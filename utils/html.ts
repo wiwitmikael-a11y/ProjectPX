@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -35,7 +36,7 @@ export const hideBodyText = (html: string): string => {
   const cssToInject = `
     <style>
       /* Hides common overlay IDs and classes used in Three.js examples and generated code */
-      #info, #loading, #ui, #instructions, .label, .overlay, #description {
+      #info, #loading, #ui, #instructions, .label, .overlay, #description, #debug, div[style*="position: absolute"] {
         display: none !important;
         opacity: 0 !important;
         pointer-events: none !important;

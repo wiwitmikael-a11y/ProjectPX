@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type BodyType = 'BIPED' | 'QUADRUPED' | 'FLOATING' | 'WHEELED' | 'SERPENTINE';
+export type AITactic = 'BALANCED' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SPEEDSTER';
+export type WeatherType = 'CLEAR' | 'RAIN' | 'STORM' | 'NEON_MIST';
+
 export interface GameItem {
     id: string;
     name: string;
@@ -25,6 +29,7 @@ export interface WildEnemyBlueprint {
     description: string;
     visualPrompt: string;
     minRank: string;
+    bodyType: BodyType;
 }
 
 export interface ObjectArchetype {
@@ -34,7 +39,22 @@ export interface ObjectArchetype {
     def?: number;
     spd?: number;
     int?: number;
+    defaultBodyType?: BodyType;
 }
+
+export const TACTIC_MULTIPLIERS: Record<AITactic, { atk: number, def: number, spd: number, crit: number }> = {
+    BALANCED: { atk: 1.0, def: 1.0, spd: 1.0, crit: 0.05 },
+    AGGRESSIVE: { atk: 1.4, def: 0.6, spd: 1.1, crit: 0.20 },
+    DEFENSIVE: { atk: 0.7, def: 1.5, spd: 0.8, crit: 0.02 },
+    SPEEDSTER: { atk: 1.1, def: 0.8, spd: 1.5, crit: 0.15 }
+};
+
+export const WEATHER_MULTIPLIERS: Record<WeatherType, Record<string, number>> = {
+    CLEAR: { Fire: 1.2, Grass: 1.2, Light: 1.2, Dark: 0.8 },
+    RAIN: { Water: 1.5, Electric: 1.2, Fire: 0.7, Metal: 0.9 },
+    STORM: { Electric: 1.5, Metal: 1.3, Water: 1.2, Flying: 0.8 },
+    NEON_MIST: { Psychic: 1.4, Spirit: 1.4, Dark: 1.3, Light: 0.8, Toxic: 1.3 }
+};
 
 export const ELEMENT_CHART: Record<string, Record<string, number>> = {
     Fire: { Grass: 2, Metal: 2, Water: 0.5, Fire: 0.5 },
@@ -49,17 +69,31 @@ export const ELEMENT_CHART: Record<string, Record<string, number>> = {
     Toxic: { Grass: 2, Metal: 0.5, Toxic: 0.5 }
 };
 
+// Neo-Pop Biome Palettes for Voxel Generation
+export const BIOME_DEFINITIONS: Record<string, { ground: string, accent: string, sky: string, detail: string }> = {
+    Fire: { ground: '0x330000', accent: '0xFF4500', sky: '0xFFAA00', detail: 'Obsidian/Lava' },
+    Water: { ground: '0x006994', accent: '0x00BFFF', sky: '0xE0F7FA', detail: 'Sand/Water' },
+    Grass: { ground: '0x4CAF50', accent: '0x8BC34A', sky: '0x87CEEB', detail: 'Flowers/Trees' },
+    Electric: { ground: '0x212121', accent: '0xFFEB3B', sky: '0x424242', detail: 'Metal Tiles' },
+    Psychic: { ground: '0x4A148C', accent: '0xEA80FC', sky: '0xF3E5F5', detail: 'Crystals' },
+    Metal: { ground: '0x607D8B', accent: '0xB0BEC5', sky: '0xECEFF1', detail: 'Factory Floor' },
+    Dark: { ground: '0x000000', accent: '0x6A1B9A', sky: '0x311B92', detail: 'Grave Soil' },
+    Light: { ground: '0xFFFFFF', accent: '0xFFD700', sky: '0xFFFDE7', detail: 'Gold Tiles' },
+    Spirit: { ground: '0x283593', accent: '0x00E5FF', sky: '0xE8EAF6', detail: 'Mist' },
+    Toxic: { ground: '0x1B5E20', accent: '0x76FF03', sky: '0xF1F8E9', detail: 'Sludge' }
+};
+
 export const OBJECT_ARCHETYPES: Record<string, ObjectArchetype> = {
-    'LiquidContainer': { element: 'Water', def: 60, spd: 30 },
-    'Electronics': { element: 'Electric', int: 80, spd: 70 },
-    'Plant': { element: 'Grass', hp: 80, spd: 20 },
-    'Food': { element: 'Toxic', hp: 100, atk: 20 },
-    'Toy': { element: 'Psychic', spd: 60 },
-    'Tool': { element: 'Metal', atk: 70, def: 50 },
-    'LightSource': { element: 'Light', int: 70, atk: 60 },
-    'Vehicle': { element: 'Metal', spd: 90, def: 60 },
-    'Book': { element: 'Psychic', int: 100, atk: 10 },
-    'Trash': { element: 'Dark', hp: 120, def: 80 }
+    'LiquidContainer': { element: 'Water', def: 60, spd: 30, defaultBodyType: 'FLOATING' },
+    'Electronics': { element: 'Electric', int: 80, spd: 70, defaultBodyType: 'BIPED' },
+    'Plant': { element: 'Grass', hp: 80, spd: 20, defaultBodyType: 'QUADRUPED' },
+    'Food': { element: 'Toxic', hp: 100, atk: 20, defaultBodyType: 'FLOATING' },
+    'Toy': { element: 'Psychic', spd: 60, defaultBodyType: 'BIPED' },
+    'Tool': { element: 'Metal', atk: 70, def: 50, defaultBodyType: 'BIPED' },
+    'LightSource': { element: 'Light', int: 70, atk: 60, defaultBodyType: 'FLOATING' },
+    'Vehicle': { element: 'Metal', spd: 90, def: 60, defaultBodyType: 'WHEELED' },
+    'Book': { element: 'Psychic', int: 100, atk: 10, defaultBodyType: 'FLOATING' },
+    'Trash': { element: 'Dark', hp: 120, def: 80, defaultBodyType: 'FLOATING' }
 };
 
 export const SKILL_DATABASE = [
@@ -77,82 +111,49 @@ export const ITEMS_DB: Record<string, GameItem> = {
     'potion_small': {
         id: 'potion_small', name: 'Mini Data Pack', type: 'Consumable',
         description: 'Restores 20 HP.',
-        effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 20); return "Recovered 20 HP"; },
-        icon: '💊', rarity: 'Common', price: 50
+        effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 20); return pet; },
+        icon: '❤️', rarity: 'Common', price: 50
     },
     'energy_drink': {
-        id: 'energy_drink', name: 'Voltage Drink', type: 'Consumable',
+        id: 'energy_drink', name: 'Voltage Cola', type: 'Consumable',
         description: 'Restores 50 Fatigue.',
-        effect: (pet: any) => { pet.fatigue = Math.max(0, pet.fatigue - 50); return "Pet feels energized!"; },
-        icon: '⚡', rarity: 'Common', price: 75
-    },
-    'chip_attack': {
-        id: 'chip_attack', name: 'ATK Chip', type: 'Consumable',
-        description: 'Permanently grants +5 ATK.',
-        effect: (pet: any) => { pet.atk += 5; return "ATK Up!"; },
-        icon: '💾', rarity: 'Rare', price: 200
+        effect: (pet: any) => { pet.fatigue = Math.max(0, pet.fatigue - 50); return pet; },
+        icon: '⚡', rarity: 'Common', price: 100
     }
 };
 
-export const ENEMIES_DB: Record<string, WildEnemyBlueprint> = {
-    'GlitchSlime': {
-        name: 'Glitch Slime', element: 'Toxic',
-        baseHp: 30, baseAtk: 15, baseDef: 10, baseSpd: 10,
-        description: 'A blob of corrupted data.',
-        visualPrompt: 'A green slime blob with glitch artifacts', minRank: 'E'
-    },
-    'RogueDrone': {
-        name: 'Rogue Drone', element: 'Metal',
-        baseHp: 40, baseAtk: 25, baseDef: 20, baseSpd: 30,
-        description: 'A malfunctioning surveillance drone.',
-        visualPrompt: 'A small flying drone with a red eye', minRank: 'D'
-    },
-    'FireWall': {
-        name: 'Living Firewall', element: 'Fire',
-        baseHp: 60, baseAtk: 30, baseDef: 40, baseSpd: 10,
-        description: 'Security software gone rogue.',
-        visualPrompt: 'A brick wall monster with fire limbs', minRank: 'C'
-    }
-};
-
-export const getRandomEnemy = (rank: string, playerLevel: number) => {
-    const enemies = Object.values(ENEMIES_DB);
-    const blueprint = enemies[Math.floor(Math.random() * enemies.length)];
-    const scale = playerLevel * 0.8; 
+export const getRandomEnemy = (rank: string, playerLevel: number): any => {
+    const elements = Object.keys(ELEMENT_CHART);
+    const element = elements[Math.floor(Math.random() * elements.length)];
+    const types: BodyType[] = ['BIPED', 'QUADRUPED', 'FLOATING', 'WHEELED'];
+    const bodyType = types[Math.floor(Math.random() * types.length)];
     
-    // Return a complete object compatible with Pixupet type
     return {
         id: `wild_${Date.now()}`,
-        name: blueprint.name,
-        element: blueprint.element as any,
-        rarity: 'Common' as const,
-        stage: 'Rookie' as const,
-        rank: 'E' as const,
-        nature: "Wild", 
-        personality: "Wild", 
-        visual_design: blueprint.visualPrompt, 
-        potential: 0,
-        hp: Math.floor(blueprint.baseHp * scale),
-        atk: Math.floor(blueprint.baseAtk * scale),
-        def: Math.floor(blueprint.baseDef * scale),
-        spd: Math.floor(blueprint.baseSpd * scale),
+        name: `Glitch ${element}`,
+        element,
+        rarity: 'Common',
+        stage: 'Rookie',
+        rank: 'E',
+        nature: 'Wild',
+        personality: 'Aggressive',
+        visual_design: `A corrupted data entity made of ${element} energy. Body type: ${bodyType}.`,
+        potential: 1,
+        hp: 80 + playerLevel * 10,
+        maxHp: 80 + playerLevel * 10,
+        atk: 20 + playerLevel * 2,
+        def: 20 + playerLevel * 2,
+        spd: 20 + playerLevel * 2,
         int: 10,
-        description: blueprint.description,
-        ability: "Wild",
+        description: "A wild data anomaly.",
+        ability: "Glitch",
         moves: [],
-        level: playerLevel,
-        exp: 10, maxExp: 100, hunger: 100, fatigue: 0,
-        imageSource: '',
-        cardArtUrl: '',
-        currentHp: Math.floor(blueprint.baseHp * scale),
-        maxHp: Math.floor(blueprint.baseHp * scale),
-        voxelCode: '', // Will be filled by getGenericVoxel later
-        dateCreated: Date.now()
+        bodyType,
+        tactic: 'AGGRESSIVE'
     };
 };
 
-export const getLootDrop = (enemyRank: string) => {
-    if (Math.random() > 0.5) return null;
-    const items = Object.values(ITEMS_DB);
-    return items[Math.floor(Math.random() * items.length)];
+export const getLootDrop = (rank: string): string | null => {
+    if (Math.random() > 0.7) return 'potion_small';
+    return null;
 };

@@ -2,16 +2,14 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { extractHtmlFromText } from "../utils/html";
-import { OBJECT_ARCHETYPES, SKILL_DATABASE } from "./gameData";
+import { OBJECT_ARCHETYPES, BodyType, BIOME_DEFINITIONS, AITactic } from "./gameData";
 
-// Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// UUID Helper
 const generateId = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
@@ -19,7 +17,6 @@ const generateId = () => {
     return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 }
 
-// Robust JSON Parsing
 const parseGeminiJson = (text: string) => {
     if (!text) return {};
     try {
@@ -35,59 +32,49 @@ const parseGeminiJson = (text: string) => {
 };
 
 export const VOXEL_PROMPT = `
-  You are a World-Class Three.js Voxel Engine Developer. 
-  Transform the input into a **"RIGGED PIXUPET"** scene.
+  You are a World-Class Three.js Developer specializing in "AAA Indie" aesthetics (Neo-Pop/Voxel).
+  Create a **GOD-TIER RPG HABITAT**.
   
-  ### 1. CORE SETUP:
-  - **IMPORT MAP:**
-    \`\`\`html
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-        }
-      }
-    </script>
-    \`\`\`
-  - **RENDERER:** \`new THREE.WebGLRenderer({ alpha: true, antialias: true });\`
-  - **SCENE:** \`scene.background = null;\` (Initially transparent).
-  
-  ### 2. INFINITE HORIZON (SKY DOME SHADER):
-  - **CRITICAL:** The world must look infinite.
-  - Create a large SphereGeometry (radius 120).
-  - Use a **ShaderMaterial** with \`side: THREE.BackSide\`.
-  - **Vertex Shader:**
-    \`varying vec3 vWorldPosition; void main() { vec4 worldPosition = modelMatrix * vec4( position, 1.0 ); vWorldPosition = worldPosition.xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }\`
-  - **Fragment Shader:**
-    \`uniform vec3 topColor; uniform vec3 bottomColor; uniform float offset; uniform float exponent; varying vec3 vWorldPosition; void main() { float h = normalize( vWorldPosition + offset ).y; gl_FragColor = vec4( mix( bottomColor, topColor, max( pow( max( h , 0.0), exponent ), 0.0 ) ), 1.0 ); }\`
-  - **Uniforms:** \`topColor\` (Sky Color), \`bottomColor\` (Ground Color matching element), \`offset: 33\`, \`exponent: 0.6\`.
-  - **Result:** The floor must blend seamlessly into the horizon.
+  ### 1. CORE SETUP
+  - **Imports:** standard Three.js (0.160.0) + SimplexNoise.
+  - **Renderer:** \`new THREE.WebGLRenderer({ alpha: true, antialias: true });\`
+  - **Scene:** \`scene.background = null;\` (Transparency handled by app).
+  - **Camera & Controls (STRICT):** 
+    - Use \`OrbitControls\`.
+    - \`controls.enablePan = false;\` (LOCK TARGET)
+    - \`controls.enableDamping = true;\`
+    - \`controls.minDistance = 14;\` (Keep pet in view)
+    - \`controls.maxDistance = 28;\` (Don't drift too far)
+    - \`controls.maxPolarAngle = Math.PI / 2 - 0.1;\` (Never go below ground)
 
-  ### 3. RIGGING & HIERARCHY:
-  - **Structure:**
-    - \`heroGroup\` (Root).
-      - \`bodyGroup\` (Torso).
-        - \`headGroup\`, \`armL\`, \`armR\`, \`legL\`, \`legR\`.
-  
-  ### 4. PHYSICS & ANIMATION (FIX MOVEMENT):
-  - **Global State:** \`window.animState = 'IDLE';\`
-  - **Loop Logic (\`animate()\`)**:
-    - **WANDERING:**
-       - Pick random target on the ground plane.
-       - **ROTATION (CRITICAL):** Use \`heroGroup.lookAt(target)\`. Ensure the model faces the direction it is moving. Do NOT walk backwards.
-       - Move forward along Z-axis relative to rotation.
-    - **ANIMATIONS:**
-       - Use \`Math.sin(time)\` for limbs.
-       - **JUMP:** If state is JUMP, translate Y up/down.
-       - **ATTACK:** Rotate arms aggressively.
+  ### 2. PROCEDURAL TERRAIN (SEAMLESS)
+  - **GRID:** x: -25 to 25, z: -25 to 25.
+  - **NOISE:** Use \`SimplexNoise\` for terrain height y. Store this noise function to use in Animation loop.
+  - **FLOOR:** Create a seamless voxel terrain.
 
-  ### 5. MESSAGING SYSTEM:
-  - Handle: \`SET_MODE\` (Hide habitat/sky dome when value is 'BATTLE'), \`ANIM_STATE\`, \`CAMERA_MOVE\`.
+  ### 3. THE "JUICE" - AAA VISUALS (CRITICAL)
+  - **CEL-SHADING (INVERTED HULL):** For every voxel mesh of the PET (Body, Head, Limbs), create a duplicate mesh:
+    - \`material = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });\`
+    - \`scale.setScalar(1.06);\`
+    - This creates a thick black "Neo-Pop" outline.
+  - **HIT STOP:** Implement a global \`let hitStop = 0;\`. In \`animate()\`, if \`hitStop > 0\`, \`hitStop -= delta;\` and SKIP animation updates.
 
-  ### 6. CLEAN OUTPUT:
-  - **STRICT RULE:** NO TEXTURES containing text, logos, or brands. Use procedural colors only.
-  - Valid HTML/JS only.
+  ### 4. PROCEDURAL ANIMATION RIGGING (IK)
+  - **Structure:** \`heroGroup\` > \`body\` > \`head\`, \`legL\`, \`legR\`.
+  - **Fake IK (Terrain Matching):**
+    - In \`animate()\`: Calculate the ground height at the Leg's world X/Z using the Noise function.
+    - \`leg.position.y = groundHeightAt(leg.x, leg.z)\`.
+    - This ensures feet stick to the terrain slopes perfectly while walking.
+  - **Head Tracking:** \`head.lookAt(camera.position)\` (The pet watches the player).
+
+  ### 5. WEATHER SYSTEM
+  - Listen for messages: \`window.addEventListener('message', (e) => { if(e.data.type === 'SET_WEATHER') ... })\`
+  - **RAIN:** Create a particle system (InstancedMesh) of thin blue boxes falling. Visible only if \`weather === 'RAIN'\`.
+  - **MIST:** Adjust \`scene.fog\` density.
+
+  ### 6. LOGIC
+  - Listen for \`PAUSE\`: If paused, stop rotation/movement, but keep rendering.
+  - **Output:** Raw HTML string only.
 `;
 
 export interface Move {
@@ -109,6 +96,8 @@ export interface MonsterStats {
   nature: string; 
   personality: string; 
   visual_design: string; 
+  bodyType: BodyType;
+  tactic?: AITactic;
   potential: number;
   hp: number;
   atk: number;
@@ -135,8 +124,9 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
           {
             text: `Analyze object for 'Pixupet'.
             ARCHETYPES: ${JSON.stringify(OBJECT_ARCHETYPES)}
-            TASK: Identify object, map to Element. Create Stats.
-            VISUAL_DESIGN: Detailed description for Voxel Artist AND Anime Artist to match perfectly. Include color palette.
+            TASK: Identify object, map to Element. Determine BODY_TYPE (BIPED, QUADRUPED, FLOATING, WHEELED). Create Stats.
+            VISUAL_DESIGN: Extremely detailed description of the monster's appearance, colors, and body shape for a 3D Artist. NO LOGOS OR BRAND NAMES.
+            HABITAT_DESC: Describe the ideal biome (e.g., "Volcanic Crater with Obsidian spikes" for Fire).
             Return JSON.`
           }
         ]
@@ -153,6 +143,7 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
             rank: { type: Type.STRING }, 
             nature: { type: Type.STRING },
             visual_design: { type: Type.STRING },
+            bodyType: { type: Type.STRING, enum: ['BIPED', 'QUADRUPED', 'FLOATING', 'WHEELED', 'SERPENTINE'] },
             potential: { type: Type.INTEGER },
             hp: { type: Type.INTEGER },
             atk: { type: Type.INTEGER },
@@ -183,7 +174,8 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
     return {
       ...data, 
       id: generateId(),
-      dateCreated: Date.now()
+      dateCreated: Date.now(),
+      tactic: 'BALANCED' // Default Tactic
     };
   } catch (error) {
     console.error("Analysis failed:", error);
@@ -217,12 +209,15 @@ export const generateCardArt = async (monsterDescription: string, objectName: st
     return generateImage(prompt, '3:4', false);
 };
 
-export const generateVoxelScene = async (imageBase64: string, visualDescription: string, onThoughtUpdate?: (thought: string) => void): Promise<string> => {
+export const generateVoxelScene = async (imageBase64: string, visualDescription: string, bodyType: string = 'BIPED'): Promise<string> => {
   let contentsPart: any[] = [];
-  if (imageBase64 && imageBase64.startsWith('data:')) {
-      contentsPart.push({ inlineData: { mimeType: 'image/jpeg', data: imageBase64.split(',')[1] } });
-  }
-  const PROMPT_WITH_CONTEXT = `${VOXEL_PROMPT}\n\n### TARGET VISUAL_DESIGN:\n"${visualDescription}"`;
+  // Inject specific AAA Juice instructions into the prompt for this request
+  const JUICE_INSTRUCTIONS = `
+    CRITICAL: Implement 'Inverted Hull' outlining (black back-faced mesh scaled 1.05x) for all pet parts.
+    CRITICAL: Implement 'Terrain Matching IK'. Legs must move up/down based on noise(x,z) of floor.
+    CRITICAL: Lock Camera pan. Limit Zoom.
+  `;
+  const PROMPT_WITH_CONTEXT = `${VOXEL_PROMPT}\n\n### TARGET VISUAL_DESIGN:\n"${visualDescription}"\n### BODY_TYPE: ${bodyType}\n### INSTRUCTIONS: ${JUICE_INSTRUCTIONS}`;
   contentsPart.push({ text: PROMPT_WITH_CONTEXT });
 
   try {
@@ -249,108 +244,116 @@ export const generateVoxelScene = async (imageBase64: string, visualDescription:
 
 export const fuseVoxelScene = async (petA: MonsterStats, petB: MonsterStats) => {
     const visual_design = `A fusion chimera of ${petA.name} and ${petB.name}. ${petA.visual_design} combined with ${petB.visual_design}.`;
-    const code = await generateVoxelScene("", visual_design);
+    const code = await generateVoxelScene("", visual_design, petA.bodyType);
     return { code, visual_design, name: `${petA.name.substring(0, 3)}${petB.name.substring(petB.name.length-3)}`, element: petA.element };
 };
 
 export const evolveVoxelScene = async (pet: MonsterStats) => {
      const visual_design = `Evolved Mega Form of ${pet.name}. ${pet.visual_design} but bigger, stronger armor, glowing energy aura.`;
-     const code = await generateVoxelScene("", visual_design);
+     const code = await generateVoxelScene("", visual_design, pet.bodyType);
      return { code, visual_design };
 }
 
 export const getGenericVoxel = (element: string) => {
+    const colors: any = {
+        Fire: '0xFF5555', Water: '0x5555FF', Grass: '0x55FF55', Electric: '0xFFFF55',
+        Psychic: '0xFF55FF', Metal: '0xAAAAAA', Dark: '0x333333', Light: '0xFFFFFF',
+        Spirit: '0xAA55FF', Toxic: '0xAAFF55'
+    };
+    const colorHex = colors[element] || '0xAAAAAA';
+
     return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <script type="importmap">
-    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-  </script>
+    <meta charset="UTF-8">
+    <style>body { margin: 0; overflow: hidden; background: transparent !important; }</style>
+    <script type="importmap">
+    {
+        "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
 </head>
-<body style="margin:0; overflow:hidden; background:transparent;">
+<body>
 <script type="module">
-  import * as THREE from 'three';
-  
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
-  camera.position.set(20, 20, 20);
-  camera.lookAt(0,0,0);
-  
-  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
-  
-  const light = new THREE.DirectionalLight(0xffffff, 1.5);
-  light.position.set(10, 20, 10);
-  scene.add(light);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-  
-  const group = new THREE.Group();
-  scene.add(group);
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-  // A Simple Slime Monster Voxel
-  const color = 0x${element === 'Fire' ? 'FF4444' : element === 'Water' ? '4444FF' : element === 'Grass' ? '44FF44' : 'AAAAAA'};
-  const geo = new THREE.BoxGeometry(1,1,1);
-  const mat = new THREE.MeshStandardMaterial({ color });
-  
-  // Body
-  for(let x=-2; x<=2; x++) {
-      for(let y=0; y<=2; y++) {
-          for(let z=-2; z<=2; z++) {
-              if(Math.random()>0.2) {
-                  const m = new THREE.Mesh(geo, mat);
-                  m.position.set(x,y,z);
-                  group.add(m);
-              }
-          }
-      }
-  }
-  // Eyes
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
-  const pupilMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
-  
-  const eyeL = new THREE.Mesh(geo, eyeMat); eyeL.position.set(-1, 1, 2.1); group.add(eyeL);
-  const pupL = new THREE.Mesh(geo, pupilMat); pupL.position.set(-1, 1, 2.3); pupL.scale.set(0.5,0.5,0.5); group.add(pupL);
-
-  const eyeR = new THREE.Mesh(geo, eyeMat); eyeR.position.set(1, 1, 2.1); group.add(eyeR);
-  const pupR = new THREE.Mesh(geo, pupilMat); pupR.position.set(1, 1, 2.3); pupR.scale.set(0.5,0.5,0.5); group.add(pupR);
-
-  // Animation
-  const clock = new THREE.Clock();
-  function animate() {
-    requestAnimationFrame(animate);
-    const t = clock.getElapsedTime();
-    
-    // Idle bounce
-    group.position.y = Math.abs(Math.sin(t * 3)) * 2;
-    group.scale.y = 1 - Math.sin(t*10)*0.1;
-    group.scale.x = 1 + Math.sin(t*10)*0.05;
-    group.scale.z = 1 + Math.sin(t*10)*0.05;
-
-    group.rotation.y += 0.01;
-    
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+    const scene = new THREE.Scene();
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+    document.body.appendChild(renderer.domElement);
 
-  window.addEventListener('message', (e) => {
-      if(e.data.type === 'ANIM_STATE' && e.data.value === 'ATTACK') {
-          // Attack Animation trigger
-          const jump = setInterval(() => {
-               group.position.z += 0.5;
-          }, 16);
-          setTimeout(() => {
-              clearInterval(jump);
-              group.position.z = 0;
-          }, 500);
-      }
-  });
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 5, 15);
+    
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.enablePan = false;
+    controls.minDistance = 8;
+    controls.maxDistance = 25;
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(5, 10, 5);
+    scene.add(dirLight);
+
+    const heroGroup = new THREE.Group();
+    scene.add(heroGroup);
+
+    // Slime Body with Outline
+    const geometry = new THREE.SphereGeometry(0.8, 16, 16);
+    const material = new THREE.MeshStandardMaterial({ color: ${colorHex}, roughness: 0.2, metalness: 0.1 });
+    const body = new THREE.Mesh(geometry, material);
+    body.scale.y = 0.8; 
+    heroGroup.add(body);
+    
+    // INVERTED HULL (OUTLINE)
+    const outlineGeo = geometry.clone();
+    const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
+    const outline = new THREE.Mesh(outlineGeo, outlineMat);
+    outline.scale.setScalar(1.05); 
+    heroGroup.add(outline);
+    
+    // Eyes
+    const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(-0.3, 0.3, 0.6);
+    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+    rightEye.position.set(0.3, 0.3, 0.6);
+    
+    heroGroup.add(leftEye);
+    heroGroup.add(rightEye);
+
+    let paused = false;
+    window.addEventListener('message', (e) => {
+        if(e.data.type === 'PAUSE') paused = e.data.value;
+    });
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        if(paused) return;
+
+        const t = clock.getElapsedTime();
+        
+        // Simple bounce
+        heroGroup.position.y = Math.abs(Math.sin(t * 3)) * 0.2;
+        
+        renderer.render(scene, camera);
+    }
+    animate();
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
 </script>
 </body>
 </html>`;
