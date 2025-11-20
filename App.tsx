@@ -7,11 +7,14 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { generateVoxelScene, analyzeObject, MonsterStats, fuseVoxelScene, generateCardArt, getGenericVoxel, evolveVoxelScene } from './services/gemini';
 import { hideBodyText, zoomCamera, makeBackgroundTransparent } from './utils/html';
-import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_CHART, AITactic, TACTIC_MULTIPLIERS, WEATHER_MULTIPLIERS, WeatherType } from './services/gameData';
+import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, AITactic, WeatherType, calculateOfflineProgress, OfflineReport, getProceduralMonsterArt } from './services/gameData';
 
 // --- TYPES ---
-type GameState = 'SPLASH' | 'NEXUS' | 'SCAN' | 'INVENTORY' | 'ARENA' | 'SYNTHESIS' | 'ERROR';
-type EventType = 'WILD_BATTLE' | 'TREASURE' | 'WEATHER_CHANGE';
+type GameState = 'SPLASH' | 'NEXUS' | 'SCAN' | 'INVENTORY' | 'ARENA' | 'SYNTHESIS' | 'TRAINING' | 'SHOP' | 'ERROR';
+type EventType = 'WILD_BATTLE' | 'TREASURE' | 'WEATHER_CHANGE' | 'MERCHANT' | 'MYSTERY_SIGNAL';
+type BattleCommand = 'ATTACK' | 'DEFEND' | 'CHARGE' | 'HEAL';
+
+const SAVE_VERSION = 'v2.1'; // Increment this to force wipe user data on updates
 
 interface UserProfile {
   name: string;
@@ -19,6 +22,7 @@ interface UserProfile {
   exp: number;
   coins: number; 
   joinedAt: number;
+  lastSaveAt: number; 
   battlesWon: number;
   currentRank: 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
   inventory: string[]; 
@@ -35,6 +39,7 @@ interface Pixupet extends MonsterStats {
   maxExp: number;
   hunger: number; 
   fatigue: number;
+  happiness?: number; 
 }
 
 interface FloatingText {
@@ -47,7 +52,7 @@ interface FloatingText {
 
 interface RandomEvent {
     type: EventType;
-    data: any; // Enemy Pet or Item
+    data: any; 
     step: 'INTRO' | 'ACTION' | 'RESULT';
     logs: string[];
     winner?: 'PLAYER' | 'ENEMY';
@@ -61,19 +66,6 @@ const SCAN_PHRASES = [
     "WEAVING DATA STRANDS...",
     "MATERIALIZING ENTITY..."
 ];
-
-const ELEMENT_THEMES: any = {
-  Fire: { bg: 'bg-red-400', text: 'text-white', icon: '🔥' },
-  Water: { bg: 'bg-blue-400', text: 'text-white', icon: '💧' },
-  Grass: { bg: 'bg-green-400', text: 'text-black', icon: '🌿' },
-  Electric: { bg: 'bg-yellow-400', text: 'text-black', icon: '⚡' },
-  Psychic: { bg: 'bg-purple-400', text: 'text-white', icon: '🔮' },
-  Metal: { bg: 'bg-gray-400', text: 'text-black', icon: '⚙️' },
-  Dark: { bg: 'bg-gray-800', text: 'text-white', icon: '🌑' },
-  Light: { bg: 'bg-yellow-100', text: 'text-black', icon: '✨' },
-  Spirit: { bg: 'bg-indigo-400', text: 'text-white', icon: '👻' },
-  Toxic: { bg: 'bg-lime-400', text: 'text-black', icon: '☣️' },
-};
 
 const HABITAT_PATTERNS: any = {
   Fire: 'bg-red-50', Water: 'bg-blue-50', Grass: 'bg-green-50', 
@@ -90,7 +82,8 @@ const ICONS = {
     TRASH: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
     STAR: "M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z",
     CLOSE: "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z",
-    SHARE: "M18,16.08C17.24,16.08 16.56,16.38 16.04,16.85L8.91,12.7C8.96,12.47 9,12.24 9,12C9,11.76 8.96,11.53 8.91,11.3L15.96,7.19C16.5,7.69 17.21,8 18,8A4,4 0 0,0 22,4A4,4 0 0,0 18,0A4,4 0 0,0 14,4C14,4.24 14.04,4.47 14.09,4.7L7.04,8.81C6.5,8.31 5.79,8 5,8A4,4 0 0,0 1,12A4,4 0 0,0 5,16C5.79,16 6.5,15.69 7.04,15.19L14.16,19.32C14.1,19.54 14.07,19.77 14.07,20C14.07,22.21 15.86,24 18.07,24C20.28,24 22.07,22.21 22.07,20C22.07,17.79 20.28,16.08 18.07,16.08"
+    TRAIN: "M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6V12L16.24,16.24L14.83,17.66L9,11.83V6H12Z",
+    SHOP: "M4,4H20V6H4V4M4,9H20V19H4V9M6,12V16H8V12H6M10,12V16H12V12H10M14,12V16H16V12H14M2,2V22H22V2H2Z"
 };
 
 // --- COMPONENTS ---
@@ -114,17 +107,6 @@ const BrandLogo: React.FC<{ className?: string, scale?: number }> = ({ className
             </filter>
         </defs>
         <g filter="url(#dropShadow)">
-             <g className="animate-bounce" style={{animationDuration: '3s'}}>
-                 {/* Cubes */}
-                 <path d="M20,40 l15,-8 l15,8 l-15,8 z" fill="#00FFFF" stroke="black" strokeWidth="2"/>
-                 <path d="M20,40 v15 l15,8 v-15 z" fill="#0088FF" stroke="black" strokeWidth="2"/>
-                 <path d="M50,40 v15 l-15,8 v-15 z" fill="#0044CC" stroke="black" strokeWidth="2"/>
-                 
-                 <path d="M360,50 l12,-6 l12,6 l-12,6 z" fill="#00FF00" stroke="black" strokeWidth="2" transform="translate(0, -10)"/>
-                 <path d="M360,50 v12 l12,6 v-12 z" fill="#008800" stroke="black" strokeWidth="2" transform="translate(0, -10)"/>
-                 <path d="M384,50 v12 l-12,6 v-12 z" fill="#004400" stroke="black" strokeWidth="2" transform="translate(0, -10)"/>
-             </g>
-
              <text x="50%" y="85" textAnchor="middle" 
                    fontFamily="Verdana, sans-serif" fontWeight="900" fontSize="80"
                    stroke="black" strokeWidth="16" strokeLinejoin="round" fill="none"
@@ -134,8 +116,6 @@ const BrandLogo: React.FC<{ className?: string, scale?: number }> = ({ className
                    fontFamily="Verdana, sans-serif" fontWeight="900" fontSize="80"
                    fill="url(#logoGrad)"
              >Pixupet</text>
-             
-             <path d="M70 45 Q 120 35, 170 45 T 270 45" stroke="white" strokeWidth="4" strokeOpacity="0.5" fill="none" />
         </g>
     </svg>
 );
@@ -203,7 +183,7 @@ const StatBar = ({ label, value, max, color }: any) => (
     </div>
 );
 
-const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolean, small?: boolean }> = ({ pet, onClick, selected, small }) => (
+const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolean, small?: boolean, onEvolve?: () => void }> = ({ pet, onClick, selected, small, onEvolve }) => (
     <div onClick={onClick} className={`w-full aspect-[3/4.2] neo-card flex flex-col p-2 cursor-pointer relative bg-white ${selected ? 'ring-4 ring-yellow-400' : ''} ${!small && 'hover:scale-105'} transition-transform`}>
          <div className={`flex items-center justify-between px-2 py-1 rounded border-2 border-black ${ELEMENT_THEMES[pet.element]?.bg} ${ELEMENT_THEMES[pet.element]?.text} mb-2`}>
              <div className="flex items-center gap-1">
@@ -213,7 +193,7 @@ const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolea
              <span className="font-black text-[10px]">Lv.{pet.level}</span>
          </div>
          <div className="flex-1 border-2 border-black rounded bg-gray-100 overflow-hidden relative mb-2">
-             <img src={pet.cardArtUrl || pet.imageSource} className="w-full h-full object-cover" />
+             <img src={pet.cardArtUrl || pet.imageSource} className="w-full h-full object-cover" style={{imageRendering: 'pixelated'}} />
          </div>
          {!small && (
              <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-1">
@@ -221,30 +201,50 @@ const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolea
                  <StatBar label="ATK" value={pet.atk} max={200} color="bg-red-400" />
              </div>
          )}
+         {onEvolve && pet.level >= 10 && (
+             <button onClick={(e) => { e.stopPropagation(); onEvolve(); }} className="absolute bottom-2 right-2 bg-cyan-400 border-2 border-black text-xs font-black px-2 py-1 rounded hover:bg-cyan-300 animate-pulse shadow-[2px_2px_0px_0px_black]">
+                 EVOLVE!
+             </button>
+         )}
     </div>
 );
 
-// --- EVENT POPUP MODAL (SEAMLESS INTEGRATION) ---
-const EventModal: React.FC<{ 
-    event: RandomEvent, 
-    onClose: () => void,
-    playerPet: Pixupet
-}> = ({ event, onClose, playerPet }) => {
-    
+// --- MODALS ---
+const WelcomeModal: React.FC<{ report: OfflineReport, onClose: () => void }> = ({ report, onClose }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+         <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+         <div className="relative w-full max-w-md bg-white border-4 border-black shadow-[12px_12px_0px_0px_black] p-1 animate-pop-in rounded-2xl overflow-hidden">
+             <div className="bg-cyan-400 border-b-4 border-black py-4 text-center">
+                 <h2 className="text-2xl font-black tracking-wider">WELCOME BACK!</h2>
+             </div>
+             <div className="p-6 text-center">
+                 <div className="mb-4 font-mono text-sm text-gray-600">
+                     You were gone for <span className="font-bold text-black">{(report.secondsAway / 60).toFixed(0)} mins</span>.
+                 </div>
+                 <div className="bg-gray-100 border-2 border-black p-4 rounded-xl mb-4 grid grid-cols-2 gap-4">
+                     <div><div className="text-xs uppercase font-bold text-gray-500">XP Gained</div><div className="text-2xl font-black text-green-600">+{report.xpGained}</div></div>
+                     <div><div className="text-xs uppercase font-bold text-gray-500">Coins</div><div className="text-2xl font-black text-yellow-600">+{report.coinsFound}</div></div>
+                     <div><div className="text-xs uppercase font-bold text-gray-500">Hunger</div><div className="text-2xl font-black text-red-600">-{report.hungerLost}</div></div>
+                 </div>
+                 <div className="bg-black text-green-400 p-3 rounded font-mono text-xs text-left h-24 overflow-y-auto mb-4">
+                     {report.events.map((e, i) => <div key={i}>> {e}</div>)}
+                 </div>
+                 <button onClick={onClose} className="neo-btn bg-yellow-400 w-full py-3 text-lg hover:bg-yellow-300">RESUME</button>
+             </div>
+         </div>
+    </div>
+);
+
+const EventModal: React.FC<{ event: RandomEvent, onClose: () => void, playerPet: Pixupet }> = ({ event, onClose, playerPet }) => {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-             {/* Dark Backdrop with Blur */}
              <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-             
              <div className="relative w-full max-w-lg bg-white border-4 border-black shadow-[12px_12px_0px_0px_black] p-1 animate-pop-in rounded-2xl overflow-hidden">
-                 {/* Header Strip */}
                  <div className={`w-full py-3 text-center border-b-4 border-black font-black text-xl tracking-widest ${event.type === 'WILD_BATTLE' ? 'bg-red-500 text-white' : 'bg-yellow-400 text-black'}`}>
-                     {event.type === 'WILD_BATTLE' ? '⚠️ WILD ENCOUNTER ⚠️' : '✨ DISCOVERY ✨'}
+                     {event.type === 'WILD_BATTLE' ? '⚠️ WILD ENCOUNTER ⚠️' : event.type === 'TREASURE' ? '✨ DISCOVERY ✨' : '📫 EVENT'}
                  </div>
 
                  <div className="p-6 flex flex-col gap-4">
-                     
-                     {/* Battle Layout */}
                      {event.type === 'WILD_BATTLE' && (
                          <div className="flex items-center justify-between gap-4 mb-4">
                              <div className="w-1/3 transform translate-y-4">
@@ -257,33 +257,26 @@ const EventModal: React.FC<{
                          </div>
                      )}
 
-                     {/* Loot Layout */}
                      {event.type === 'TREASURE' && (
                          <div className="flex flex-col items-center text-center py-8 animate-bounce">
                              <div className="text-6xl mb-4">🎁</div>
                              <div className="text-2xl font-black">YOU FOUND AN ITEM!</div>
                          </div>
                      )}
-
-                     {/* Weather Change Layout */}
-                     {event.type === 'WEATHER_CHANGE' && (
+                     
+                     {event.type === 'MERCHANT' && (
                          <div className="flex flex-col items-center text-center py-8">
-                              <div className="text-6xl mb-4 animate-pulse">
-                                  {event.data === 'RAIN' ? '🌧️' : event.data === 'STORM' ? '⛈️' : '☀️'}
-                              </div>
-                              <div className="text-2xl font-black uppercase">WEATHER SHIFT: {event.data}</div>
+                             <div className="text-6xl mb-4">🛒</div>
+                             <div className="text-2xl font-black">MYSTERIOUS MERCHANT</div>
+                             <p>He offers you a deal...</p>
                          </div>
                      )}
 
-                     {/* Action Log / Terminal */}
                      <div className="bg-black p-4 rounded-xl border-2 border-gray-700 h-32 overflow-y-auto font-mono text-xs text-green-400 shadow-inner">
-                         {event.logs.map((log, i) => (
-                             <div key={i} className="mb-1">> {log}</div>
-                         ))}
+                         {event.logs.map((log, i) => <div key={i}>> {log}</div>)}
                          {event.step === 'ACTION' && <div className="animate-pulse">> PROCESSING...</div>}
                      </div>
                      
-                     {/* Result & Close */}
                      {event.step === 'RESULT' && (
                          <div className="animate-pop-in mt-2">
                              {event.reward && (
@@ -292,7 +285,7 @@ const EventModal: React.FC<{
                                  </div>
                              )}
                              <button onClick={onClose} className="w-full neo-btn bg-cyan-300 py-4 text-lg hover:bg-cyan-200">
-                                 {event.winner === 'ENEMY' ? 'RETREAT...' : 'CONTINUE EXPLORATION'}
+                                 {event.winner === 'ENEMY' ? 'RETREAT...' : 'CONTINUE'}
                              </button>
                          </div>
                      )}
@@ -315,35 +308,72 @@ const App: React.FC = () => {
   const [battleLog, setBattleLog] = useState<string[]>([]);
   const [isBattleOver, setIsBattleOver] = useState(false);
   const [scanMessage, setScanMessage] = useState<string>(SCAN_PHRASES[0]);
-  const [hasGlitch, setHasGlitch] = useState(false);
   const [fusionSlots, setFusionSlots] = useState<{a: Pixupet | null, b: Pixupet | null}>({a: null, b: null});
   const [isFusionSelecting, setIsFusionSelecting] = useState<'a'|'b'|null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [autoLootMsg, setAutoLootMsg] = useState<string | null>(null);
-  const [inspectingPet, setInspectingPet] = useState<Pixupet | null>(null);
   const [weather, setWeather] = useState<WeatherType>('CLEAR');
-  const [gameHour, setGameHour] = useState(12); // 0-24
+  const [gameHour, setGameHour] = useState(12); 
   const [screenShake, setScreenShake] = useState(false);
+  const [offlineReport, setOfflineReport] = useState<OfflineReport | null>(null);
+  const [trainingStat, setTrainingStat] = useState<'atk'|'def'|'spd'|null>(null);
+  const [isFeeding, setIsFeeding] = useState(false);
+  
+  // Battle Tactics
+  const [battleCommand, setBattleCommand] = useState<BattleCommand | null>(null);
+  const [playerCharged, setPlayerCharged] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const battlePlayerRef = useRef<HTMLIFrameElement | null>(null);
   const battleEnemyRef = useRef<HTMLIFrameElement | null>(null);
 
+  // --- LOAD & RESET LOGIC ---
   useEffect(() => {
       try {
-          const savedUser = localStorage.getItem('pixupet_user_v1');
-          const savedInv = localStorage.getItem('pixupet_inventory_v1');
-          if (savedUser) setUser(JSON.parse(savedUser));
-          if (savedInv) setInventory(JSON.parse(savedInv));
-          
-          if (savedUser) {
-            setGameState('NEXUS'); 
+          const currentVersion = localStorage.getItem('pixupet_version');
+          if (currentVersion !== SAVE_VERSION) {
+              localStorage.clear();
+              localStorage.setItem('pixupet_version', SAVE_VERSION);
+              console.log("Save version mismatch. Data wiped.");
+          } else {
+              const savedUser = localStorage.getItem('pixupet_user_v1');
+              const savedInv = localStorage.getItem('pixupet_inventory_v1');
+              if (savedUser && savedInv) {
+                  const u = JSON.parse(savedUser);
+                  const inv = JSON.parse(savedInv);
+                  
+                  if (u.lastSaveAt && inv.length > 0) {
+                      const report = calculateOfflineProgress(inv[0], u.lastSaveAt);
+                      inv[0].exp += report.xpGained;
+                      if (inv[0].exp >= inv[0].maxExp) {
+                          inv[0].level++;
+                          inv[0].exp = 0;
+                          inv[0].maxExp = Math.floor(inv[0].maxExp * 1.2);
+                          inv[0].atk += 2; inv[0].maxHp! += 5; inv[0].hp += 5;
+                      }
+                      u.coins += report.coinsFound;
+                      setOfflineReport(report);
+                  }
+                  
+                  setUser(u);
+                  setInventory(inv);
+                  setGameState('NEXUS'); 
+              }
           }
       } catch(e) { console.error("Save Corrupt", e); }
   }, []);
+
+  // SAVE LOOP
+  useEffect(() => {
+      const interval = setInterval(() => {
+          if (user && inventory.length > 0) {
+              saveGame(user, inventory);
+          }
+      }, 5000);
+      return () => clearInterval(interval);
+  }, [user, inventory]);
   
-  // Real-time Weather Loop
+  // WEATHER
   useEffect(() => {
       const fetchWeather = () => {
           if (navigator.geolocation) {
@@ -353,43 +383,223 @@ const App: React.FC = () => {
                       const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=weather_code`);
                       const data = await res.json();
                       const code = data.current?.weather_code;
-                      
                       let newWeather: WeatherType = 'CLEAR';
                       if (code >= 51 && code <= 67) newWeather = 'RAIN';
                       else if (code >= 80 && code <= 82) newWeather = 'RAIN';
                       else if (code >= 95) newWeather = 'STORM';
                       else if (code >= 45 && code <= 48) newWeather = 'NEON_MIST';
-                      else if (code === 0 || code === 1) newWeather = 'CLEAR';
                       
-                      if (newWeather !== weather) {
-                         // Trigger weather change event if in game
-                         if (gameState === 'NEXUS' && !activeEvent) {
-                             triggerEvent('WEATHER_CHANGE', newWeather);
-                         }
-                         setWeather(newWeather);
-                      }
-                  } catch(e) {
-                      console.warn("Weather fetch failed");
-                  }
+                      if (newWeather !== weather) setWeather(newWeather);
+                  } catch(e) {}
               });
           }
       };
-      
       fetchWeather();
-      const weatherInterval = setInterval(fetchWeather, 60000 * 10); // Check every 10 mins
-
       const t = setInterval(() => {
           const now = new Date();
           setCurrentTime(now);
           setGameHour(now.getHours()); 
       }, 1000);
-      
-      return () => { clearInterval(t); clearInterval(weatherInterval); };
-  }, [weather, gameState, activeEvent]);
+      return () => { clearInterval(t); };
+  }, [weather]);
 
-  const saveGame = (u?: UserProfile, i?: Pixupet[]) => {
-      if (u) { setUser(u); localStorage.setItem('pixupet_user_v1', JSON.stringify(u)); }
-      if (i) { setInventory(i); localStorage.setItem('pixupet_inventory_v1', JSON.stringify(i)); }
+  // --- BATTLE ARENA LOGIC (TACTICAL) ---
+  useEffect(() => {
+      let arenaInterval: any;
+      
+      // Only run the loop if we have a command OR if we are waiting for animation
+      if (gameState === 'ARENA' && !isBattleOver && playerPet && enemyPet && battleCommand) {
+          
+          // Execute Turn immediately upon command
+          const executeTurn = () => {
+              // 1. Player Turn
+              let pDmg = 0;
+              let logMsg = "";
+              let isDefending = false;
+
+              if (battleCommand === 'ATTACK') {
+                  pDmg = Math.max(5, Math.floor((playerPet.atk * 0.5) - (enemyPet.def * 0.1)));
+                  const pCrit = Math.random() < (playerPet.happiness || 50) / 500;
+                  if (pCrit) { pDmg = Math.floor(pDmg * 1.5); logMsg = "CRITICAL HIT! "; }
+                  if (playerCharged) { pDmg *= 2; logMsg += "SUPER CHARGED! "; setPlayerCharged(false); }
+                  logMsg += `${playerPet.name} attacks!`;
+              } else if (battleCommand === 'DEFEND') {
+                  isDefending = true;
+                  logMsg = `${playerPet.name} is bracing!`;
+              } else if (battleCommand === 'CHARGE') {
+                  setPlayerCharged(true);
+                  logMsg = `${playerPet.name} is charging power!`;
+              }
+
+              setBattleLog(prev => [logMsg, ...prev]);
+              
+              if (pDmg > 0) {
+                  const newEnemyHp = Math.max(0, (enemyPet.currentHp || enemyPet.hp) - pDmg);
+                  setEnemyPet(prev => prev ? ({...prev, currentHp: newEnemyHp}) : null);
+                  triggerShake();
+                  setBattleLog(prev => [`> Dealt ${pDmg} damage!`, ...prev]);
+                  
+                  if (newEnemyHp <= 0) {
+                      setIsBattleOver(true);
+                      setBattleLog(prev => ["ENEMY DEFEATED!", ...prev]);
+                      const xp = 50;
+                      const coins = 50;
+                      const updatedPlayer = { ...playerPet, exp: playerPet.exp + xp, battlesWon: (user?.battlesWon||0) + 1 };
+                      if (updatedPlayer.exp >= updatedPlayer.maxExp) {
+                           updatedPlayer.level++;
+                           updatedPlayer.exp = 0;
+                           updatedPlayer.maxHp! += 10; updatedPlayer.hp += 10; updatedPlayer.atk += 5; updatedPlayer.currentHp = updatedPlayer.maxHp;
+                      }
+                      const newInv = inventory.map(p => p.id === playerPet.id ? updatedPlayer : p);
+                      setInventory(newInv);
+                      setUser(prev => prev ? ({...prev, coins: prev.coins + coins}) : null);
+                      saveGame(user!, newInv);
+                      setBattleCommand(null);
+                      return;
+                  }
+              }
+
+              // 2. Enemy Turn (Delayed)
+              setTimeout(() => {
+                  if (isBattleOver) return;
+                  let eDmg = Math.max(2, Math.floor((enemyPet.atk * 0.4) - (playerPet.def * 0.1)));
+                  
+                  if (isDefending) {
+                      eDmg = Math.floor(eDmg * 0.5);
+                      setBattleLog(prev => ["Blocked the attack!", ...prev]);
+                  }
+
+                  const newPlayerHp = Math.max(0, (playerPet.currentHp || playerPet.hp) - eDmg);
+                  setPlayerPet(prev => prev ? ({...prev, currentHp: newPlayerHp}) : null);
+                  setBattleLog(prev => [`Enemy dealt ${eDmg} dmg!`, ...prev]);
+                  
+                  if (newPlayerHp <= 0) {
+                      setIsBattleOver(true);
+                      setBattleLog(prev => ["YOU FAINTED...", ...prev]);
+                      const updatedPlayer = { ...playerPet, currentHp: 0 };
+                      const newInv = inventory.map(p => p.id === playerPet.id ? updatedPlayer : p);
+                      setInventory(newInv);
+                      saveGame(user!, newInv);
+                  }
+                  
+                  // Reset Command to allow next turn
+                  setBattleCommand(null);
+
+              }, 1000);
+          };
+
+          executeTurn();
+      }
+  }, [battleCommand, gameState, isBattleOver]);
+
+  const saveGame = (u: UserProfile, i: Pixupet[]) => {
+      const updatedUser = { ...u, lastSaveAt: Date.now() };
+      setUser(updatedUser);
+      setInventory(i);
+      localStorage.setItem('pixupet_user_v1', JSON.stringify(updatedUser));
+      localStorage.setItem('pixupet_inventory_v1', JSON.stringify(i));
+      localStorage.setItem('pixupet_version', SAVE_VERSION);
+  };
+
+  const triggerShake = () => {
+      setScreenShake(true);
+      setTimeout(() => setScreenShake(false), 500);
+  };
+
+  const handleFeed = (itemKey: string) => {
+      const item = ITEMS_DB[itemKey];
+      const pet = inventory[0];
+      if (pet.hunger >= 100 && item.type === 'Food') {
+          alert("Pet is full!");
+          return;
+      }
+      let newPet = { ...pet };
+      if (item.effect) newPet = item.effect(newPet);
+      const newInvList = [...user!.inventory];
+      const idx = newInvList.indexOf(itemKey);
+      if (idx > -1) newInvList.splice(idx, 1);
+      const newUser = { ...user!, inventory: newInvList };
+      const newInventory = [newPet, ...inventory.slice(1)];
+      saveGame(newUser, newInventory);
+      setIsFeeding(false);
+      triggerShake();
+      spawnFloatText("YUMMY!", "text-green-400");
+  };
+
+  const handleBuy = (itemKey: string) => {
+      const item = ITEMS_DB[itemKey];
+      if (!user || user.coins < item.price) {
+          alert("Not enough coins!");
+          return;
+      }
+      const newUser = { ...user, coins: user.coins - item.price, inventory: [...user.inventory, itemKey] };
+      setUser(newUser); // Optimistic update
+      saveGame(newUser, inventory);
+      spawnFloatText("- " + item.price, "text-yellow-400");
+  };
+  
+  const handleEvolve = async (pet: Pixupet) => {
+      if (pet.level < 10) return;
+      const confirmed = window.confirm("Evolution is permanent. Are you ready?");
+      if (!confirmed) return;
+      
+      setGameState('SCAN');
+      setScanMessage("EVOLVING MATRIX...");
+      try {
+          const result = await evolveVoxelScene(pet);
+          // Generate new art
+          const newArt = await generateCardArt(pet.description + " evolved form, bigger, stronger, mega armor.", pet.name + " Mega", result.visual_design);
+          
+          const evolvedPet: Pixupet = {
+              ...pet,
+              visual_design: result.visual_design,
+              voxelCode: makeBackgroundTransparent(result.code),
+              cardArtUrl: newArt,
+              name: "Mega " + pet.name,
+              stage: 'Mega',
+              atk: pet.atk + 20,
+              def: pet.def + 20,
+              maxHp: (pet.maxHp||100) + 50,
+              currentHp: (pet.maxHp||100) + 50,
+              level: pet.level // Keep level
+          };
+          
+          const newInv = inventory.map(p => p.id === pet.id ? evolvedPet : p);
+          setInventory(newInv);
+          saveGame(user!, newInv);
+          setGameState('NEXUS');
+          spawnFloatText("EVOLUTION COMPLETE!", "text-purple-400");
+      } catch (e) {
+          console.error(e);
+          setGameState('NEXUS');
+          alert("Evolution failed. Try again.");
+      }
+  };
+
+  const handleTrain = (stat: 'atk'|'def'|'spd') => {
+      const pet = inventory[0];
+      if (pet.fatigue >= 80) {
+          alert("Too tired to train!");
+          return;
+      }
+      setGameState('TRAINING');
+      setTrainingStat(stat);
+      let progress = 0;
+      const trainInterval = setInterval(() => {
+          progress += 10;
+          if (progress >= 100) {
+              clearInterval(trainInterval);
+              const newPet = { ...pet };
+              newPet[stat] += 1;
+              newPet.fatigue += 20;
+              newPet.exp += 10;
+              newPet.hunger = Math.max(0, newPet.hunger - 10);
+              const newInv = [newPet, ...inventory.slice(1)];
+              saveGame(user!, newInv);
+              setGameState('NEXUS');
+              spawnFloatText(`+1 ${stat.toUpperCase()}!`, "text-yellow-400");
+          }
+      }, 200);
   };
 
   const spawnFloatText = (text: string, color: string) => {
@@ -398,190 +608,135 @@ const App: React.FC = () => {
       setTimeout(() => setFloatingTexts(prev => prev.filter(t => t.id !== id)), 1000);
   };
 
-  const triggerShake = () => {
-      setScreenShake(true);
-      setTimeout(() => setScreenShake(false), 500);
-  };
-
-  // HANDLE PET SWITCHING
-  const handleSetAsActive = (pet: Pixupet) => {
-      if (pet.id === inventory[0].id) return; // Already active
-      const otherPets = inventory.filter(p => p.id !== pet.id);
-      const newInv = [pet, ...otherPets];
-      setInventory(newInv);
-      saveGame(user!, newInv);
-      setInspectingPet(null);
-      setGameState('NEXUS');
-  };
-
-  // HANDLE TACTIC CHANGE
-  const handleUpdateTactic = (id: string, tactic: AITactic) => {
-      const newInv = inventory.map(p => p.id === id ? { ...p, tactic } : p);
-      setInventory(newInv);
-      saveGame(user!, newInv);
-      if (inspectingPet && inspectingPet.id === id) {
-          setInspectingPet({ ...inspectingPet, tactic });
-      }
-  };
-
-  // GENERIC EVENT TRIGGER
   const triggerEvent = (type: EventType, data?: any) => {
-      if (activeEvent) return; // Block if busy
-      
+      if (activeEvent || isFeeding) return; 
       triggerShake();
-      
-      // 1. Initialize Event State
       let initialData = data;
       if (type === 'WILD_BATTLE' && !data) {
            const enemy = getRandomEnemy(user?.currentRank || 'E', inventory[0].level);
-           // Stat Adjustment for Quick Auto-Battles
            enemy.hp = Math.floor(enemy.hp * 0.6); 
            initialData = enemy;
       }
-
       const newEvent: RandomEvent = {
           type,
           data: initialData,
           step: 'INTRO',
           logs: type === 'WILD_BATTLE' ? [`A wild ${initialData.name} appeared!`] : ['Something glimmers nearby...']
       };
-      
       setActiveEvent(newEvent);
 
-      // 2. Start Async Logic after short delay for UI enter
+      // Auto-Resolve Loop for Non-Battle events
       setTimeout(() => {
-          if (type === 'WILD_BATTLE') {
-              resolveAutoBattle(newEvent, inventory[0]);
-          } else if (type === 'TREASURE') {
-              resolveTreasure(newEvent);
-          } else if (type === 'WEATHER_CHANGE') {
-              setActiveEvent(prev => prev ? { ...prev, step: 'RESULT', logs: [...prev.logs, `Environment shifted to ${data}.`] } : null);
+          if (type === 'WILD_BATTLE') resolveAutoBattle(newEvent, inventory[0]);
+          else if (type === 'TREASURE') resolveTreasure(newEvent);
+          else if (type === 'MERCHANT') {
+              setActiveEvent(prev => prev ? {...prev, step: 'RESULT', reward: 'Offer: 100 Coins -> Mystery Box', logs: [...prev.logs, "Trade?"]} : null);
           }
       }, 1500);
   };
 
   const resolveTreasure = (event: RandomEvent) => {
-      const foundCoins = Math.floor(Math.random() * 50) + 10;
-      const updatedUser = { ...user!, coins: user!.coins + foundCoins };
-      saveGame(updatedUser);
-      
-      setActiveEvent(prev => prev ? {
-          ...prev,
-          step: 'RESULT',
-          reward: `${foundCoins} Coins`,
-          logs: [...prev.logs, `You found a stash of coins!`, `+${foundCoins} Gold added.`]
-      } : null);
+      const itemKey = getLootDrop('E');
+      let rewardText = "";
+      let updatedUser = user;
+      if (itemKey) {
+          const item = ITEMS_DB[itemKey];
+          updatedUser = { ...user!, inventory: [...(user?.inventory || []), itemKey] };
+          rewardText = `${item.name} (${item.rarity})`;
+      } else {
+          const foundCoins = Math.floor(Math.random() * 50) + 10;
+          updatedUser = { ...user!, coins: user!.coins + foundCoins };
+          rewardText = `${foundCoins} Coins`;
+      }
+      saveGame(updatedUser!, inventory);
+      setActiveEvent(prev => prev ? { ...prev, step: 'RESULT', reward: rewardText, logs: [...prev.logs, `You found: ${rewardText}`] } : null);
   };
 
+  // Automated battle (for Wild Events only - Arena is manual)
   const resolveAutoBattle = (event: RandomEvent, player: Pixupet) => {
       setActiveEvent(prev => prev ? { ...prev, step: 'ACTION' } : null);
-      
       const enemy = event.data as Pixupet;
       let pHp = player.currentHp || player.hp;
       let eHp = enemy.hp;
       const logs: string[] = [...event.logs];
 
-      // Simulate Turns (Simplified for AFK)
       const battleLoop = setInterval(() => {
-          // Player Turn
-          const pDmg = Math.max(5, Math.floor((player.atk * 0.5) - (enemy.def * 0.1)));
+          if (!event) { clearInterval(battleLoop); return; }
+          
+          // Player Hit
+          const pCrit = Math.random() < (player.happiness || 50) / 500; 
+          let pDmg = Math.max(5, Math.floor((player.atk * 0.5) - (enemy.def * 0.1)));
+          if(pCrit) { pDmg *= 2; logs.push("CRITICAL HIT!"); }
           eHp -= pDmg;
           logs.push(`${player.name} hits for ${pDmg} dmg!`);
           
           if (eHp <= 0) {
               clearInterval(battleLoop);
-              // Win Logic
               const xp = 30;
               const coins = 20;
-              const updatedPet = { ...player, exp: player.exp + xp, currentHp: pHp };
-              // Level Up Check
+              const updatedPet = { ...player, exp: player.exp + xp, currentHp: pHp, happiness: Math.min(100, (player.happiness||50) + 2) };
               if (updatedPet.exp >= updatedPet.maxExp) {
-                   updatedPet.level++;
-                   updatedPet.exp = 0;
-                   updatedPet.maxExp = Math.floor(updatedPet.maxExp * 1.2);
+                   updatedPet.level++; updatedPet.exp = 0; updatedPet.maxExp = Math.floor(updatedPet.maxExp * 1.2);
                    updatedPet.atk += 5; updatedPet.maxHp! += 10; updatedPet.hp += 10; updatedPet.currentHp = updatedPet.maxHp;
                    logs.push("LEVEL UP!");
               }
-
               const newInv = [updatedPet, ...inventory.slice(1)];
               const newUser = { ...user!, coins: user!.coins + coins, battlesWon: (user!.battlesWon||0) + 1 };
               saveGame(newUser, newInv);
-              
-              setActiveEvent(prev => prev ? {
-                  ...prev,
-                  step: 'RESULT',
-                  winner: 'PLAYER',
-                  reward: `+${xp} XP | +${coins} Coins`,
-                  logs: [...logs, `Enemy ${enemy.name} defeated!`]
-              } : null);
+              setActiveEvent(prev => prev ? { ...prev, step: 'RESULT', winner: 'PLAYER', reward: `+${xp} XP | +${coins} Coins`, logs: [...logs, `Enemy defeated!`] } : null);
               return;
           }
 
-          // Enemy Turn
+          // Enemy Hit
           const eDmg = Math.max(2, Math.floor((enemy.atk * 0.4) - (player.def * 0.1)));
           pHp -= eDmg;
           logs.push(`Enemy hits back for ${eDmg} dmg!`);
 
           if (pHp <= 0) {
               clearInterval(battleLoop);
-              // Loss Logic
-              const updatedPet = { ...player, currentHp: 0 };
+              const updatedPet = { ...player, currentHp: 0, happiness: Math.max(0, (player.happiness||50) - 10) };
               const newInv = [updatedPet, ...inventory.slice(1)];
               saveGame(user!, newInv);
-
-              setActiveEvent(prev => prev ? {
-                  ...prev,
-                  step: 'RESULT',
-                  winner: 'ENEMY',
-                  logs: [...logs, `${player.name} fainted...`]
-              } : null);
+              setActiveEvent(prev => prev ? { ...prev, step: 'RESULT', winner: 'ENEMY', logs: [...logs, `${player.name} fainted...`] } : null);
               return;
           }
 
-          // Update Logs UI
           setActiveEvent(prev => prev ? { ...prev, logs: [...logs] } : null);
-
-      }, 800); // Turn Speed
+      }, 800);
   };
 
-  // AFK Loop for Triggering Events
+  // AFK Loop
   useEffect(() => {
       const loop = setInterval(() => {
-          if (gameState === 'NEXUS' && inventory.length > 0 && !activeEvent) {
-              // 2% chance per check
+          if (gameState === 'NEXUS' && inventory.length > 0 && !activeEvent && !isFeeding) {
               if (Math.random() < 0.02) {
                   const rand = Math.random();
-                  if (rand < 0.7) triggerEvent('WILD_BATTLE');
-                  else triggerEvent('TREASURE');
-              }
-              
-              // Glitch chance
-              if (!hasGlitch && Math.random() < 0.01) {
-                  setHasGlitch(true);
-                  iframeRef.current?.contentWindow?.postMessage({ type: 'TOGGLE_DIRT', value: true }, '*');
+                  if (rand < 0.6) triggerEvent('WILD_BATTLE');
+                  else if (rand < 0.9) triggerEvent('TREASURE');
+                  else triggerEvent('MERCHANT');
               }
           }
       }, 2000);
       return () => clearInterval(loop);
-  }, [gameState, inventory, activeEvent, hasGlitch]);
+  }, [gameState, inventory, activeEvent, isFeeding]);
 
-  // ... handleScan, handleCreateProfile, etc ... (Kept largely same, just updated logic where needed)
-  
   const handleScan = async (img: string) => {
       setGameState('SCAN');
       try {
           const stats = await analyzeObject(img);
           let code = await generateVoxelScene(img, stats.visual_design, stats.bodyType);
           code = makeBackgroundTransparent(zoomCamera(hideBodyText(code), 1.0));
-          let art = img;
+          
+          // Generate Art
           generateCardArt(stats.description, stats.name, stats.visual_design)
               .then(url => {
                   setInventory(prev => prev.map(p => p.id === newPet.id ? {...p, cardArtUrl: url} : p));
               }).catch(console.error);
+          
           const newPet: Pixupet = {
-              ...stats, voxelCode: code, imageSource: img, cardArtUrl: art,
+              ...stats, voxelCode: code, imageSource: img, cardArtUrl: img,
               currentHp: stats.hp, maxHp: stats.hp, level: 1, exp: 0, maxExp: 100,
-              hunger: 100, fatigue: 0, tactic: 'BALANCED'
+              hunger: 100, fatigue: 0, tactic: 'BALANCED', happiness: 50
           };
           const newInv = [newPet, ...inventory];
           saveGame(user!, newInv);
@@ -593,7 +748,7 @@ const App: React.FC = () => {
   };
 
   const handleCreateProfile = () => {
-      const u: UserProfile = { name: 'Tamer', level: 1, exp: 0, coins: 100, joinedAt: Date.now(), battlesWon: 0, currentRank: 'E', inventory: [] };
+      const u: UserProfile = { name: 'Tamer', level: 1, exp: 0, coins: 100, joinedAt: Date.now(), lastSaveAt: Date.now(), battlesWon: 0, currentRank: 'E', inventory: ['data_burger', 'potion_small'] };
       saveGame(u, []);
       setGameState('NEXUS');
   };
@@ -610,23 +765,68 @@ const App: React.FC = () => {
       saveGame(user!, newInv);
       const enemy = getRandomEnemy(user?.currentRank || 'E', pet.level);
       const enemyVoxel = getGenericVoxel(enemy.element);
+      
       setPlayerPet(updatedPet);
-      setEnemyPet({ ...enemy, voxelCode: enemyVoxel });
+      setEnemyPet({ ...enemy, voxelCode: makeBackgroundTransparent(enemyVoxel), currentHp: enemy.hp });
+      
       setIsBattleOver(false);
-      setBattleLog(["BATTLE START!"]);
+      setPlayerCharged(false);
+      setBattleCommand(null);
+      setBattleLog(["BATTLE START!", "Choose a command!"]);
       setGameState('ARENA');
   };
 
-  // ... render logic ...
+  const activePet = inventory[0];
 
+  // RENDER
   if (gameState === 'SPLASH') {
       return (
           <div className="w-full h-screen bg-yellow-300 flex items-center justify-center p-4">
               <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_black] p-8 text-center animate-pop-in flex flex-col items-center">
                   <BrandLogo scale={1.5} className="mb-8" />
-                  <p className="font-bold mb-8 bg-black text-white inline-block px-2 py-1">GOD-TIER UPDATE</p>
+                  <p className="font-bold mb-8 bg-black text-white inline-block px-2 py-1">VERSION 3.0 - TACTICS UPDATE</p>
                   <button onClick={handleCreateProfile} className="neo-btn bg-cyan-300 w-full py-4 text-xl hover:bg-cyan-200">START GAME</button>
               </div>
+          </div>
+      );
+  }
+  
+  if (gameState === 'TRAINING') {
+      return (
+          <div className="w-full h-screen bg-orange-300 flex items-center justify-center flex-col">
+              <h1 className="text-6xl font-black italic mb-8 animate-pulse">TRAINING...</h1>
+              <div className="w-64 h-64 bg-white border-4 border-black flex items-center justify-center rounded-full shadow-[8px_8px_0px_0px_black] mb-8 overflow-hidden">
+                   {activePet && <img src={activePet.cardArtUrl || activePet.imageSource} className="w-full h-full object-cover animate-bounce" />}
+              </div>
+              <div className="text-2xl font-black bg-white border-2 border-black px-4 py-2">FOCUS: {trainingStat?.toUpperCase()}</div>
+          </div>
+      );
+  }
+
+  if (gameState === 'SHOP') {
+      return (
+          <div className="w-full h-screen bg-purple-50 p-4 flex flex-col">
+               <div className="flex justify-between mb-4 items-center bg-white border-b-4 border-black p-4 -m-4 sticky top-0 z-10 shadow-md">
+                  <h2 className="text-3xl font-black text-purple-600 tracking-tighter">NEON MARKET</h2>
+                  <div className="bg-yellow-300 px-4 py-2 border-2 border-black font-black rounded-full shadow-[2px_2px_0px_0px_black]">💰 {user?.coins}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 overflow-y-auto py-6">
+                  {Object.values(ITEMS_DB).map(item => (
+                      <div key={item.id} className="bg-white border-4 border-black p-3 shadow-[4px_4px_0px_0px_black] flex flex-col justify-between hover:-translate-y-1 transition-transform">
+                          <div className="text-center text-4xl mb-2">{item.icon}</div>
+                          <div className="font-black text-sm mb-1">{item.name}</div>
+                          <div className="text-xs text-gray-500 mb-2 h-8 leading-tight">{item.description}</div>
+                          <button 
+                             onClick={() => handleBuy(item.id)}
+                             disabled={(user?.coins || 0) < item.price}
+                             className="neo-btn bg-green-400 py-2 w-full text-xs hover:bg-green-300 disabled:opacity-50 disabled:bg-gray-300"
+                          >
+                              BUY {item.price}
+                          </button>
+                      </div>
+                  ))}
+              </div>
+              <button onClick={() => setGameState('NEXUS')} className="neo-btn bg-white py-4 w-full mt-4 shrink-0">EXIT SHOP</button>
           </div>
       );
   }
@@ -646,7 +846,7 @@ const App: React.FC = () => {
           <div className="w-full h-screen bg-gray-100 p-4 flex flex-col">
               <div className="flex justify-between mb-4">
                   <h2 className="text-3xl font-black">INVENTORY</h2>
-                  <button onClick={() => setGameState(isFusionSelecting ? 'SYNTHESIS' : 'NEXUS')} className="neo-btn bg-white px-4">CLOSE</button>
+                  <button onClick={() => setGameState('NEXUS')} className="neo-btn bg-white px-4">CLOSE</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pb-20">
                   {inventory.map(pet => (
@@ -654,16 +854,13 @@ const App: React.FC = () => {
                         key={pet.id} 
                         pet={pet} 
                         selected={pet.id === inventory[0].id}
+                        onEvolve={() => handleEvolve(pet)}
                         onClick={() => {
-                            if (isFusionSelecting) {
-                                setFusionSlots(prev => ({ ...prev, [isFusionSelecting]: pet }));
-                                setIsFusionSelecting(null);
-                                setGameState('SYNTHESIS');
-                            } else {
-                                // setInspectingPet(pet); 
-                                // Simplified for this update to just select
-                                handleSetAsActive(pet);
-                            }
+                            const otherPets = inventory.filter(p => p.id !== pet.id);
+                            const newInv = [pet, ...otherPets];
+                            setInventory(newInv);
+                            saveGame(user!, newInv);
+                            setGameState('NEXUS');
                         }} 
                       />
                   ))}
@@ -671,9 +868,8 @@ const App: React.FC = () => {
           </div>
       );
   }
-
+  
   if (gameState === 'SYNTHESIS') {
-       // ... existing synthesis render ...
       return (
           <div className="w-full h-screen bg-purple-100 flex flex-col items-center justify-center p-4">
               <h2 className="text-4xl font-black mb-8">FUSION LAB</h2>
@@ -682,7 +878,7 @@ const App: React.FC = () => {
                       <div key={slot} onClick={() => { setIsFusionSelecting(slot as 'a'|'b'); setGameState('INVENTORY'); }} 
                            className="w-32 h-48 border-4 border-dashed border-black bg-white/50 flex items-center justify-center cursor-pointer overflow-hidden hover:bg-white transition-colors">
                           {fusionSlots[slot as 'a'|'b'] ? (
-                              <img src={fusionSlots[slot as 'a'|'b']!.imageSource} className="w-full h-full object-cover" />
+                              <img src={fusionSlots[slot as 'a'|'b']!.cardArtUrl || fusionSlots[slot as 'a'|'b']!.imageSource} className="w-full h-full object-cover" />
                           ) : <span className="font-bold opacity-50">SELECT {slot.toUpperCase()}</span>}
                       </div>
                   ))}
@@ -707,10 +903,9 @@ const App: React.FC = () => {
   }
 
   if (gameState === 'ARENA') {
-       // ... existing arena render ...
       return (
           <div className={`w-full h-screen bg-gray-900 flex flex-col relative overflow-hidden ${screenShake ? 'shake' : ''}`}>
-              <div className="absolute inset-0 flex flex-col md:flex-row">
+              <div className="absolute inset-0 flex flex-col md:flex-row pb-32">
                   <div className="relative flex-1 border-b-4 md:border-r-4 border-black bg-gray-800">
                        {playerPet && <VoxelViewer code={playerPet.voxelCode} onRef={ref => battlePlayerRef.current = ref} mode="BATTLE" />}
                        <div className="absolute bottom-4 left-4 bg-white border-2 border-black p-2 rounded shadow-[4px_4px_0px_0px_black] z-10">
@@ -726,21 +921,37 @@ const App: React.FC = () => {
                        </div>
                   </div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 bg-black/90 text-white p-6 text-center font-bold border-t-4 border-white z-20">
-                  {isBattleOver ? (
-                      <div className="animate-pop-in">
-                          <div className="text-4xl text-yellow-400 mb-4 font-black">{playerPet?.currentHp! > 0 ? "VICTORY!" : "DEFEATED..."}</div>
-                          <button onClick={() => setGameState('NEXUS')} className="neo-btn bg-white text-black px-8 py-3 text-xl hover:bg-gray-200">RETURN TO NEXUS</button>
+              
+              {/* TACTICAL UI AREA */}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/90 text-white p-2 z-20 h-40 border-t-4 border-white flex flex-col">
+                   <div className="text-center text-yellow-300 font-mono text-sm mb-2 border-b border-gray-700 pb-1">{battleLog[0]}</div>
+                   
+                   {!isBattleOver && (
+                       <div className="flex gap-2 justify-center items-center h-full">
+                           <button onClick={() => setBattleCommand('ATTACK')} disabled={!!battleCommand} className={`neo-btn bg-red-500 text-white w-24 h-20 text-xs disabled:opacity-50 ${battleCommand === 'ATTACK' ? 'bg-red-300' : ''}`}>
+                               ATTACK<br/><span className="text-[8px] font-normal opacity-80">Normal Dmg</span>
+                           </button>
+                           <button onClick={() => setBattleCommand('DEFEND')} disabled={!!battleCommand} className={`neo-btn bg-blue-500 text-white w-24 h-20 text-xs disabled:opacity-50 ${battleCommand === 'DEFEND' ? 'bg-blue-300' : ''}`}>
+                               DEFEND<br/><span className="text-[8px] font-normal opacity-80">-50% Dmg</span>
+                           </button>
+                           <button onClick={() => setBattleCommand('CHARGE')} disabled={!!battleCommand} className={`neo-btn bg-yellow-500 text-black w-24 h-20 text-xs disabled:opacity-50 ${battleCommand === 'CHARGE' ? 'bg-yellow-300' : ''}`}>
+                               CHARGE<br/><span className="text-[8px] font-normal opacity-80">x2 Next Hit</span>
+                           </button>
+                       </div>
+                   )}
+
+                   {isBattleOver && (
+                      <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center animate-pop-in z-30">
+                          <div className={`text-4xl mb-4 font-black ${playerPet?.currentHp! > 0 ? 'text-yellow-400' : 'text-red-500'}`}>
+                              {playerPet?.currentHp! > 0 ? "VICTORY!" : "DEFEATED..."}
+                          </div>
+                          <button onClick={() => setGameState('NEXUS')} className="neo-btn bg-white text-black px-8 py-3 text-xl hover:bg-gray-200">RETURN</button>
                       </div>
-                  ) : (
-                      <div className="text-xl md:text-2xl">{battleLog[0]}</div>
                   )}
               </div>
           </div>
       );
   }
-
-  const activePet = inventory[0];
 
   return (
       <div className={`w-full h-screen relative overflow-hidden flex flex-col ${activePet ? HABITAT_PATTERNS[activePet.element] || 'bg-gray-100' : 'bg-gray-100'} ${screenShake ? 'shake' : ''}`}>
@@ -756,68 +967,73 @@ const App: React.FC = () => {
              </div>
           ) : (
              <>
-                {/* LAYER 0: 3D WORLD (PAUSES ON EVENT) */}
-                <div className={`absolute inset-0 z-0 w-full h-full transition-opacity duration-500 ${activeEvent ? 'opacity-50 scale-95' : 'opacity-100 scale-100'}`}>
+                <div className={`absolute inset-0 z-0 w-full h-full transition-opacity duration-500 ${activeEvent || isFeeding ? 'opacity-50 scale-95' : 'opacity-100 scale-100'}`}>
                     <VoxelViewer 
                         code={activePet.voxelCode} 
                         onRef={ref => iframeRef.current = ref} 
                         mode={'HABITAT'} 
                         weather={weather} 
                         time={gameHour} 
-                        paused={!!activeEvent} // PAUSE RENDERING LOOP
+                        paused={!!activeEvent || !!offlineReport || isFeeding || gameState !== 'NEXUS'} 
                     />
                 </div>
-
-                {/* LAYER 1: UI OVERLAYS */}
                 <div className="absolute inset-0 z-10 pointer-events-none">
                     {floatingTexts.map(ft => (
                         <div key={ft.id} className={`absolute font-black text-2xl stroke-black ${ft.color} animate-float-up`} style={{ left: `${ft.x}%`, top: `${ft.y}%`, textShadow: '2px 2px 0 #000' }}>{ft.text}</div>
                     ))}
                 </div>
-                
-                {/* MODAL LAYER: EVENTS */}
-                {activeEvent && (
-                    <EventModal 
-                        event={activeEvent} 
-                        onClose={() => { setActiveEvent(null); setGameState('NEXUS'); }} 
-                        playerPet={activePet}
-                    />
+                {offlineReport && <WelcomeModal report={offlineReport} onClose={() => setOfflineReport(null)} />}
+                {activeEvent && <EventModal event={activeEvent} onClose={() => { setActiveEvent(null); setGameState('NEXUS'); }} playerPet={activePet} />}
+                {isFeeding && (
+                    <div className="absolute inset-0 z-40 bg-black/50 flex items-end justify-center pointer-events-auto">
+                        <div className="bg-white w-full p-4 rounded-t-3xl border-t-4 border-black animate-slide-up h-1/2 overflow-y-auto shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
+                            <h3 className="font-black text-xl mb-4">SELECT FOOD</h3>
+                            <div className="grid grid-cols-3 gap-2">
+                                {user?.inventory.filter(id => ITEMS_DB[id].type === 'Food' || ITEMS_DB[id].type === 'Consumable').map((id, idx) => (
+                                    <button key={idx} onClick={() => handleFeed(id)} className="border-2 border-black p-2 rounded flex flex-col items-center hover:bg-yellow-100 transition-colors">
+                                        <span className="text-2xl">{ITEMS_DB[id].icon}</span>
+                                        <span className="text-[10px] font-bold text-center leading-tight mt-1">{ITEMS_DB[id].name}</span>
+                                    </button>
+                                ))}
+                                {user?.inventory.filter(id => ITEMS_DB[id].type === 'Food').length === 0 && <div className="col-span-3 text-center text-gray-500 italic">No food! Buy some in the Shop.</div>}
+                            </div>
+                            <button onClick={() => setIsFeeding(false)} className="mt-4 w-full py-3 font-bold bg-gray-200 rounded hover:bg-gray-300">CANCEL</button>
+                        </div>
+                    </div>
                 )}
-
-                {/* HUD */}
                 <div className="absolute top-0 left-0 right-0 p-4 z-20 pointer-events-none flex justify-between items-start">
-                    <div className="bg-white border-2 border-black px-4 py-2 rounded-full shadow-[4px_4px_0px_0px_black] pointer-events-auto flex gap-4 items-center">
-                        <div>
-                            <div className="font-black text-lg">{activePet.name}</div>
-                            <div className="text-xs font-bold text-gray-500 flex gap-2">
-                                <span>LVL {activePet.level}</span>
-                                <span className={activePet.currentHp! < activePet.maxHp! * 0.3 ? "text-red-500 blink" : "text-green-500"}>HP {activePet.currentHp}/{activePet.maxHp}</span>
+                    <div className="bg-white border-2 border-black px-4 py-2 rounded-full shadow-[4px_4px_0px_0px_black] pointer-events-auto flex gap-4 items-center min-w-[200px]">
+                        <div className="w-full">
+                            <div className="font-black text-lg flex justify-between"><span>{activePet.name}</span><span className="text-xs text-gray-500">LVL {activePet.level}</span></div>
+                            <div className="flex flex-col gap-1 mt-1">
+                                <StatBar label="HP" value={activePet.currentHp} max={activePet.maxHp} color="bg-green-500" />
+                                <StatBar label="HUN" value={activePet.hunger} max={100} color="bg-orange-400" />
+                                <StatBar label="HAP" value={activePet.happiness || 50} max={100} color="bg-pink-400" />
                             </div>
                         </div>
                     </div>
                     <div className="flex gap-2 pointer-events-auto items-start">
-                        <div className="bg-black text-white px-3 py-1 rounded-full font-bold text-xs border-2 border-white">{weather}</div>
-                        {hasGlitch && (
-                            <button onClick={() => { setHasGlitch(false); iframeRef.current?.contentWindow?.postMessage({type:'TOGGLE_DIRT', value:false}, '*'); }} className="neo-btn bg-red-500 text-white p-3 rounded-full animate-bounce shadow-lg"><NeonIcon path={ICONS.TRASH} /></button>
-                        )}
-                        <div className="bg-white border-2 border-black px-4 py-2 rounded-full font-black flex flex-col items-end shadow-[4px_4px_0px_0px_black]">
-                            <span>💰 {user?.coins}</span>
-                            <span className="text-[10px] text-gray-500">{currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <div className="bg-black text-white px-3 py-1 rounded-full font-bold text-xs border-2 border-white flex items-center gap-1">
+                            <span>{weather === 'RAIN' ? '🌧️' : weather === 'STORM' ? '⛈️' : '☀️'}</span>
+                            {weather}
                         </div>
+                        <button onClick={() => setGameState('SHOP')} className="bg-white border-2 border-black px-4 py-2 rounded-full font-black flex flex-col items-end shadow-[4px_4px_0px_0px_black] hover:bg-yellow-100 active:translate-y-1 active:shadow-none transition-all">
+                            <span>💰 {user?.coins}</span>
+                            <span className="text-[10px] text-gray-500">SHOP</span>
+                        </button>
                     </div>
                 </div>
-
-                {/* CONTROLS */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 z-30 pointer-events-none">
                      <div className="flex justify-center relative top-8 pointer-events-auto mb-4">
                             <button onClick={() => fileInputRef.current?.click()} className="w-24 h-24 bg-black rounded-full text-yellow-400 border-4 border-yellow-400 flex items-center justify-center hover:scale-110 shadow-[0px_10px_20px_rgba(0,0,0,0.3)] transition-transform">
                                 <NeonIcon path={ICONS.SCAN} size={48} />
                             </button>
                     </div>
-                    <div className="bg-white border-t-4 border-x-4 border-black rounded-t-3xl p-4 grid grid-cols-3 gap-4 shadow-[0px_-10px_0px_0px_rgba(0,0,0,0.1)] pointer-events-auto">
-                        <NavButton label="BATTLE ARENA" icon={ICONS.SWORD} onClick={startArenaBattle} />
-                        <NavButton label="COLLECTION" icon={ICONS.CARDS} onClick={() => setGameState('INVENTORY')} />
-                        <NavButton label="FUSION LAB" icon={ICONS.FUSION} onClick={() => setGameState('SYNTHESIS')} />
+                    <div className="bg-white border-t-4 border-x-4 border-black rounded-t-3xl p-4 grid grid-cols-4 gap-2 shadow-[0px_-10px_0px_0px_rgba(0,0,0,0.1)] pointer-events-auto">
+                        <NavButton label="ARENA" icon={ICONS.SWORD} onClick={startArenaBattle} />
+                        <NavButton label="FEED" icon={ICONS.FOOD} onClick={() => setIsFeeding(true)} />
+                        <NavButton label="TRAIN" icon={ICONS.TRAIN} onClick={() => handleTrain('atk')} />
+                        <NavButton label="CARDS" icon={ICONS.CARDS} onClick={() => setGameState('INVENTORY')} />
                     </div>
                 </div>
              </>

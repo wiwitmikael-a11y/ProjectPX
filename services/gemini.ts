@@ -6,7 +6,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { extractHtmlFromText } from "../utils/html";
-import { OBJECT_ARCHETYPES, BodyType, BIOME_DEFINITIONS, AITactic } from "./gameData";
+import { BodyType, AITactic } from "./gameData";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -31,50 +31,52 @@ const parseGeminiJson = (text: string) => {
     }
 };
 
+// --- THE ENGINE CORE ---
+// This prompt instructs the model to build a high-fidelity "AAA Indie" engine
 export const VOXEL_PROMPT = `
-  You are a World-Class Three.js Developer specializing in "AAA Indie" aesthetics (Neo-Pop/Voxel).
-  Create a **GOD-TIER RPG HABITAT**.
+  You are a Senior Graphics Engineer specializing in WebGL and "Juicy" Game Feel.
+  Create a **High-Fidelity Voxel Habitat**.
   
   ### 1. CORE SETUP
   - **Imports:** standard Three.js (0.160.0) + SimplexNoise.
   - **Renderer:** \`new THREE.WebGLRenderer({ alpha: true, antialias: true });\`
-  - **Scene:** \`scene.background = null;\` (Transparency handled by app).
-  - **Camera & Controls (STRICT):** 
-    - Use \`OrbitControls\`.
-    - \`controls.enablePan = false;\` (LOCK TARGET)
-    - \`controls.enableDamping = true;\`
-    - \`controls.minDistance = 14;\` (Keep pet in view)
-    - \`controls.maxDistance = 28;\` (Don't drift too far)
-    - \`controls.maxPolarAngle = Math.PI / 2 - 0.1;\` (Never go below ground)
+  - **Camera:** Use \`OrbitControls\`.
+    - **CRITICAL:** \`controls.enablePan = false;\` (Lock target to pet).
+    - **CRITICAL:** \`controls.minDistance = 12; controls.maxDistance = 20;\` (Forced framing).
+    - **CRITICAL:** \`controls.maxPolarAngle = Math.PI / 2 - 0.1;\` (Prevent going under ground).
+  
+  ### 2. THE "JUICE" (VISUALS & ANIMATION)
+  - **NEO-POP OUTLINES (Inverted Hull Method):**
+    - For EVERY mesh part of the pet (head, body, limbs, armor):
+    - Create a clone: \`const outline = originalMesh.clone();\`
+    - Material: \`new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });\`
+    - Scale: \`outline.scale.multiplyScalar(1.06);\`
+    - Add outline to the same parent group.
+  - **PROCEDURAL IK (Inverse Kinematics):**
+    - Use \`SimplexNoise\` to generate the floor height \`y\` at any \`x, z\`.
+    - In \`animate()\`:
+      - For each foot/wheel: Calculate \`groundHeight = getNoiseHeight(foot.worldPosition.x, foot.worldPosition.z)\`.
+      - Force \`foot.position.y\` to match \`groundHeight\` relative to the body.
+      - This ensures feet stick to the hills/slopes while walking.
+  - **HEAD TRACKING:**
+    - In \`animate()\`: \`headGroup.lookAt(camera.position);\`.
+  - **HIT STOP (Impact Frames):**
+    - Global var: \`let hitStopTimer = 0;\`.
+    - In \`animate()\`: \`if (hitStopTimer > 0) { hitStopTimer -= delta; return; } // Skip frame updates\`.
+    - Listen for: \`window.addEventListener('message', (e) => { if(e.data.type==='HIT_STOP') hitStopTimer = 0.15; });\`
 
-  ### 2. PROCEDURAL TERRAIN (SEAMLESS)
-  - **GRID:** x: -25 to 25, z: -25 to 25.
-  - **NOISE:** Use \`SimplexNoise\` for terrain height y. Store this noise function to use in Animation loop.
-  - **FLOOR:** Create a seamless voxel terrain.
+  ### 3. WEATHER SYSTEM
+  - Listen for: \`window.addEventListener('message', (e) => { if(e.data.type === 'SET_WEATHER') updateWeather(e.data.value); });\`
+  - **RAIN:** Create a particle system of blue lines that only renders when weather is 'RAIN'.
+  - **STORM:** Darker ambient light + flash effect.
+  - **CLEAR:** Bright sunlight.
 
-  ### 3. THE "JUICE" - AAA VISUALS (CRITICAL)
-  - **CEL-SHADING (INVERTED HULL):** For every voxel mesh of the PET (Body, Head, Limbs), create a duplicate mesh:
-    - \`material = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });\`
-    - \`scale.setScalar(1.06);\`
-    - This creates a thick black "Neo-Pop" outline.
-  - **HIT STOP:** Implement a global \`let hitStop = 0;\`. In \`animate()\`, if \`hitStop > 0\`, \`hitStop -= delta;\` and SKIP animation updates.
+  ### 4. PROCEDURAL TERRAIN
+  - Grid: x: -30 to 30, z: -30 to 30.
+  - Use the noise function to create gentle rolling hills.
+  - Seamless infinite scrolling illusion if possible, or just a large detailed island.
 
-  ### 4. PROCEDURAL ANIMATION RIGGING (IK)
-  - **Structure:** \`heroGroup\` > \`body\` > \`head\`, \`legL\`, \`legR\`.
-  - **Fake IK (Terrain Matching):**
-    - In \`animate()\`: Calculate the ground height at the Leg's world X/Z using the Noise function.
-    - \`leg.position.y = groundHeightAt(leg.x, leg.z)\`.
-    - This ensures feet stick to the terrain slopes perfectly while walking.
-  - **Head Tracking:** \`head.lookAt(camera.position)\` (The pet watches the player).
-
-  ### 5. WEATHER SYSTEM
-  - Listen for messages: \`window.addEventListener('message', (e) => { if(e.data.type === 'SET_WEATHER') ... })\`
-  - **RAIN:** Create a particle system (InstancedMesh) of thin blue boxes falling. Visible only if \`weather === 'RAIN'\`.
-  - **MIST:** Adjust \`scene.fog\` density.
-
-  ### 6. LOGIC
-  - Listen for \`PAUSE\`: If paused, stop rotation/movement, but keep rendering.
-  - **Output:** Raw HTML string only.
+  ### Output: Raw HTML string only.
 `;
 
 export interface Move {
@@ -107,6 +109,7 @@ export interface MonsterStats {
   description: string;
   ability: string;
   moves: Move[]; 
+  happiness?: number;
 }
 
 export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> => {
@@ -116,17 +119,26 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
     const mimeMatch = imageBase64.match(/^data:(.*?);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
+    // ENHANCED PROMPT: STRICT GAMIFICATION ANALYSIS
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `Analyze object for 'Pixupet'.
-            ARCHETYPES: ${JSON.stringify(OBJECT_ARCHETYPES)}
-            TASK: Identify object, map to Element. Determine BODY_TYPE (BIPED, QUADRUPED, FLOATING, WHEELED). Create Stats.
-            VISUAL_DESIGN: Extremely detailed description of the monster's appearance, colors, and body shape for a 3D Artist. NO LOGOS OR BRAND NAMES.
-            HABITAT_DESC: Describe the ideal biome (e.g., "Volcanic Crater with Obsidian spikes" for Fire).
+            text: `Analyze this object and **TRANSFORM IT** into a "Pixupet" Battle Monster.
+            
+            TASK:
+            1. Identify the base object.
+            2. **GAMIFY & EQUIP:** Do not just describe the object. Reimagine it as an RPG character.
+               - **Armor:** Add plating, helmets, or shields that match the object's theme.
+               - **Weapons:** Add tails, claws, floating orbs, or energy blades.
+               - **Accessories:** Cybernetic visors, magical runes, scarves, or backpacks.
+               - *Example:* If it's a Shoe, make it a "Speedster Wolf" with lace-whips and rubber sole-armor.
+            
+            3. VISUAL_DESIGN: Write a detailed prompt for an artist/3D modeler describing this *enhanced* version. 
+               **CRITICAL:** Explicitly describe the added armor and accessories. (e.g., "A floating teapot with a golden steam-powered jetpack and ceramic shield plating").
+            
             Return JSON.`
           }
         ]
@@ -175,7 +187,8 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
       ...data, 
       id: generateId(),
       dateCreated: Date.now(),
-      tactic: 'BALANCED' // Default Tactic
+      tactic: 'BALANCED', // Default Tactic
+      happiness: 50
     };
   } catch (error) {
     console.error("Analysis failed:", error);
@@ -199,24 +212,39 @@ export const generateImage = async (prompt: string, aspectRatio: string = '1:1',
 };
 
 export const generateCardArt = async (monsterDescription: string, objectName: string, visualDesign: string): Promise<string> => {
-    const prompt = `Anime trading card illustration of: ${visualDesign}. 
-    Subject: ${objectName} transformed into a Pixupet monster.
-    Style: High-quality anime art, vibrant colors, thick black outlines (Neo-Pop).
-    CONSISTENCY: Must match the visual description exactly.
-    NEGATIVE PROMPT: Text, Logo, Brand Name, Watermark, Blur, Realistic, Trademark, Signage, Writing, Letters.
-    Action: Dynamic battle stance.`;
+    // CRITICAL: This prompt forces consistency with the 3D gamified design
+    const prompt = `
+    High-quality Anime Trading Card Art of a Monster.
+    
+    **CHARACTER DESIGN (STRICT):**
+    ${visualDesign}
+    
+    **STYLE GUIDE:**
+    - **Neo-Pop Anime:** Vibrant colors, flat shading, thick bold black outlines (Cel-Shaded).
+    - **Chibi Proportions:** Slightly large head, cute but cool, matching the voxel aesthetic.
+    - **Pose:** Dynamic battle stance, showing off the armor/weapons described.
+    - **Composition:** Center frame, full body or 3/4 view.
+    - **Background:** Abstract elemental energy patterns (minimalist).
+    - **Consistency:** Must look exactly like the description provided. Do not revert to a normal object.
+    
+    No text.
+    `;
     
     return generateImage(prompt, '3:4', false);
 };
 
 export const generateVoxelScene = async (imageBase64: string, visualDescription: string, bodyType: string = 'BIPED'): Promise<string> => {
   let contentsPart: any[] = [];
-  // Inject specific AAA Juice instructions into the prompt for this request
+  
+  // INJECT JUICE INSTRUCTIONS
   const JUICE_INSTRUCTIONS = `
-    CRITICAL: Implement 'Inverted Hull' outlining (black back-faced mesh scaled 1.05x) for all pet parts.
-    CRITICAL: Implement 'Terrain Matching IK'. Legs must move up/down based on noise(x,z) of floor.
-    CRITICAL: Lock Camera pan. Limit Zoom.
+    ## CRITICAL ART DIRECTION:
+    1. **GAMIFY:** This is NOT a normal object. You MUST build the "Pixupet" described below using voxels.
+    2. **ARMOR & ACCESSORIES:** Specifically create the armor, visors, and weapons mentioned in the VISUAL_DESIGN. Use distinct colors for these attachments.
+    3. **OUTLINES:** You MUST implement the 'Inverted Hull' method for every body part mesh. Code this explicitly.
+    4. **PHYSICS/IK:** Feet/Base must track ground noise height.
   `;
+  
   const PROMPT_WITH_CONTEXT = `${VOXEL_PROMPT}\n\n### TARGET VISUAL_DESIGN:\n"${visualDescription}"\n### BODY_TYPE: ${bodyType}\n### INSTRUCTIONS: ${JUICE_INSTRUCTIONS}`;
   contentsPart.push({ text: PROMPT_WITH_CONTEXT });
 
@@ -243,18 +271,19 @@ export const generateVoxelScene = async (imageBase64: string, visualDescription:
 };
 
 export const fuseVoxelScene = async (petA: MonsterStats, petB: MonsterStats) => {
-    const visual_design = `A fusion chimera of ${petA.name} and ${petB.name}. ${petA.visual_design} combined with ${petB.visual_design}.`;
+    const visual_design = `A fusion chimera of ${petA.name} and ${petB.name}. ${petA.visual_design} combined with ${petB.visual_design}. Ensure it has combined armor elements from both.`;
     const code = await generateVoxelScene("", visual_design, petA.bodyType);
     return { code, visual_design, name: `${petA.name.substring(0, 3)}${petB.name.substring(petB.name.length-3)}`, element: petA.element };
 };
 
 export const evolveVoxelScene = async (pet: MonsterStats) => {
-     const visual_design = `Evolved Mega Form of ${pet.name}. ${pet.visual_design} but bigger, stronger armor, glowing energy aura.`;
+     const visual_design = `Evolved Mega Form of ${pet.name}. ${pet.visual_design} but bigger, with golden armor and glowing energy aura.`;
      const code = await generateVoxelScene("", visual_design, pet.bodyType);
      return { code, visual_design };
 }
 
 export const getGenericVoxel = (element: string) => {
+    // A simple fallback, but we add the juice instructions to it just in case we expand this later.
     const colors: any = {
         Fire: '0xFF5555', Water: '0x5555FF', Grass: '0x55FF55', Electric: '0xFFFF55',
         Psychic: '0xFF55FF', Metal: '0xAAAAAA', Dark: '0x333333', Light: '0xFFFFFF',
@@ -287,13 +316,14 @@ export const getGenericVoxel = (element: string) => {
     document.body.appendChild(renderer.domElement);
 
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 5, 15);
+    camera.position.set(0, 8, 18); // Tighter frame
     
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.enablePan = false;
+    controls.enablePan = false; // LOCKED
     controls.minDistance = 8;
-    controls.maxDistance = 25;
+    controls.maxDistance = 20;
+    controls.maxPolarAngle = Math.PI / 2;
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
@@ -304,19 +334,20 @@ export const getGenericVoxel = (element: string) => {
     const heroGroup = new THREE.Group();
     scene.add(heroGroup);
 
-    // Slime Body with Outline
+    // Slime Body
     const geometry = new THREE.SphereGeometry(0.8, 16, 16);
     const material = new THREE.MeshStandardMaterial({ color: ${colorHex}, roughness: 0.2, metalness: 0.1 });
     const body = new THREE.Mesh(geometry, material);
     body.scale.y = 0.8; 
     heroGroup.add(body);
     
-    // INVERTED HULL (OUTLINE)
+    // --- JUICE: INVERTED HULL OUTLINE ---
     const outlineGeo = geometry.clone();
     const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
     const outline = new THREE.Mesh(outlineGeo, outlineMat);
     outline.scale.setScalar(1.05); 
     heroGroup.add(outline);
+    // ------------------------------------
     
     // Eyes
     const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);

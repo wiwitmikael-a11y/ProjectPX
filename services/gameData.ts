@@ -11,149 +11,294 @@ export type WeatherType = 'CLEAR' | 'RAIN' | 'STORM' | 'NEON_MIST';
 export interface GameItem {
     id: string;
     name: string;
-    type: 'Consumable' | 'Material' | 'Key';
+    type: 'Consumable' | 'Material' | 'Key' | 'Food';
     description: string;
     effect?: (pet: any) => any;
     icon: string;
     rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
     price: number;
-}
-
-export interface WildEnemyBlueprint {
-    name: string;
-    element: string;
-    baseHp: number;
-    baseAtk: number;
-    baseDef: number;
-    baseSpd: number;
-    description: string;
-    visualPrompt: string;
-    minRank: string;
-    bodyType: BodyType;
+    value?: number; 
 }
 
 export interface ObjectArchetype {
-    element?: string;
+    element: string;
+    defaultBodyType: BodyType;
     hp?: number;
     atk?: number;
     def?: number;
     spd?: number;
     int?: number;
-    defaultBodyType?: BodyType;
 }
 
-export const TACTIC_MULTIPLIERS: Record<AITactic, { atk: number, def: number, spd: number, crit: number }> = {
-    BALANCED: { atk: 1.0, def: 1.0, spd: 1.0, crit: 0.05 },
-    AGGRESSIVE: { atk: 1.4, def: 0.6, spd: 1.1, crit: 0.20 },
-    DEFENSIVE: { atk: 0.7, def: 1.5, spd: 0.8, crit: 0.02 },
-    SPEEDSTER: { atk: 1.1, def: 0.8, spd: 1.5, crit: 0.15 }
+export interface OfflineReport {
+    secondsAway: number;
+    xpGained: number;
+    coinsFound: number;
+    hungerLost: number;
+    hpLost: number;
+    events: string[];
+}
+
+export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineReport => {
+    const now = Date.now();
+    const diffSeconds = Math.floor((now - lastSeen) / 1000);
+    
+    const hungerDropRate = 10 / 3600; 
+    const xpRate = 50 / 3600;
+    
+    const totalHungerLost = Math.floor(diffSeconds * hungerDropRate);
+    let remainingHunger = pet.hunger - totalHungerLost;
+    
+    let xpGained = 0;
+    let coinsFound = 0;
+    let hpLost = 0;
+    let events: string[] = [];
+
+    if (remainingHunger > 0) {
+        xpGained = Math.floor(diffSeconds * xpRate);
+        coinsFound = Math.floor(diffSeconds * (10/3600)); 
+        pet.hunger = Math.max(0, remainingHunger);
+        events.push(`Explored for ${(diffSeconds/60).toFixed(0)} mins.`);
+    } else {
+        const safeTime = pet.hunger / hungerDropRate;
+        const starvingTime = diffSeconds - safeTime;
+        
+        xpGained = Math.floor(safeTime * xpRate);
+        pet.hunger = 0;
+        
+        hpLost = Math.floor(starvingTime * (5/3600));
+        pet.currentHp = Math.max(0, pet.currentHp - hpLost);
+        
+        events.push("Ran out of food and got weak...");
+        if (pet.currentHp === 0) events.push("Fainted from hunger!");
+    }
+
+    return {
+        secondsAway: diffSeconds,
+        xpGained,
+        coinsFound,
+        hungerLost: totalHungerLost,
+        hpLost,
+        events
+    };
 };
 
-export const WEATHER_MULTIPLIERS: Record<WeatherType, Record<string, number>> = {
-    CLEAR: { Fire: 1.2, Grass: 1.2, Light: 1.2, Dark: 0.8 },
-    RAIN: { Water: 1.5, Electric: 1.2, Fire: 0.7, Metal: 0.9 },
-    STORM: { Electric: 1.5, Metal: 1.3, Water: 1.2, Flying: 0.8 },
-    NEON_MIST: { Psychic: 1.4, Spirit: 1.4, Dark: 1.3, Light: 0.8, Toxic: 1.3 }
+// --- PROCEDURAL ART GENERATOR ---
+// Creates a data:image/svg+xml string based on name and element
+export const getProceduralMonsterArt = (name: string, element: string): string => {
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    const colors = ELEMENT_THEMES[element as keyof typeof ELEMENT_THEMES] || { bg: '#888', text: '#fff' };
+    const primaryColor = colors.bg.replace('bg-', '').replace('-400', ''); // Very rough mapping, better to use explicit hex
+    
+    const hexMap: any = {
+        Fire: '#F87171', Water: '#60A5FA', Grass: '#4ADE80', Electric: '#FACC15',
+        Psychic: '#C084FC', Metal: '#9CA3AF', Dark: '#1F2937', Light: '#FEF08A',
+        Spirit: '#818CF8', Toxic: '#A3E635'
+    };
+    const baseHex = hexMap[element] || '#999';
+
+    // Generate deterministic shapes
+    const shapes = [];
+    for(let i=0; i<5; i++) {
+        const sX = Math.abs((hash * (i+1) * 345) % 100);
+        const sY = Math.abs((hash * (i+2) * 678) % 100);
+        const sR = Math.abs((hash * (i+3) * 123) % 30) + 10;
+        shapes.push(`<circle cx="${sX}" cy="${sY}" r="${sR}" fill="${baseHex}" fill-opacity="0.4" />`);
+        shapes.push(`<rect x="${100-sX}" y="${100-sY}" width="${sR}" height="${sR}" fill="#fff" fill-opacity="0.2" transform="rotate(${sX} ${100-sX} ${100-sY})" />`);
+    }
+
+    // SVG String
+    const svg = `
+    <svg width="200" height="280" viewBox="0 0 100 140" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:${baseHex};stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#000;stop-opacity:1" />
+            </linearGradient>
+            <filter id="glitch">
+                <feTurbulence type="fractalNoise" baseFrequency="0.1" numOctaves="1" result="noise" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="2" />
+            </filter>
+        </defs>
+        <rect width="100" height="140" fill="url(#grad)" />
+        <g filter="url(#glitch)">
+            ${shapes.join('')}
+            <text x="50" y="70" font-family="monospace" font-size="40" text-anchor="middle" fill="white" opacity="0.5">?</text>
+            <path d="M20,120 L80,120 L50,20 Z" fill="none" stroke="white" stroke-width="2" />
+        </g>
+        <rect x="10" y="10" width="80" height="80" fill="none" stroke="white" stroke-width="1" stroke-dasharray="4 2" />
+    </svg>
+    `;
+    
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
 };
 
-export const ELEMENT_CHART: Record<string, Record<string, number>> = {
-    Fire: { Grass: 2, Metal: 2, Water: 0.5, Fire: 0.5 },
-    Water: { Fire: 2, Metal: 2, Grass: 0.5, Water: 0.5 },
-    Grass: { Water: 2, Electric: 2, Fire: 0.5, Grass: 0.5, Toxic: 0.5 },
-    Electric: { Water: 2, Metal: 2, Grass: 0.5, Electric: 0.5 },
-    Psychic: { Toxic: 2, Dark: 0.5, Metal: 0.5 },
-    Metal: { Grass: 2, Psychic: 2, Fire: 0.5, Electric: 0.5 },
-    Dark: { Psychic: 2, Spirit: 2, Dark: 0.5 },
-    Light: { Dark: 2, Spirit: 2, Light: 0.5 },
-    Spirit: { Psychic: 2, Light: 0.5, Spirit: 2 },
-    Toxic: { Grass: 2, Metal: 0.5, Toxic: 0.5 }
-};
 
-// Neo-Pop Biome Palettes for Voxel Generation
-export const BIOME_DEFINITIONS: Record<string, { ground: string, accent: string, sky: string, detail: string }> = {
-    Fire: { ground: '0x330000', accent: '0xFF4500', sky: '0xFFAA00', detail: 'Obsidian/Lava' },
-    Water: { ground: '0x006994', accent: '0x00BFFF', sky: '0xE0F7FA', detail: 'Sand/Water' },
-    Grass: { ground: '0x4CAF50', accent: '0x8BC34A', sky: '0x87CEEB', detail: 'Flowers/Trees' },
-    Electric: { ground: '0x212121', accent: '0xFFEB3B', sky: '0x424242', detail: 'Metal Tiles' },
-    Psychic: { ground: '0x4A148C', accent: '0xEA80FC', sky: '0xF3E5F5', detail: 'Crystals' },
-    Metal: { ground: '0x607D8B', accent: '0xB0BEC5', sky: '0xECEFF1', detail: 'Factory Floor' },
-    Dark: { ground: '0x000000', accent: '0x6A1B9A', sky: '0x311B92', detail: 'Grave Soil' },
-    Light: { ground: '0xFFFFFF', accent: '0xFFD700', sky: '0xFFFDE7', detail: 'Gold Tiles' },
-    Spirit: { ground: '0x283593', accent: '0x00E5FF', sky: '0xE8EAF6', detail: 'Mist' },
-    Toxic: { ground: '0x1B5E20', accent: '0x76FF03', sky: '0xF1F8E9', detail: 'Sludge' }
+export const ELEMENT_THEMES: any = {
+  Fire: { bg: 'bg-red-400', text: 'text-white', icon: '🔥' },
+  Water: { bg: 'bg-blue-400', text: 'text-white', icon: '💧' },
+  Grass: { bg: 'bg-green-400', text: 'text-black', icon: '🌿' },
+  Electric: { bg: 'bg-yellow-400', text: 'text-black', icon: '⚡' },
+  Psychic: { bg: 'bg-purple-400', text: 'text-white', icon: '🔮' },
+  Metal: { bg: 'bg-gray-400', text: 'text-black', icon: '⚙️' },
+  Dark: { bg: 'bg-gray-800', text: 'text-white', icon: '🌑' },
+  Light: { bg: 'bg-yellow-100', text: 'text-black', icon: '✨' },
+  Spirit: { bg: 'bg-indigo-400', text: 'text-white', icon: '👻' },
+  Toxic: { bg: 'bg-lime-400', text: 'text-black', icon: '☣️' },
 };
-
-export const OBJECT_ARCHETYPES: Record<string, ObjectArchetype> = {
-    'LiquidContainer': { element: 'Water', def: 60, spd: 30, defaultBodyType: 'FLOATING' },
-    'Electronics': { element: 'Electric', int: 80, spd: 70, defaultBodyType: 'BIPED' },
-    'Plant': { element: 'Grass', hp: 80, spd: 20, defaultBodyType: 'QUADRUPED' },
-    'Food': { element: 'Toxic', hp: 100, atk: 20, defaultBodyType: 'FLOATING' },
-    'Toy': { element: 'Psychic', spd: 60, defaultBodyType: 'BIPED' },
-    'Tool': { element: 'Metal', atk: 70, def: 50, defaultBodyType: 'BIPED' },
-    'LightSource': { element: 'Light', int: 70, atk: 60, defaultBodyType: 'FLOATING' },
-    'Vehicle': { element: 'Metal', spd: 90, def: 60, defaultBodyType: 'WHEELED' },
-    'Book': { element: 'Psychic', int: 100, atk: 10, defaultBodyType: 'FLOATING' },
-    'Trash': { element: 'Dark', hp: 120, def: 80, defaultBodyType: 'FLOATING' }
-};
-
-export const SKILL_DATABASE = [
-    { name: "Tackle", type: "Physical", power: 40, accuracy: 100, description: "A standard charge attack." },
-    { name: "Ember", type: "Special", power: 40, accuracy: 100, description: "Small flame attack." },
-    { name: "Water Gun", type: "Special", power: 40, accuracy: 100, description: "Squirts water." },
-    { name: "Leafage", type: "Physical", power: 40, accuracy: 100, description: "Throws leaves." },
-    { name: "Spark", type: "Physical", power: 65, accuracy: 100, description: "Electrified tackle." },
-    { name: "Confusion", type: "Special", power: 50, accuracy: 100, description: "Psychic wave." },
-    { name: "Metal Claw", type: "Physical", power: 50, accuracy: 95, description: "Steel slash." },
-    { name: "Bite", type: "Physical", power: 60, accuracy: 100, description: "Dark energy bite." }
-];
 
 export const ITEMS_DB: Record<string, GameItem> = {
+    'pixel_pizza': {
+        id: 'pixel_pizza', name: 'Pixel Pizza', type: 'Food',
+        description: 'Greasy, blocky goodness. +40 Hunger.',
+        effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 40); pet.happiness = Math.min(100, (pet.happiness || 50) + 5); return pet; },
+        icon: '🍕', rarity: 'Common', price: 30
+    },
+    'data_burger': {
+        id: 'data_burger', name: 'Data Burger', type: 'Food',
+        description: 'Packed with bytes. +60 Hunger.',
+        effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 60); pet.happiness = Math.min(100, (pet.happiness || 50) + 10); return pet; },
+        icon: '🍔', rarity: 'Common', price: 60
+    },
+    'glitch_candy': {
+        id: 'glitch_candy', name: 'Glitch Candy', type: 'Food',
+        description: 'Spicy code errors. +10 Hunger, High Happiness.',
+        effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 10); pet.happiness = Math.min(100, (pet.happiness || 50) + 20); return pet; },
+        icon: '🍬', rarity: 'Rare', price: 80
+    },
+    'void_soup': {
+        id: 'void_soup', name: 'Void Soup', type: 'Food',
+        description: 'Dark matter broth. +80 Hunger, chance to confuse.',
+        effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 80); return pet; },
+        icon: '🍲', rarity: 'Epic', price: 120
+    },
+    'neon_soda': {
+        id: 'neon_soda', name: 'Neon Soda', type: 'Food',
+        description: 'Glowing fizz. +20 Hunger, +20 Speed boost (temp).',
+        effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 20); pet.happiness += 5; return pet; },
+        icon: '🥤', rarity: 'Common', price: 40
+    },
+    
+    // CONSUMABLES
     'potion_small': {
         id: 'potion_small', name: 'Mini Data Pack', type: 'Consumable',
         description: 'Restores 20 HP.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 20); return pet; },
         icon: '❤️', rarity: 'Common', price: 50
     },
+    'potion_super': {
+        id: 'potion_super', name: 'Macro Data Pack', type: 'Consumable',
+        description: 'Restores 60 HP.',
+        effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 60); return pet; },
+        icon: '💖', rarity: 'Rare', price: 150
+    },
+    'revive_chip': {
+        id: 'revive_chip', name: 'Reboot Chip', type: 'Consumable',
+        description: 'Revives a fainted pet with 50% HP.',
+        effect: (pet: any) => { if(pet.currentHp <= 0) pet.currentHp = Math.floor(pet.maxHp * 0.5); return pet; },
+        icon: '💾', rarity: 'Epic', price: 500
+    },
     'energy_drink': {
         id: 'energy_drink', name: 'Voltage Cola', type: 'Consumable',
         description: 'Restores 50 Fatigue.',
         effect: (pet: any) => { pet.fatigue = Math.max(0, pet.fatigue - 50); return pet; },
         icon: '⚡', rarity: 'Common', price: 100
+    },
+    'atk_boost': {
+        id: 'atk_boost', name: 'Overclock Module', type: 'Consumable',
+        description: 'Permanently increases ATK by 5.',
+        effect: (pet: any) => { pet.atk += 5; return pet; },
+        icon: '⚔️', rarity: 'Rare', price: 1000
+    },
+    'spd_boost': {
+        id: 'spd_boost', name: 'RAM Upgrade', type: 'Consumable',
+        description: 'Permanently increases SPD by 5.',
+        effect: (pet: any) => { pet.spd += 5; return pet; },
+        icon: '⏩', rarity: 'Rare', price: 1000
+    },
+    'mystery_box': {
+        id: 'mystery_box', name: 'Mystery Box', type: 'Consumable',
+        description: 'Contains a random item.',
+        effect: (pet: any) => { return pet; }, // Logic handled in app
+        icon: '🎁', rarity: 'Epic', price: 500
     }
 };
 
+const ENEMY_PREFIXES: Record<string, string[]> = {
+    Fire: ["Pyro", "Flame", "Blaze", "Heat", "Ember", "Inferno", "Solar", "Magma"],
+    Water: ["Hydro", "Aqua", "Tide", "Mist", "Rain", "Deep", "Bubble", "Tsunami"],
+    Grass: ["Leaf", "Vine", "Root", "Thorn", "Bloom", "Forest", "Moss", "Spore"],
+    Electric: ["Volt", "Shock", "Zap", "Thunder", "Spark", "Neon", "Pulse", "Gigawatt"],
+    Metal: ["Iron", "Steel", "Chrome", "Gear", "Rusty", "Alloy", "Cyber", "Mecha"],
+    Psychic: ["Mind", "Psi", "Dream", "Cosmic", "Zen", "Aura", "Brain", "Tele"],
+    Dark: ["Shadow", "Void", "Night", "Dusk", "Grim", "Abyss", "Null", "Obsidian"],
+    Light: ["Luma", "Star", "Sun", "Flash", "Holy", "Prism", "Bright", "Photon"],
+    Toxic: ["Venom", "Sludge", "Acid", "Poison", "Tox", "Virus", "Blight", "Rad"],
+    Spirit: ["Ghost", "Soul", "Phantom", "Specter", "Wisp", "Ecto", "Spirit", "Wraith"]
+};
+
+const ENEMY_SUFFIXES = ["Fang", "Claw", "Wing", "Bot", "Droid", "Beast", "Guardian", "Drone", "Stalker", "Watcher", "Glitch", "Maw", "Shell", "Core", "Unit"];
+
+const getEnemyName = (element: string) => {
+    const prefixes = ENEMY_PREFIXES[element] || ["Data"];
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const suffix = ENEMY_SUFFIXES[Math.floor(Math.random() * ENEMY_SUFFIXES.length)];
+    return `${prefix} ${suffix}`;
+}
+
 export const getRandomEnemy = (rank: string, playerLevel: number): any => {
-    const elements = Object.keys(ELEMENT_CHART);
+    const elements = Object.keys(ELEMENT_THEMES);
     const element = elements[Math.floor(Math.random() * elements.length)];
     const types: BodyType[] = ['BIPED', 'QUADRUPED', 'FLOATING', 'WHEELED'];
     const bodyType = types[Math.floor(Math.random() * types.length)];
+    const name = getEnemyName(element);
     
+    const level = Math.max(1, playerLevel + (Math.floor(Math.random() * 3) - 1)); 
+
+    // Generate procedural art immediately
+    const art = getProceduralMonsterArt(name, element);
+
     return {
         id: `wild_${Date.now()}`,
-        name: `Glitch ${element}`,
+        name: name,
         element,
         rarity: 'Common',
         stage: 'Rookie',
         rank: 'E',
         nature: 'Wild',
         personality: 'Aggressive',
-        visual_design: `A corrupted data entity made of ${element} energy. Body type: ${bodyType}.`,
+        visual_design: `A wild ${name}.`,
         potential: 1,
-        hp: 80 + playerLevel * 10,
-        maxHp: 80 + playerLevel * 10,
-        atk: 20 + playerLevel * 2,
-        def: 20 + playerLevel * 2,
-        spd: 20 + playerLevel * 2,
+        hp: 70 + level * 12,
+        maxHp: 70 + level * 12,
+        atk: 15 + level * 2.5,
+        def: 15 + level * 2.5,
+        spd: 15 + level * 2.5,
         int: 10,
-        description: "A wild data anomaly.",
-        ability: "Glitch",
+        level: level,
+        exp: 20 * level,
+        description: `A wild ${name} wandering the digital plains.`,
+        ability: "Glitch Aura",
         moves: [],
         bodyType,
-        tactic: 'AGGRESSIVE'
+        tactic: 'AGGRESSIVE',
+        cardArtUrl: art // Attach art
     };
 };
 
 export const getLootDrop = (rank: string): string | null => {
-    if (Math.random() > 0.7) return 'potion_small';
+    const rand = Math.random();
+    if (rand > 0.98) return 'revive_chip';
+    if (rand > 0.90) return 'mystery_box';
+    if (rand > 0.85) return 'potion_super';
+    if (rand > 0.60) return 'potion_small';
+    if (rand > 0.50) return 'energy_drink';
+    if (rand > 0.30) return 'data_burger';
+    if (rand > 0.15) return 'pixel_pizza';
     return null;
 };
