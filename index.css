@@ -1,0 +1,119 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #fdfbf7; /* Warm white */
+  color: #000;
+  font-family: 'Courier New', Courier, monospace; /* keeping mono for retro feel but clean */
+  overflow-x: hidden;
+  background-image: radial-gradient(#000 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* NEO-BRUTALISM UTILS */
+
+.neo-card {
+  background-color: white;
+  border: 3px solid black;
+  box-shadow: 6px 6px 0px 0px black;
+  border-radius: 1rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.neo-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0px 0px black;
+}
+
+.neo-btn {
+  border: 3px solid black;
+  box-shadow: 4px 4px 0px 0px black;
+  transition: all 0.1s;
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.neo-btn:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px 0px black;
+}
+
+.neo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  background-color: #e5e7eb;
+}
+
+.neo-input {
+  border: 3px solid black;
+  box-shadow: 4px 4px 0px 0px black;
+  outline: none;
+  transition: box-shadow 0.2s;
+}
+
+.neo-input:focus {
+  box-shadow: 6px 6px 0px 0px black;
+}
+
+/* ANIMATIONS */
+
+.pop-in {
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.shake {
+  animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes shake {
+  10%, 90% { transform: translate3d(-2px, 0, 0); }
+  20%, 80% { transform: translate3d(4px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+  40%, 60% { transform: translate3d(6px, 0, 0); }
+}
+
+.float-up {
+  animation: floatUp 1s ease-out forwards;
+}
+
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-60px) scale(1.5); }
+}
+
+/* TRAINING BAR ANIMATION */
+@keyframes slide-x {
+  0% { left: 0%; }
+  50% { left: 95%; }
+  100% { left: 0%; }
+}
+
+.animate-slide-x {
+  animation: slide-x 1s linear infinite;
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar {
+  width: 12px;
+}
+::-webkit-scrollbar-track {
+  background: #fff; 
+  border-left: 3px solid black;
+}
+::-webkit-scrollbar-thumb {
+  background: #000; 
+  border: 2px solid white;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #333; 
+}
