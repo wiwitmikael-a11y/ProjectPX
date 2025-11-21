@@ -143,8 +143,7 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.05; 
 controls.minDistance = 5;
 controls.maxDistance = 25;
-// CONSTRAINT: Prevent camera from going underground (Math.PI/2 is horizon)
-controls.maxPolarAngle = Math.PI / 2 - 0.1; 
+controls.maxPolarAngle = Math.PI / 2 - 0.05;
 controls.target.set(0, 1.5, 0);
 controls.enableRotate = true;
 
@@ -180,18 +179,13 @@ window.addEventListener('touchend', (e) => {
 });
 
 function triggerPoke() {
-    // Context aware reaction
-    if (currentAction === 'SLEEP') {
-        window.parent.postMessage({ type: 'PET_CLICKED', context: 'WAKE_UP' }, '*');
-        currentAction = 'JUMP'; // Startle
-        overrideTimer = 1.0;
-        isMoving = false;
-    } else {
-        window.parent.postMessage({ type: 'PET_CLICKED', context: 'HAPPY' }, '*');
-        currentAction = 'JUMP';
-        overrideTimer = 1.0;
-        isMoving = false; // Pause briefly
-    }
+    currentAction = 'JUMP';
+    isMoving = false; // Pause walk briefly
+    window.parent.postMessage({ type: 'PET_CLICKED' }, '*');
+    setTimeout(() => { 
+        if (currentAction === 'JUMP') currentAction = 'WALK'; // Resume
+        // isMoving logic handles resuming walk in loop
+    }, 1000);
 }
 
 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.1); 
@@ -270,7 +264,6 @@ function createHillGeometry() {
     for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i);
         const y = pos.getY(i); // This is Z in world space
-        // Center is roughly 3.0 high
         const height = Math.sin(x * 0.1) * 1.5 + Math.cos(y * 0.1) * 1.5;
         pos.setZ(i, height);
     }
@@ -308,7 +301,6 @@ function createGroundTexture(hexColor) {
 const groundMat = new THREE.MeshToonMaterial({ map: createGroundTexture(0x6BCB77) });
 const ground = new THREE.Mesh(createHillGeometry(), groundMat);
 ground.rotation.x = -Math.PI / 2;
-// Ground Mesh Y is -2. Peak height at 0,0 is +3. So actual floor Y is +1.0
 ground.position.y = -2; 
 ground.receiveShadow = true;
 scene.add(ground);
@@ -471,30 +463,30 @@ if (bodyType === 'QUADRUPED') {
 
 // --- GROUNDING LOGIC (FIX SINKING) ---
 function snapToFloor() {
+    // 1. Lift up first to clear the ground to ensure bounding box isn't buried
     if (bodyType !== 'FLOATING') {
-        // 1. Ensure geometry is initialized
-        scene.updateMatrixWorld(true);
-        
-        // 2. World Height Calculation
-        // Terrain at (0,0) is peak ~3.0. Ground Mesh Y is -2.0.
-        // Actual Floor Level = +1.0
-        
-        const floorY = 1.0;
-        let targetY = 0;
-        
-        if (bodyType === 'BIPED') {
-            // Biped legs extend ~1.1 units down from center
-            // Formula: Floor + LegLength
-            targetY = floorY + (1.1 * ${scale}); 
-        } else if (bodyType === 'QUADRUPED') {
-            // Quadruped legs extend ~0.8 units down
-            targetY = floorY + (0.8 * ${scale});
-        }
-        
-        charGroup.position.y = targetY;
+        charGroup.position.y = 2.0;
+    }
+    
+    scene.updateMatrixWorld(true);
+    
+    // 2. Calculate real bounding box
+    const box = new THREE.Box3().setFromObject(charGroup);
+    const minY = box.min.y;
+    
+    // 3. Surface at 0,0 is approx -0.5 (Ground -2 + Hill 1.5)
+    // We want feet (minY) to be precisely at this level
+    const TARGET_FLOOR_Y = -0.5;
+    
+    if (bodyType !== 'FLOATING') {
+        const shift = TARGET_FLOOR_Y - minY;
+        charGroup.position.y += shift;
+        // Small sink for weight feeling
+        charGroup.position.y -= 0.05;
     }
 }
-setTimeout(snapToFloor, 100);
+// Run once immediately after creation
+snapToFloor();
 
 
 // --- INFINITE GRID SYSTEM ---
@@ -568,7 +560,6 @@ const clock = new THREE.Clock();
 let isBattle = false;
 let currentAction = 'WALK';
 let isMoving = true; // Used for Walk/Idle cycle
-let overrideTimer = 0; // Used to lock action based on random event text
 
 const targetCamPos = new THREE.Vector3();
 
@@ -604,16 +595,7 @@ window.addEventListener('message', (e) => {
         groundMat.needsUpdate = true;
     }
     if (e.data.type === 'PAUSE') { if (e.data.value) clock.stop(); else clock.start(); }
-    if (e.data.type === 'SET_ACTION') { 
-        // SYNCHRONIZATION LOGIC
-        currentAction = e.data.value; 
-        overrideTimer = 7.0; // Lock this action for 7 seconds
-        if (currentAction === 'SLEEP' || currentAction === 'SCAN' || currentAction === 'JUMP') {
-            isMoving = false; // Stop walking for these actions
-        } else {
-            isMoving = true;
-        }
-    }
+    if (e.data.type === 'SET_ACTION') { currentAction = e.data.value; }
     if (e.data.type === 'SET_EQUIPMENT') {
         const equip = e.data.value || {};
         if (equip.head) { clearSlot(headSlot); if(equip.head.includes('crown')) buildCrown(headSlot); if(equip.head.includes('visor')) buildVisor(headSlot); if(equip.head.includes('iron')) buildHelmetIron(headSlot); }
@@ -622,16 +604,7 @@ window.addEventListener('message', (e) => {
     if (e.data.type === 'PRE_EVENT') {
         isMoving = false; // STOP
         currentAction = 'SCAN';
-        overrideTimer = 3.0; // Override normal cycle
         showEmote(e.data.value || '!');
-    }
-    if (e.data.type === 'RESUME') {
-        isMoving = true;
-        currentAction = 'WALK';
-        emoteSprite.visible = false;
-        cycleTimer = 0;
-        overrideTimer = 0; // Clear override
-        headGroup.rotation.set(0,0,0);
     }
     if (e.data.type === 'SET_MODE') {
         if (e.data.value.startsWith('BATTLE')) {
@@ -676,22 +649,16 @@ function animate() {
     }
 
     if (!isBattle) {
-        // AUTO-CYCLE LOGIC (Only if not overridden by text event)
-        if (overrideTimer > 0) {
-            overrideTimer -= delta;
-            // Action state is already set by SET_ACTION
-        } else {
-            // Normal cycle
+        // CYCLE LOGIC
+        if (currentAction !== 'SCAN') {
             cycleTimer += delta;
             if (isMoving && cycleTimer > WALK_DURATION) {
                 isMoving = false;
                 cycleTimer = 0;
-                currentAction = 'IDLE';
                 window.parent.postMessage({ type: 'ENTER_IDLE' }, '*');
             } else if (!isMoving && cycleTimer > IDLE_DURATION) {
                 isMoving = true;
                 cycleTimer = 0;
-                currentAction = 'WALK';
                 window.parent.postMessage({ type: 'ENTER_WALK' }, '*');
             }
         }
@@ -737,15 +704,7 @@ function animate() {
             torso.scale.y = 1.0 + Math.sin(t * 2) * 0.02; 
         }
 
-        // --- ANIMATION ACTIONS ---
-        if (currentAction === 'SLEEP') {
-             charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI/2, 0.1); // Lay down
-             charGroup.position.y = lerp(charGroup.position.y, -0.8, 0.1); // Lower
-        } else {
-             charGroup.rotation.x = lerp(charGroup.rotation.x, 0, 0.1); // Stand up
-             // snapToFloor handled initial Y
-        }
-
+        // --- LIMB ANIMATIONS ---
         if (currentAction === 'JUMP') {
              torso.position.y = Math.sin(t * 20) * 0.2;
         } else if (currentAction === 'SCAN') {
@@ -786,7 +745,7 @@ animate();
 window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 </script>
 </body>
-</html>`
+</html>`;
 };
 
 export const evolveVoxelScene = async (pet: any) => {

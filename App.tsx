@@ -240,12 +240,12 @@ const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
 
 // --- COMPONENTS ---
 
-const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Grass', equipment, onInteract, onStateChange, preEvent, eventActive }: { code: string, mode?: string, action?: string, theme?: string, equipment?: any, onInteract?: (ctx?:any)=>void, onStateChange?: (s:string)=>void, preEvent?: string, eventActive?: boolean }) => {
+const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Grass', equipment, onInteract, onStateChange, preEvent }: { code: string, mode?: string, action?: string, theme?: string, equipment?: any, onInteract?: ()=>void, onStateChange?: (s:string)=>void, preEvent?: string }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-        if (e.data.type === 'PET_CLICKED' && onInteract) onInteract(e.data.context);
+        if (e.data.type === 'PET_CLICKED' && onInteract) onInteract();
         if ((e.data.type === 'ENTER_IDLE' || e.data.type === 'ENTER_WALK') && onStateChange) onStateChange(e.data.type);
     };
     window.addEventListener('message', handler);
@@ -281,13 +281,6 @@ const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Gr
         iframeRef.current.contentWindow.postMessage({ type: 'PRE_EVENT', value: preEvent }, '*');
     }
   }, [preEvent]);
-
-  // Send RESUME signal when eventActive becomes false
-  useEffect(() => {
-    if (!eventActive && iframeRef.current && iframeRef.current.contentWindow) {
-        iframeRef.current.contentWindow.postMessage({ type: 'RESUME' }, '*');
-    }
-  }, [eventActive]);
 
   return (
     <div className="w-full h-full relative">
@@ -392,7 +385,6 @@ export default function App() {
   // Interactive State
   const [isPetIdle, setIsPetIdle] = useState(false);
   const [speechBubble, setSpeechBubble] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState('WALK');
 
   // FX
   const [purchaseAnim, setPurchaseAnim] = useState<string | null>(null);
@@ -408,7 +400,7 @@ export default function App() {
           const data = JSON.parse(saved);
           setUser(data.user);
           setInventory(data.inventory);
-          // Removed auto-setGameState to 'NEXUS' to allow user choice on Splash screen
+          setGameState('NEXUS');
       }
   }, []);
 
@@ -422,20 +414,15 @@ export default function App() {
   useEffect(() => {
       if (gameState !== 'NEXUS' || activeBattle || activeEvent || isAnalyzing || preEventEmote) return;
       
-      // Slower interval for more natural pacing (8 seconds)
       const interval = setInterval(() => {
-          if (Math.random() > 0.7 && !isPetIdle) { 
+          if (Math.random() > 0.7 && !isPetIdle) { // Only update text if moving, idle handles its own speech
               const txt = getRandomEventText(user.currentLocation);
               setStatusText(txt);
-              
-              // Force visual sync immediately
-              const act = getActionFromText(txt);
-              setActiveAction(act);
           }
           if (Math.random() > 0.85) { 
              triggerRandomEvent();
           }
-      }, 8000); // SLOWED DOWN FROM 3000
+      }, 3000);
       return () => clearInterval(interval);
   }, [gameState, activeBattle, activeEvent, user.currentLocation, isAnalyzing, isPetIdle, preEventEmote]);
 
@@ -457,15 +444,6 @@ export default function App() {
 
   // --- LOGIC ---
 
-  const handleNewGame = () => {
-      if(window.confirm("Delete current save data and start over?")) {
-          localStorage.removeItem(`pixupet_save_${SAVE_VERSION}`);
-          setUser({ name: 'Tamer', level: 1, exp: 0, coins: 100, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob' });
-          setInventory([]);
-          setGameState('ONBOARDING');
-      }
-  };
-
   const triggerRandomEvent = async () => {
       const rand = Math.random();
       
@@ -483,8 +461,10 @@ export default function App() {
       setPreEventEmote(emote);
       
       // Wait 2 seconds for "Anticipation" animation
-      await new Promise(r => setTimeout(r, 2500));
+      await new Promise(r => setTimeout(r, 2000));
       
+      setPreEventEmote(null); // Clear emote signal
+
       // 2. TRIGGER ACTUAL EVENT
       if (type === 'BATTLE') {
           startAutoBattle();
@@ -493,9 +473,6 @@ export default function App() {
           if(item) {
             const ev: any = { type: 'TREASURE', title: 'SECRET STASH', description: 'You found something shiny!', logs: ['Scanning area...', 'Ping detected!', `Uncovered: ${ITEMS_DB[item].name}`], resultText: 'LOOT SECURED!' };
             startAutoEvent(ev, () => addItem(item));
-          } else {
-             const ev: any = { type: 'TREASURE', title: 'EMPTY STASH', description: 'Nothing here.', logs: ['Scanning...', 'Dust.'], resultText: 'EMPTY' };
-             startAutoEvent(ev, () => {});
           }
       } else {
           const ev = getRandomSpecialEvent(user.currentLocation);
@@ -505,9 +482,6 @@ export default function App() {
              if(ev.type === 'HAZARD') { damagePet(ev.effectValue); }
           });
       }
-      
-      // Clear emote AFTER setting event state so eventActive stays true
-      setPreEventEmote(null); 
   };
 
   const startAutoEvent = (ev: any, onComplete: () => void) => {
@@ -726,15 +700,10 @@ export default function App() {
       }
   };
 
-  const handlePetInteraction = (context?: string) => {
-      if (context === 'WAKE_UP') {
-          setSpeechBubble("Wha-?! I was sleeping!");
-          showFloatingText("!", "text-red-500");
-      } else {
-          setSpeechBubble("Hey! Don't poke me!");
-          showFloatingText("♥", "text-pink-500");
-      }
+  const handlePetInteraction = () => {
+      setSpeechBubble("Hey! Don't poke me!");
       setTimeout(() => setSpeechBubble(null), 2000);
+      showFloatingText("♥", "text-pink-500");
   };
 
   // --- RENDER ---
@@ -750,26 +719,10 @@ export default function App() {
           <div className="neo-pop-box px-6 py-3 mb-8 rotate-2 bg-white max-w-xs sm:max-w-md text-center">
                <h2 className="font-['Bangers'] text-2xl sm:text-3xl text-black tracking-wide">Turn Anything into a Pet!</h2>
           </div>
-          
-          <div className="flex flex-col gap-4 w-full max-w-xs sm:max-w-md z-20">
-              {inventory.length > 0 ? (
-                  <>
-                      <button onClick={() => setGameState('NEXUS')} 
-                          className="pop-btn btn-success text-xl sm:text-2xl px-12 py-4 pop-in hover:scale-105 active:scale-95 transition-all w-full">
-                          RESUME GAME
-                      </button>
-                      <button onClick={handleNewGame} 
-                          className="pop-btn btn-danger text-sm px-12 py-3 pop-in hover:scale-105 active:scale-95 transition-all w-full">
-                          NEW GAME
-                      </button>
-                  </>
-              ) : (
-                  <button onClick={() => setGameState('ONBOARDING')} 
-                      className="pop-btn btn-primary text-xl sm:text-2xl px-12 py-4 pop-in hover:scale-105 active:scale-95 transition-all w-full">
-                      NEW GAME
-                  </button>
-              )}
-          </div>
+          <button onClick={() => setGameState(inventory.length > 0 ? 'NEXUS' : 'ONBOARDING')} 
+              className="pop-btn btn-primary text-xl sm:text-2xl px-12 sm:px-16 py-4 sm:py-6 pop-in hover:scale-105 active:scale-95 transition-all">
+              PRESS START
+          </button>
       </div>
   );
 
@@ -821,13 +774,12 @@ export default function App() {
       <div className="absolute inset-0 z-0 w-full h-full">
         {activePet && <VoxelViewer 
             code={activePet.voxelCode} 
-            action={activeAction} 
+            action={getActionFromText(statusText)} 
             theme={location.environmentType} 
             equipment={activePet.equipment} 
             onInteract={handlePetInteraction}
             onStateChange={(state) => setIsPetIdle(state === 'ENTER_IDLE')}
             preEvent={preEventEmote || undefined}
-            eventActive={!!activeBattle || !!activeEvent || !!preEventEmote}
         />}
       </div>
 
