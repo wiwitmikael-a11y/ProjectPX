@@ -1,7 +1,5 @@
 {
   "name": "Pixupet",
   "description": "Create pet from any object image",
-  "requestFramePermissions": [
-    "geolocation"
-  ]
+  "requestFramePermissions": []
 }

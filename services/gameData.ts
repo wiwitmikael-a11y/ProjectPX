@@ -6,7 +6,6 @@
 
 export type BodyType = 'BIPED' | 'QUADRUPED' | 'FLOATING' | 'WHEELED' | 'SERPENTINE';
 export type AITactic = 'BALANCED' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SPEEDSTER';
-export type WeatherType = 'CLEAR' | 'RAIN' | 'STORM' | 'NEON_MIST';
 // NEW STAGE NAMES: Cyber-Organic Theme
 export type MonsterStage = 'Spark' | 'Surge' | 'Turbo' | 'Nova';
 
@@ -99,23 +98,31 @@ export const determineEvolutionPath = (stats: {atk: number, def: number, spd: nu
     let dominant = 'BALANCED';
     let protocolName = 'Core Protocol';
     let color = 'text-gray-500';
+    let borderColor = 'border-gray-500';
     let icon = '⚪';
+    let desc = "Balanced growth. No specialized evolution detected.";
     
     if (atk >= def && atk >= spd) {
         dominant = 'ATTACK';
         protocolName = 'Crimson Protocol'; // Striker
         color = 'text-red-500';
+        borderColor = 'border-red-500';
         icon = '🔴';
+        desc = "Evolution Path: STRIKER (High Damage)";
     } else if (def > atk && def > spd) {
         dominant = 'DEFENSE';
         protocolName = 'Titanium Protocol'; // Tank
-        color = 'text-slate-600';
+        color = 'text-slate-400';
+        borderColor = 'border-slate-400';
         icon = '🛡️';
+        desc = "Evolution Path: GUARDIAN (High Armor)";
     } else if (spd > atk && spd > def) {
         dominant = 'SPEED';
         protocolName = 'Azure Protocol'; // Speedster
-        color = 'text-blue-500';
+        color = 'text-cyan-400';
+        borderColor = 'border-cyan-400';
         icon = '⚡';
+        desc = "Evolution Path: VELOCITY (High Evasion)";
     }
     
     // 2. Determine Alignment (Corruption vs Ascension)
@@ -123,7 +130,7 @@ export const determineEvolutionPath = (stats: {atk: number, def: number, spd: nu
     if (happiness >= 85) alignment = 'LUMINOUS'; // Holy/Ascended
     if (happiness <= 25) alignment = 'CORRUPTED'; // Dark/Glitch
 
-    return { dominant, alignment, protocolName, color, icon };
+    return { dominant, alignment, protocolName, color, borderColor, icon, desc };
 };
 
 // --- PROCEDURAL ART GENERATOR ---
@@ -179,16 +186,16 @@ export const getProceduralMonsterArt = (name: string, element: string): string =
 
 
 export const ELEMENT_THEMES: any = {
-  Fire: { bg: 'bg-red-400', text: 'text-white', icon: '🔥' },
-  Water: { bg: 'bg-blue-400', text: 'text-white', icon: '💧' },
-  Grass: { bg: 'bg-green-400', text: 'text-black', icon: '🌿' },
+  Fire: { bg: 'bg-red-500', text: 'text-white', icon: '🔥' },
+  Water: { bg: 'bg-blue-500', text: 'text-white', icon: '💧' },
+  Grass: { bg: 'bg-green-500', text: 'text-black', icon: '🌿' },
   Electric: { bg: 'bg-yellow-400', text: 'text-black', icon: '⚡' },
-  Psychic: { bg: 'bg-purple-400', text: 'text-white', icon: '🔮' },
+  Psychic: { bg: 'bg-purple-500', text: 'text-white', icon: '🔮' },
   Metal: { bg: 'bg-gray-400', text: 'text-black', icon: '⚙️' },
   Dark: { bg: 'bg-gray-800', text: 'text-white', icon: '🌑' },
   Light: { bg: 'bg-yellow-100', text: 'text-black', icon: '✨' },
-  Spirit: { bg: 'bg-indigo-400', text: 'text-white', icon: '👻' },
-  Toxic: { bg: 'bg-lime-400', text: 'text-black', icon: '☣️' },
+  Spirit: { bg: 'bg-indigo-500', text: 'text-white', icon: '👻' },
+  Toxic: { bg: 'bg-lime-500', text: 'text-black', icon: '☣️' },
 };
 
 export const ITEMS_DB: Record<string, GameItem> = {
@@ -219,16 +226,16 @@ export const ITEMS_DB: Record<string, GameItem> = {
     
     // CONSUMABLES
     'potion_small': {
-        id: 'potion_small', name: 'Mini Data Pack', type: 'Consumable',
+        id: 'potion_small', name: 'Nano-Repair Kit', type: 'Consumable',
         description: 'Restores 20 HP.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 20); return pet; },
-        icon: '❤️', rarity: 'Common', price: 50
+        icon: '🩹', rarity: 'Common', price: 50
     },
     'potion_super': {
-        id: 'potion_super', name: 'Macro Data Pack', type: 'Consumable',
+        id: 'potion_super', name: 'Full System Restore', type: 'Consumable',
         description: 'Restores 60 HP.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 60); return pet; },
-        icon: '💖', rarity: 'Rare', price: 150
+        icon: '💉', rarity: 'Rare', price: 150
     },
     'revive_chip': {
         id: 'revive_chip', name: 'Reboot Chip', type: 'Consumable',
@@ -243,47 +250,47 @@ export const ITEMS_DB: Record<string, GameItem> = {
         icon: '⚡', rarity: 'Common', price: 100
     },
     'mystery_box': {
-        id: 'mystery_box', name: 'Mystery Box', type: 'Consumable',
-        description: 'Contains a random item.',
+        id: 'mystery_box', name: 'Encrypted Cache', type: 'Consumable',
+        description: 'Decrypt to find a random item.',
         effect: (pet: any) => { return pet; }, // Logic handled in app
-        icon: '🎁', rarity: 'Epic', price: 500
+        icon: '📦', rarity: 'Epic', price: 500
     },
 
     // PROTOCOL DRIVERS (The Grinding Loop Rewards)
     'driver_crimson': {
         id: 'driver_crimson', name: 'Crimson Driver', type: 'Driver',
-        description: 'Forces logic circuits to prioritize violence. +5 ATK.',
+        description: 'Rewrites combat logic. +5 ATK.',
         effect: (pet: any) => { pet.atk += 5; return pet; },
-        icon: '🔴', rarity: 'Rare', price: 800
+        icon: '🔴', rarity: 'Rare', price: 1200
     },
     'driver_titanium': {
         id: 'driver_titanium', name: 'Titanium Driver', type: 'Driver',
-        description: 'Reinforces chassis integrity. +5 DEF.',
+        description: 'Hardens hull density. +5 DEF.',
         effect: (pet: any) => { pet.def += 5; return pet; },
-        icon: '🛡️', rarity: 'Rare', price: 800
+        icon: '🛡️', rarity: 'Rare', price: 1200
     },
     'driver_azure': {
         id: 'driver_azure', name: 'Azure Driver', type: 'Driver',
-        description: 'Overclocks motor refresh rates. +5 SPD.',
+        description: 'Overclocks motor systems. +5 SPD.',
         effect: (pet: any) => { pet.spd += 5; return pet; },
-        icon: '⚡', rarity: 'Rare', price: 800
+        icon: '⚡', rarity: 'Rare', price: 1200
     }
 };
 
 const ENEMY_PREFIXES: Record<string, string[]> = {
-    Fire: ["Pyro", "Flame", "Blaze", "Heat", "Ember", "Inferno", "Solar", "Magma"],
-    Water: ["Hydro", "Aqua", "Tide", "Mist", "Rain", "Deep", "Bubble", "Tsunami"],
-    Grass: ["Leaf", "Vine", "Root", "Thorn", "Bloom", "Forest", "Moss", "Spore"],
-    Electric: ["Volt", "Shock", "Zap", "Thunder", "Spark", "Neon", "Pulse", "Gigawatt"],
-    Metal: ["Iron", "Steel", "Chrome", "Gear", "Rusty", "Alloy", "Cyber", "Mecha"],
-    Psychic: ["Mind", "Psi", "Dream", "Cosmic", "Zen", "Aura", "Brain", "Tele"],
-    Dark: ["Shadow", "Void", "Night", "Dusk", "Grim", "Abyss", "Null", "Obsidian"],
-    Light: ["Luma", "Star", "Sun", "Flash", "Holy", "Prism", "Bright", "Photon"],
-    Toxic: ["Venom", "Sludge", "Acid", "Poison", "Tox", "Virus", "Blight", "Rad"],
-    Spirit: ["Ghost", "Soul", "Phantom", "Specter", "Wisp", "Ecto", "Spirit", "Wraith"]
+    Fire: ["Pyro", "Flame", "Blaze", "Magma", "Solar", "Inferno", "Ash", "Cinder", "Volcano", "Scorch"],
+    Water: ["Hydro", "Aqua", "Tide", "Abyss", "Coral", "Frost", "Mist", "Rain", "Storm", "Deep"],
+    Grass: ["Leaf", "Vine", "Root", "Moss", "Bloom", "Spore", "Thorn", "Bark", "Forest", "Wild"],
+    Electric: ["Volt", "Shock", "Zap", "Pulse", "Neon", "Wire", "Spark", "Thunder", "Lightning", "Flash"],
+    Metal: ["Iron", "Steel", "Chrome", "Rust", "Gear", "Mecha", "Alloy", "Titan", "Cyber", "Tech"],
+    Psychic: ["Mind", "Psi", "Zen", "Dream", "Aura", "Soul", "Brain", "Tele", "Mystic", "Void"],
+    Dark: ["Shadow", "Night", "Dusk", "Grim", "Null", "Obsidian", "Terror", "Phantom", "Shade", "Eclipse"],
+    Light: ["Luma", "Star", "Sun", "Holy", "Prism", "Bright", "Photon", "Glory", "Shine", "Dawn"],
+    Toxic: ["Venom", "Acid", "Sludge", "Virus", "Blight", "Rad", "Tox", "Hazard", "Waste", "Ooze"],
+    Spirit: ["Ghost", "Soul", "Phantom", "Specter", "Wisp", "Wraith", "Haunt", "Ecto", "Polter", "Shade"]
 };
 
-const ENEMY_SUFFIXES = ["Fang", "Claw", "Wing", "Bot", "Droid", "Beast", "Guardian", "Drone", "Stalker", "Watcher", "Glitch", "Maw", "Shell", "Core", "Unit"];
+const ENEMY_SUFFIXES = ["Fang", "Claw", "Wing", "Bot", "Droid", "Beast", "Guardian", "Drone", "Stalker", "Watcher", "Glitch", "Maw", "Shell", "Core", "Unit", "Rex", "Viper", "Golem", "Scout", "Hunter"];
 
 const getEnemyName = (element: string) => {
     const prefixes = ENEMY_PREFIXES[element] || ["Data"];
@@ -299,7 +306,9 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
     const bodyType = types[Math.floor(Math.random() * types.length)];
     const name = getEnemyName(element);
     
-    const level = Math.max(1, playerLevel + (Math.floor(Math.random() * 3) - 1)); 
+    // Scaling difficulty slightly
+    const levelVariance = Math.floor(Math.random() * 3) - 1; // -1, 0, +1
+    const level = Math.max(1, playerLevel + levelVariance); 
 
     // Generate procedural art immediately
     const art = getProceduralMonsterArt(name, element);
@@ -315,11 +324,11 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
         personality: 'Aggressive',
         visual_design: `A wild ${name}.`,
         potential: 1,
-        hp: 70 + level * 12,
-        maxHp: 70 + level * 12,
-        atk: 15 + level * 2.5,
-        def: 15 + level * 2.5,
-        spd: 15 + level * 2.5,
+        hp: 60 + level * 10,
+        maxHp: 60 + level * 10,
+        atk: 10 + level * 2,
+        def: 10 + level * 2,
+        spd: 10 + level * 2,
         int: 10,
         level: level,
         exp: 20 * level,
@@ -328,27 +337,32 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
         moves: [],
         bodyType,
         tactic: 'AGGRESSIVE',
-        cardArtUrl: art // Attach art
+        cardArtUrl: art 
     };
 };
 
 export const getLootDrop = (rank: string): string | null => {
     const rand = Math.random();
-    // High End Loot
-    if (rand > 0.97) return 'revive_chip';
-    if (rand > 0.92) return 'mystery_box';
     
-    // Drivers (The Evolution Grinding Loop)
-    if (rand > 0.88) return 'driver_crimson';
-    if (rand > 0.84) return 'driver_titanium';
+    // Adjusted rates for better gameplay loop
+    
+    // Drivers (10% chance - The core grinding goal)
+    if (rand > 0.90) return 'driver_crimson';
+    if (rand > 0.85) return 'driver_titanium';
     if (rand > 0.80) return 'driver_azure';
 
-    // Mid Tier
-    if (rand > 0.60) return 'potion_super';
-    if (rand > 0.50) return 'energy_drink';
+    // High Value (5%)
+    if (rand > 0.78) return 'revive_chip';
+    if (rand > 0.75) return 'mystery_box';
+
+    // Mid Tier (25%)
+    if (rand > 0.50) return 'potion_super';
+    if (rand > 0.40) return 'energy_drink';
     
-    // Common
-    if (rand > 0.30) return 'data_burger';
-    if (rand > 0.15) return 'pixel_pizza';
+    // Common (40%)
+    if (rand > 0.20) return 'data_burger';
+    if (rand > 0.05) return 'pixel_pizza';
+    
+    // 5% chance of nothing
     return null;
 };
