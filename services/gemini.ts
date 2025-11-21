@@ -5,7 +5,7 @@
  */
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { extractHtmlFromText } from "../utils/html";
+import { extractHtmlFromText, makeBackgroundTransparent, hideBodyText, zoomCamera } from "../utils/html";
 import { BodyType, AITactic, determineEvolutionPath, MonsterStage, getProceduralMonsterArt, MonsterStats } from "./gameData";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -31,81 +31,78 @@ const parseGeminiJson = (text: string) => {
     }
 };
 
-// --- ADVANCED VOXEL ENGINE (DIGIMON STYLE) ---
+// --- AAA VOXEL ENGINE: NEO-POP CANDY AESTHETIC ---
 export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 'BIPED', stage: string = 'Noob'): string => {
-    // 1. Color Palette Definition
+    // STRICT NEO-POP PALETTE (Must match gameData.ts)
     const colors: Record<string, number> = {
-        Fire: 0xff4400, Water: 0x0088ff, Grass: 0x44cc00, Electric: 0xffcc00,
-        Psychic: 0xaa00ff, Metal: 0x999999, Dark: 0x220044, Light: 0xffffee,
-        Spirit: 0x6600cc, Toxic: 0x88cc00
+        Fire: 0xFF6B6B, Water: 0x4D96FF, Grass: 0x6BCB77, Electric: 0xFFD93D,
+        Psychic: 0xC77DFF, Metal: 0x94A3B8, Dark: 0x6D28D9, Light: 0xFFF176,
+        Spirit: 0x8A2BE2, Toxic: 0xBEF264
     };
     const secColors: Record<string, number> = {
-        Fire: 0x550000, Water: 0x002266, Grass: 0x115500, Electric: 0x664400,
-        Psychic: 0x220044, Metal: 0x444444, Dark: 0x000000, Light: 0xffeecc,
-        Spirit: 0x110022, Toxic: 0x224400
-    };
-    const skyColors: Record<string, number> = {
-        Fire: 0x442211, Water: 0x112244, Grass: 0x113311, Electric: 0x333311,
-        Psychic: 0x221133, Metal: 0x222222, Dark: 0x111111, Light: 0xccddff,
-        Spirit: 0x111122, Toxic: 0x222211
+        Fire: 0xFF9EAA, Water: 0x83C5BE, Grass: 0x34D399, Electric: 0xFFF59D,
+        Psychic: 0xE0AAFF, Metal: 0xCBD5E1, Dark: 0x8B5CF6, Light: 0xFFFFFF,
+        Spirit: 0xA78BFA, Toxic: 0xE9F5DB
     };
 
-    const primC = colors[element] || 0x888888;
-    const secC = secColors[element] || 0x333333;
-    const skyC = skyColors[element] || 0x87CEEB;
-    const glowC = 0xffffff; 
+    const primC = colors[element] || 0xCBD5E1;
+    const secC = secColors[element] || 0xF1F5F9;
 
     return `<!DOCTYPE html>
 <html>
-<head><style>body{margin:0;overflow:hidden;background:transparent;}</style>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent !important; }
+    canvas { display: block; width: 100% !important; height: 100% !important; outline: none; position: absolute; top: 0; left: 0; z-index: 1; }
+</style>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 // --- SETUP ---
 const scene = new THREE.Scene();
-const FOG_COLOR = ${skyC};
-scene.fog = new THREE.FogExp2(FOG_COLOR, 0.02); 
-// scene.background = new THREE.Color(FOG_COLOR); // Removed to keep transparent capability, but Fog handles horizon
+// INITIAL BG: Matches 'Grass' fog as default to avoid white flash
+scene.background = new THREE.Color(0xD1FAE5); 
+scene.fog = new THREE.FogExp2(0xD1FAE5, 0.025); // Dense fog for infinite look
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(12, 8, 16);
+camera.position.set(14, 8, 14);
 
-const renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
+const renderer = new THREE.WebGLRenderer({alpha: true, antialias: true, preserveDrawingBuffer: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadows for toy look
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enablePan = false; 
 controls.autoRotate = true; 
-controls.autoRotateSpeed = 0.8;
+controls.autoRotateSpeed = 1.0;
 controls.minDistance = 5;
-controls.maxDistance = 30;
-controls.target.set(0, 3, 0);
+controls.maxDistance = 40;
+controls.maxPolarAngle = Math.PI / 2 - 0.05; 
+controls.target.set(0, 2, 0);
+controls.enableDamping = true;
 
-// --- LIGHTING ---
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+// --- LIGHTING (VINYL TOY STYLE) ---
+// High ambient for bright colors, soft directional for depth
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 1.2);
 scene.add(hemiLight);
 
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-dirLight.position.set(20, 40, 20);
+dirLight.position.set(10, 20, 10);
 dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 2048;
-dirLight.shadow.mapSize.height = 2048;
-dirLight.shadow.camera.near = 0.5;
-dirLight.shadow.camera.far = 100;
-dirLight.shadow.camera.left = -50;
-dirLight.shadow.camera.right = 50;
-dirLight.shadow.camera.top = 50;
-dirLight.shadow.camera.bottom = -50;
+dirLight.shadow.mapSize.width = 1024;
+dirLight.shadow.mapSize.height = 1024;
 scene.add(dirLight);
 
-// --- GROUPS ---
+// --- WORLD GROUPS ---
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
 const habitatGroup = new THREE.Group();
@@ -114,180 +111,225 @@ const charGroup = new THREE.Group();
 worldGroup.add(charGroup);
 
 // --- MATERIALS ---
-const primMat = new THREE.MeshStandardMaterial({color: ${primC}, roughness: 0.4, metalness: 0.2});
-const secMat = new THREE.MeshStandardMaterial({color: ${secC}, roughness: 0.7, metalness: 0.1});
-const glowMat = new THREE.MeshBasicMaterial({color: ${glowC}});
-const eyeMat = new THREE.MeshBasicMaterial({color: 0x00ff00});
-const groundMat = new THREE.MeshStandardMaterial({color: 0x333333, roughness: 1});
+// Cartoon Shader Logic via ToonMaterial + Thick Outline
+const primMat = new THREE.MeshToonMaterial({ color: ${primC} });
+const secMat = new THREE.MeshToonMaterial({ color: ${secC} });
+const outlineMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.BackSide });
+const OUTLINE_THICKNESS = 1.025; 
 
-// --- INFINITE HABITAT GENERATION ---
-
-// 1. Ground Plane (Massive)
-const groundGeo = new THREE.PlaneGeometry(400, 400, 64, 64);
-// Deform ground with noise for hills, but keep center flat
-const pos = groundGeo.attributes.position;
-for(let i=0; i<pos.count; i++){
-    const x = pos.getX(i);
-    const y = pos.getY(i); // Actually Z in plane space
-    const dist = Math.sqrt(x*x + y*y);
-    let zHeight = 0;
-    
-    if(dist > 8) {
-        zHeight = Math.sin(x*0.1) * Math.cos(y*0.1) * 2 + Math.random() * 0.5;
-    }
-    pos.setZ(i, zHeight);
+function addOutline(mesh) {
+    const outlineMesh = new THREE.Mesh(mesh.geometry, outlineMat);
+    outlineMesh.position.copy(mesh.position);
+    outlineMesh.rotation.copy(mesh.rotation);
+    outlineMesh.scale.copy(mesh.scale).multiplyScalar(OUTLINE_THICKNESS);
+    outlineMesh.position.set(0,0,0);
+    outlineMesh.rotation.set(0,0,0);
+    mesh.add(outlineMesh);
 }
-groundGeo.computeVertexNormals();
+
+function createMesh(geo, mat, parent, pos) {
+    const m = new THREE.Mesh(geo, mat);
+    if(pos) m.position.set(...pos);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    if(parent) parent.add(m);
+    if (mat) addOutline(m);
+    return m;
+}
+
+// --- DYNAMIC HABITAT SYSTEM (INFINITE HORIZON) ---
+
+// 1. Terrain Mesh (Massive plane to merge with fog)
+const groundGeo = new THREE.PlaneGeometry(200, 200, 64, 64);
+const groundMat = new THREE.MeshToonMaterial({ color: 0x6BCB77 }); // Default Grass
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 habitatGroup.add(ground);
 
-// 2. Biome Props (Scattered away from center)
-const propCount = 40;
-const element = "${element}";
-for(let i=0; i<propCount; i++) {
-    const r = 15 + Math.random() * 40;
-    const theta = Math.random() * Math.PI * 2;
-    const x = r * Math.cos(theta);
-    const z = r * Math.sin(theta);
-    const y = 0; // Should sample terrain height ideally, but simple logic ensures they poke up
+// 2. Props System (InstancedMesh pools)
+const PROP_COUNT = 40;
+const dummy = new THREE.Object3D();
 
-    if (element === 'Grass') {
-        // Trees
-        const h = 4 + Math.random() * 6;
-        const tree = new THREE.Group();
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, h/2), secMat);
-        trunk.position.y = h/4;
-        const leaves = new THREE.Mesh(new THREE.ConeGeometry(3, h/1.5, 8), primMat);
-        leaves.position.y = h/2 + h/4;
-        tree.add(trunk); tree.add(leaves);
-        tree.position.set(x, y, z);
-        habitatGroup.add(tree);
-    } else if (element === 'Fire') {
-        // Spikes/Rocks
-        const spike = new THREE.Mesh(new THREE.ConeGeometry(1, 4, 4), secMat);
-        spike.position.set(x, 2, z);
-        spike.rotation.x = (Math.random()-0.5);
-        spike.rotation.z = (Math.random()-0.5);
-        habitatGroup.add(spike);
-    } else if (element === 'Water') {
-        // Coral/Crystals
-        const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(1 + Math.random()), primMat);
-        crystal.position.set(x, 1 + Math.random(), z);
-        habitatGroup.add(crystal);
-    } else {
-        // Generic Cubes
-        const cube = new THREE.Mesh(new THREE.BoxGeometry(2,2,2), secMat);
-        cube.position.set(x, 1, z);
-        habitatGroup.add(cube);
-    }
-}
+// -- Geometries (Rounded for Toy Look) --
+const treeGeo = new THREE.ConeGeometry(1, 3, 5); 
+const rockGeo = new THREE.DodecahedronGeometry(1); 
+const pillarGeo = new RoundedBoxGeometry(0.5, 4, 0.5, 2, 0.1); 
+const bubbleGeo = new THREE.IcosahedronGeometry(0.8); 
 
-// --- COMPLEX CREATURE GENERATOR (SEGMENTED) ---
-const bodyType = "${bodyType}";
-const stage = "${stage}"; // Noob, Pro, Elite, Legend
+// -- Prop Groups --
+const treeProps = new THREE.InstancedMesh(treeGeo, new THREE.MeshToonMaterial({color: 0x34D399}), PROP_COUNT);
+const rockProps = new THREE.InstancedMesh(rockGeo, new THREE.MeshToonMaterial({color: 0xFCA5A5}), PROP_COUNT);
+const cityProps = new THREE.InstancedMesh(pillarGeo, new THREE.MeshToonMaterial({color: 0x67E8F9, emissive: 0x22D3EE}), PROP_COUNT);
+const waterProps = new THREE.InstancedMesh(bubbleGeo, new THREE.MeshToonMaterial({color: 0x93C5FD, transparent: true, opacity: 0.8}), PROP_COUNT);
 
-// Helpers
-function createMesh(geo, mat, parent, pos, rot, scale) {
-    const m = new THREE.Mesh(geo, mat);
-    if(pos) m.position.set(...pos);
-    if(rot) m.rotation.set(...rot);
-    if(scale) m.scale.set(...scale);
+[treeProps, rockProps, cityProps, waterProps].forEach(m => {
     m.castShadow = true;
     m.receiveShadow = true;
-    if(parent) parent.add(m);
-    return m;
-}
+    m.visible = false; 
+    habitatGroup.add(m);
+});
 
-// Animation Rigs
-const rig = {
-    head: null,
-    torso: null,
-    arms: { left: null, right: null },
-    legs: { left: null, right: null },
-    tail: null,
-    floaters: []
+// -- Particle System --
+const partGeo = new THREE.BufferGeometry();
+const partCount = 100;
+const partPos = new Float32Array(partCount * 3);
+for(let i=0; i<partCount*3; i++) partPos[i] = (Math.random()-0.5) * 40;
+partGeo.setAttribute('position', new THREE.BufferAttribute(partPos, 3));
+const partMat = new THREE.PointsMaterial({ size: 0.5, color: 0xffffff, transparent: true, opacity: 0.8 });
+const particles = new THREE.Points(partGeo, partMat);
+habitatGroup.add(particles);
+
+// --- THEME CONFIG (CANDY COLORED & INFINITE) ---
+// Colors must match ELEMENT_THEMES in gameData.ts
+const THEMES = {
+    'Grass': { 
+        groundColor: 0x6BCB77, fog: 0xD1FAE5, prop: treeProps, propColor: 0x10B981, 
+        particleColor: 0xA7F3D0, partSpeedY: -0.05, groundRough: true 
+    },
+    'Water': { 
+        groundColor: 0x4D96FF, fog: 0xE0F2FE, prop: waterProps, propColor: 0xBAE6FD, 
+        particleColor: 0xFFFFFF, partSpeedY: 0.05, groundRough: true 
+    },
+    'Fire': { 
+        groundColor: 0xFF6B6B, fog: 0xFFE4E6, prop: rockProps, propColor: 0xFF9EAA, 
+        particleColor: 0xFDBA74, partSpeedY: 0.08, groundRough: true 
+    },
+    'Metal': { 
+        groundColor: 0x94A3B8, fog: 0xF8FAFC, prop: cityProps, propColor: 0xCBD5E1, 
+        particleColor: 0x38BDF8, partSpeedY: 0.02, groundRough: false 
+    },
+    'Electric': { 
+        groundColor: 0xFFD93D, fog: 0xFFFBEB, prop: cityProps, propColor: 0xFDE047, 
+        particleColor: 0xFFFF00, partSpeedY: 0.1, groundRough: false 
+    },
+    'Psychic': { 
+        groundColor: 0xC77DFF, fog: 0xF3E8FF, prop: rockProps, propColor: 0xE9D5FF, 
+        particleColor: 0xD8B4FE, partSpeedY: 0.02, groundRough: true 
+    },
+    'Dark': { 
+        groundColor: 0x6D28D9, fog: 0xE0E7FF, prop: rockProps, propColor: 0x8B5CF6, 
+        particleColor: 0x818CF8, partSpeedY: 0.01, groundRough: true 
+    },
+    'Toxic': { 
+        groundColor: 0xBEF264, fog: 0xECFCCB, prop: waterProps, propColor: 0xD9F99D, 
+        particleColor: 0x84CC16, partSpeedY: 0.02, groundRough: true 
+    }
 };
 
-// SCALE FACTORS BASED ON STAGE
-let sScale = 1;
-if (stage === 'Pro') sScale = 1.2;
-if (stage === 'Elite') sScale = 1.5;
-if (stage === 'Legend') sScale = 2.0;
+let currentTheme = null;
 
-// BUILD FUNCTION
+function updateHabitat(themeName) {
+    const t = THEMES[themeName] || THEMES['Grass'];
+    
+    // 1. Seamless Fog & Background
+    scene.background = new THREE.Color(t.fog);
+    scene.fog.color.setHex(t.fog);
+    
+    // 2. Ground (Infinite Illusion)
+    groundMat.color.setHex(t.groundColor);
+    
+    // Modify Terrain Height for rough ground
+    const posAttr = groundGeo.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+        const x = posAttr.getX(i);
+        const y = posAttr.getY(i);
+        let z = 0;
+        if (t.groundRough) {
+            const freq = themeName === 'Water' ? 0.2 : 0.05;
+            const amp = themeName === 'Water' ? 2.0 : 3.0;
+            z = Math.sin(x * freq) * Math.cos(y * freq) * amp; 
+            
+            // Flatten center for pet
+            if (Math.abs(x) < 6 && Math.abs(y) < 6) z *= 0.1;
+        }
+        posAttr.setZ(i, z); 
+    }
+    posAttr.needsUpdate = true;
+    groundGeo.computeVertexNormals();
+
+    // 3. Props
+    [treeProps, rockProps, cityProps, waterProps].forEach(m => m.visible = false);
+    t.prop.visible = true;
+    t.prop.material.color.setHex(t.propColor);
+    
+    // Redistribute props
+    for(let i=0; i<PROP_COUNT; i++) {
+        const r = 10 + Math.random() * 40; // Spread further out
+        const theta = Math.random() * Math.PI * 2;
+        dummy.position.set(r * Math.cos(theta), 0, r * Math.sin(theta));
+        
+        // Match height roughly
+        if (t.groundRough) dummy.position.y = (Math.random() - 0.5) * 4;
+        else dummy.position.y = 0;
+
+        const s = 0.8 + Math.random();
+        dummy.scale.set(s,s,s);
+        dummy.rotation.set(0, Math.random() * Math.PI, 0);
+        
+        if (themeName === 'City') dummy.scale.y *= 2;
+        
+        dummy.updateMatrix();
+        t.prop.setMatrixAt(i, dummy.matrix);
+    }
+    t.prop.instanceMatrix.needsUpdate = true;
+
+    // 4. Particles
+    partMat.color.setHex(t.particleColor);
+    currentTheme = t;
+}
+
+// --- CREATURE BUILDER (AAA RIGGING) ---
+const bodyType = "${bodyType}";
+const stage = "${stage}";
+let sScale = stage === 'Pro' ? 1.2 : stage === 'Elite' ? 1.5 : stage === 'Legend' ? 2.0 : 1.0;
+const rig = { parts: [] };
+
 function buildCreature() {
-    // 1. TORSO (Root of body)
-    const torsoGeo = stage === 'Noob' 
-        ? new THREE.SphereGeometry(1.5 * sScale, 16, 16) // Round cute body for noobs
-        : new THREE.CylinderGeometry(1.5 * sScale, 1.2 * sScale, 3 * sScale, 8); // Robust body for others
+    // Use Rounded Geometry for Toy Look
+    const boxGeo = new RoundedBoxGeometry(1, 1, 1, 4, 0.2);
+    const sphereGeo = new THREE.IcosahedronGeometry(1, 2);
     
-    rig.torso = createMesh(torsoGeo, primMat, charGroup, [0, bodyType==='QUADRUPED'? 2*sScale : 3*sScale, 0]);
-    
-    // Armor Plate
-    if (stage !== 'Noob') {
-        createMesh(new THREE.BoxGeometry(2*sScale, 1.5*sScale, 0.5*sScale), secMat, rig.torso, [0, 0, 1.2*sScale]);
-    }
+    let torsoGeo = stage === 'Noob' ? sphereGeo : boxGeo;
+    const torsoY = bodyType === 'QUADRUPED' ? 1.5*sScale : 3.0*sScale;
+    const torso = createMesh(torsoGeo, primMat, charGroup, [0, torsoY, 0]);
+    torso.scale.set(2*sScale, 1.8*sScale, 1.5*sScale);
+    rig.parts.push({ m: torso, type: 'body' });
 
-    // 2. HEAD
-    const headGeo = stage === 'Noob'
-        ? new THREE.BoxGeometry(2.2*sScale, 2.2*sScale, 2.2*sScale) // Big head for noob
-        : new THREE.BoxGeometry(1.8*sScale, 2*sScale, 2*sScale);
-        
-    const headY = stage === 'Noob' ? 1.5*sScale : 2.5*sScale;
-    const headZ = bodyType === 'QUADRUPED' ? 1.5*sScale : 0;
-    
-    rig.head = createMesh(headGeo, primMat, rig.torso, [0, headY, headZ]);
-    
-    // Face
-    createMesh(new THREE.BoxGeometry(0.5*sScale, 0.5*sScale, 0.1), eyeMat, rig.head, [0.5*sScale, 0.2*sScale, 1*sScale]); // Eye R
-    createMesh(new THREE.BoxGeometry(0.5*sScale, 0.5*sScale, 0.1), eyeMat, rig.head, [-0.5*sScale, 0.2*sScale, 1*sScale]); // Eye L
-    
-    // Accessories (Horns/Ears) based on Element
-    if (element === 'Fire' || element === 'Dark') {
-        createMesh(new THREE.ConeGeometry(0.3*sScale, 1*sScale, 4), secMat, rig.head, [0.8*sScale, 1*sScale, 0], [0,0,-0.5]);
-        createMesh(new THREE.ConeGeometry(0.3*sScale, 1*sScale, 4), secMat, rig.head, [-0.8*sScale, 1*sScale, 0], [0,0,0.5]);
-    } else if (element === 'Grass' || element === 'Electric') {
-        createMesh(new THREE.BoxGeometry(0.2*sScale, 1*sScale, 0.5*sScale), secMat, rig.head, [1*sScale, 0.5*sScale, 0]);
-        createMesh(new THREE.BoxGeometry(0.2*sScale, 1*sScale, 0.5*sScale), secMat, rig.head, [-1*sScale, 0.5*sScale, 0]);
-    }
+    const headY = 1.2;
+    const head = createMesh(sphereGeo, primMat, torso, [0, headY, 0]);
+    head.scale.set(0.7, 0.7, 0.7);
 
-    // 3. LIMBS
+    const eyeGeo = new THREE.PlaneGeometry(0.3, 0.3);
+    const eyeMat = new THREE.MeshBasicMaterial({color: 0x000000});
+    const eL = new THREE.Mesh(eyeGeo, eyeMat); eL.position.set(0.3, 0.1, 0.85); eL.rotation.y = -0.2; head.add(eL);
+    const eR = new THREE.Mesh(eyeGeo, eyeMat); eR.position.set(-0.3, 0.1, 0.85); eR.rotation.y = 0.2; head.add(eR);
+
+    const limbGeo = new RoundedBoxGeometry(0.4, 1.5, 0.4, 2, 0.1);
+    
     if (bodyType === 'BIPED') {
-        // Arms
-        const armGeo = new THREE.BoxGeometry(0.6*sScale, 2*sScale, 0.6*sScale);
-        rig.arms.left = createMesh(armGeo, secMat, rig.torso, [1.8*sScale, 0.5*sScale, 0], [0,0,-0.2]);
-        rig.arms.right = createMesh(armGeo, secMat, rig.torso, [-1.8*sScale, 0.5*sScale, 0], [0,0,0.2]);
-        
-        // Legs
-        const legGeo = new THREE.BoxGeometry(0.8*sScale, 2.5*sScale, 0.8*sScale);
-        rig.legs.left = createMesh(legGeo, secMat, charGroup, [1*sScale, 1.2*sScale, 0]);
-        rig.legs.right = createMesh(legGeo, secMat, charGroup, [-1*sScale, 1.2*sScale, 0]);
-        
-    } else if (bodyType === 'QUADRUPED') {
-        rig.torso.rotation.x = Math.PI/2; // Horizontal body
-        
-        const legGeo = new THREE.CylinderGeometry(0.4*sScale, 0.3*sScale, 2*sScale);
-        rig.legs.left = createMesh(legGeo, secMat, charGroup, [1.2*sScale, 1*sScale, 1.5*sScale]); // Front L
-        rig.legs.right = createMesh(legGeo, secMat, charGroup, [-1.2*sScale, 1*sScale, 1.5*sScale]); // Front R
-        // Back legs reused in anim loop logic differently but stored here
-        // Actually let's just add them directly for simplicity in this procedural rig
-        createMesh(legGeo, secMat, charGroup, [1.2*sScale, 1*sScale, -1.5*sScale]);
-        createMesh(legGeo, secMat, charGroup, [-1.2*sScale, 1*sScale, -1.5*sScale]);
-    } else if (bodyType === 'FLOATING') {
-        // Rings or Thrusters
-        const ring = createMesh(new THREE.TorusGeometry(2.5*sScale, 0.2*sScale, 8, 16), secMat, rig.torso, [0,0,0], [Math.PI/2, 0, 0]);
-        rig.floaters.push(ring);
-        // No legs
-    }
+        const armL = createMesh(limbGeo, secMat, torso, [0.6, 0, 0]);
+        const armR = createMesh(limbGeo, secMat, torso, [-0.6, 0, 0]);
+        rig.parts.push({ m: armL, type: 'arm', off: 0 });
+        rig.parts.push({ m: armR, type: 'arm', off: Math.PI });
 
-    // 4. WINGS / BACK PROP (Elite/Legend only)
-    if (stage === 'Elite' || stage === 'Legend') {
-        const wingGeo = new THREE.BoxGeometry(0.2*sScale, 4*sScale, 1.5*sScale);
-        const wingL = createMesh(wingGeo, glowMat, rig.torso, [1*sScale, 1*sScale, -1*sScale], [0.5, 0, -0.5]);
-        const wingR = createMesh(wingGeo, glowMat, rig.torso, [-1*sScale, 1*sScale, -1*sScale], [0.5, 0, 0.5]);
-        rig.floaters.push(wingL, wingR); // Hack to animate them
+        const legL = createMesh(limbGeo, secMat, charGroup, [0.8*sScale, 0.8*sScale, 0]);
+        const legR = createMesh(limbGeo, secMat, charGroup, [-0.8*sScale, 0.8*sScale, 0]);
+        rig.parts.push({ m: legL, type: 'leg', off: 0 });
+        rig.parts.push({ m: legR, type: 'leg', off: Math.PI });
+    } 
+    else if (bodyType === 'QUADRUPED') {
+        [[0.6,-0.5,0.8], [-0.6,-0.5,0.8], [0.6,-0.5,-0.8], [-0.6,-0.5,-0.8]].forEach((pos, i) => {
+            const l = createMesh(limbGeo, secMat, torso, pos);
+            rig.parts.push({ m: l, type: 'leg', off: i%2===0?0:Math.PI, spd: 2 });
+        });
+    }
+    else if (bodyType === 'FLOATING') {
+        const wingGeo = new RoundedBoxGeometry(0.2, 1.5, 1.5, 2, 0.1);
+        const wL = createMesh(wingGeo, secMat, torso, [1.1, 0, 0]);
+        const wR = createMesh(wingGeo, secMat, torso, [-1.1, 0, 0]);
+        rig.parts.push({ m: wL, type: 'wing' });
+        rig.parts.push({ m: wR, type: 'wing' });
     }
 }
 
@@ -295,95 +337,89 @@ buildCreature();
 
 // --- ANIMATION LOOP ---
 let time = 0;
+let isPaused = false;
+
 function animate() {
-  requestAnimationFrame(animate);
-  time += 0.05;
-  
-  controls.update();
-
-  // Floating / Breathing
-  const hover = Math.sin(time * 1.5) * 0.2;
-  if (bodyType === 'FLOATING') {
-      charGroup.position.y = 3 + hover;
-      charGroup.rotation.z = Math.sin(time) * 0.1;
-      // Spin rings
-      rig.floaters.forEach(f => f.rotation.z += 0.1);
-  } else {
-      // Grounded breathing
-      rig.torso.position.y = (bodyType==='QUADRUPED'? 2*sScale : 3*sScale) + hover * 0.5;
-  }
-
-  // Walk Cycle
-  if (bodyType === 'BIPED') {
-      if (rig.legs.left && rig.legs.right) {
-          rig.legs.left.rotation.x = Math.sin(time * 2) * 0.5;
-          rig.legs.right.rotation.x = Math.sin(time * 2 + Math.PI) * 0.5;
-      }
-      if (rig.arms.left && rig.arms.right) {
-          rig.arms.left.rotation.x = Math.sin(time * 2 + Math.PI) * 0.5;
-          rig.arms.right.rotation.x = Math.sin(time * 2) * 0.5;
-      }
-  }
-
-  // Wing Flap
-  if (stage === 'Elite' || stage === 'Legend') {
-     // Simple flutter if we added wings to floaters array
-  }
-
-  renderer.render(scene, camera);
+    if (!isPaused) {
+        requestAnimationFrame(animate);
+        time += 0.05;
+        controls.update();
+        
+        // 1. Creature Animation
+        rig.parts.forEach(p => {
+            if (p.type === 'body' && bodyType === 'FLOATING') p.m.position.y += Math.sin(time*2) * 0.02;
+            if (p.type === 'arm') p.m.rotation.x = Math.sin(time + p.off) * 0.5;
+            if (p.type === 'leg') p.m.rotation.x = Math.sin(time + p.off) * 0.8;
+            if (p.type === 'wing') p.m.rotation.z = Math.sin(time*10) * 0.2;
+        });
+        
+        // 2. Particle Animation
+        if (currentTheme) {
+            const positions = particles.geometry.attributes.position.array;
+            for(let i=1; i<positions.length; i+=3) {
+                positions[i] += currentTheme.partSpeedY; // Move Y
+                // Reset if out of bounds
+                if (positions[i] > 15) positions[i] = -5;
+                if (positions[i] < -5) positions[i] = 15;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+        }
+        
+        renderer.render(scene, camera);
+    }
 }
 animate();
 
-// --- MESSAGING ---
-window.addEventListener('message', (event) => {
-    const { type, value } = event.data;
-    if (type === 'SET_MODE') {
-        if (value === 'BATTLE') {
+// --- EVENTS ---
+window.addEventListener('message', (e) => {
+    if (e.data.type === 'PAUSE') {
+        isPaused = e.data.value;
+        if(!isPaused) animate();
+    }
+    if (e.data.type === 'SET_MODE') {
+        if (e.data.value === 'BATTLE') {
             habitatGroup.visible = false;
-            controls.autoRotate = false;
-            camera.position.set(5, 3, 8);
+            camera.position.set(8, 5, 8);
             camera.lookAt(0, 2, 0);
         } else {
             habitatGroup.visible = true;
-            controls.autoRotate = true;
-            camera.position.set(12, 8, 16);
+            camera.position.set(14, 8, 14);
         }
+    }
+    if (e.data.type === 'SET_THEME') {
+        updateHabitat(e.data.value);
     }
 });
 
-window.onresize = () => {
+window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-}
-</script></body></html>`;
+});
+</script>
+</body>
+</html>`;
 };
 
-// NOTE: analyzeObject, generateCardArt, generateVoxelScene, etc. remain unchanged but import above used
 export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> => {
-     try {
+    try {
     if (!imageBase64) throw new Error("Image data is missing");
     const base64Data = imageBase64.split(',')[1] || imageBase64;
     const mimeMatch = imageBase64.match(/^data:(.*?);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
     const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-1.5-pro',
       contents: {
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `Analyze this object and create a game character profile.
-            
-            **RULES:**
-            1. **NAME:** Do not use brand names. Use a cool "Gamer" name based on the object.
-            2. **BODY TYPE:** 
-               - If it looks like an animal -> QUADRUPED.
-               - If it looks like a person/figure -> BIPED.
-               - If it's round/object-like -> FLOATING.
-               - If it has wheels -> WHEELED.
-            
-            Return JSON.`
+            text: `Analyze this object for a "Monster Tamer" game.
+            OUTPUT RULES:
+            1. Name: Creative, cool, NO Brand Names.
+            2. Element: Infer from color/material.
+            3. BodyType: BIPED (Human-like), QUADRUPED (Animal-like), FLOATING (Round/Flying), WHEELED (Car/Toy).
+            Return valid JSON.`
           }
         ]
       },
@@ -394,21 +430,13 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
           properties: {
             name: { type: Type.STRING },
             element: { type: Type.STRING, enum: ['Fire', 'Water', 'Grass', 'Electric', 'Psychic', 'Metal', 'Dark', 'Light', 'Spirit', 'Toxic'] },
-            rarity: { type: Type.STRING, enum: ['Common', 'Rare', 'Epic', 'Legendary', 'Glitch'] },
-            stage: { type: Type.STRING, enum: ['Noob'] },
-            rank: { type: Type.STRING }, 
-            nature: { type: Type.STRING },
             visual_design: { type: Type.STRING },
             bodyType: { type: Type.STRING, enum: ['BIPED', 'QUADRUPED', 'FLOATING', 'WHEELED', 'SERPENTINE'] },
-            potential: { type: Type.INTEGER },
             hp: { type: Type.INTEGER },
             atk: { type: Type.INTEGER },
             def: { type: Type.INTEGER },
             spd: { type: Type.INTEGER },
-            int: { type: Type.INTEGER },
-            description: { type: Type.STRING },
-            ability: { type: Type.STRING },
-            moves: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, type: { type: Type.STRING }, power: { type: Type.INTEGER }, accuracy: { type: Type.INTEGER }, description: { type: Type.STRING } } } }
+            description: { type: Type.STRING }
           }
         }
       }
@@ -419,8 +447,15 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
       ...data, 
       id: generateId(),
       dateCreated: Date.now(),
-      tactic: 'BALANCED',
       stage: 'Noob', 
+      rarity: 'Common',
+      rank: 'E',
+      nature: 'Loyal',
+      potential: 3,
+      int: 10,
+      ability: 'Basic',
+      moves: [],
+      tactic: 'BALANCED',
       happiness: 50
     };
   } catch (error) {
@@ -434,8 +469,9 @@ export const generateCardArt = async (monsterDescription: string, objectName: st
 };
 
 export const generateVoxelScene = async (imageBase64: string, visualDescription: string, bodyType: string = 'BIPED'): Promise<string> => {
-    // Initial generation is always Noob stage
-    return getGenericVoxel('Metal', bodyType, 'Noob');
+    // Ensure no post-processing breaks the code
+    const code = getGenericVoxel('Metal', bodyType, 'Noob');
+    return code;
 };
 
 export const fuseVoxelScene = async (petA: MonsterStats, petB: MonsterStats) => {
@@ -445,15 +481,12 @@ export const fuseVoxelScene = async (petA: MonsterStats, petB: MonsterStats) => 
 };
 
 export const evolveVoxelScene = async (pet: MonsterStats) => {
-    // Determine next stage
     let nextStage: MonsterStage = 'Pro';
     if (pet.stage === 'Noob') nextStage = 'Pro';
     else if (pet.stage === 'Pro') nextStage = 'Elite';
     else if (pet.stage === 'Elite') nextStage = 'Legend';
 
-    // Generate new complex model code
     const code = getGenericVoxel(pet.element, pet.bodyType, nextStage);
-    
     const { protocolName } = determineEvolutionPath({ 
         atk: pet.atk, def: pet.def, spd: pet.spd, happiness: pet.happiness || 50 
     });
