@@ -113,42 +113,74 @@ const IconTreasure = () => (
     </svg>
 );
 
-// COMPREHENSIVE ITEM ICON LIBRARY
+// COMPREHENSIVE ITEM ICON LIBRARY WITH RARITY COLORS
+const RARITY_COLORS = {
+    Common: '#E5E7EB', // Gray
+    Rare: '#60A5FA',   // Neon Blue
+    Epic: '#A78BFA',   // Purple
+    Legendary: '#FBBF24' // Gold
+};
+
 const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
     const id = item.id.toLowerCase();
+    const baseColor = RARITY_COLORS[item.rarity] || '#E5E7EB';
+    const strokeColor = item.rarity === 'Legendary' ? '#B45309' : 'black';
     
-    // FOOD - PIZZA
+    // PIZZA
     if (id.includes('pizza')) {
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <path d="M12 2L2 20h20L12 2z" fill="#FCD34D" stroke="black" strokeWidth="2"/>
-                <circle cx="12" cy="10" r="1.5" fill="#EF4444"/>
-                <circle cx="10" cy="15" r="1.5" fill="#EF4444"/>
-                <circle cx="14" cy="15" r="1.5" fill="#EF4444"/>
-                <path d="M2 20h20v2H2z" fill="#D97706" stroke="black" strokeWidth="1"/>
+                <path d="M12 2L2 20h20L12 2z" fill="#FCD34D" stroke={strokeColor} strokeWidth="2"/>
+                <circle cx="12" cy="8" r="1.5" fill="#EF4444"/>
+                <circle cx="10" cy="14" r="1.5" fill="#EF4444"/>
+                <circle cx="15" cy="12" r="1.5" fill="#EF4444"/>
+                <circle cx="13" cy="17" r="1.5" fill="#EF4444"/>
+                <path d="M2 20h20v2H2z" fill="#D97706" stroke={strokeColor} strokeWidth="1"/>
             </svg>
         );
     }
-    // FOOD - BURGER
+    // BURGER / STEAK
     if (id.includes('burger') || id.includes('steak')) {
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <path d="M4 10c0-4 4-6 8-6s8 2 8 6H4z" fill="#FBBF24" stroke="black" strokeWidth="2"/>
-                <rect x="4" y="14" width="16" height="4" rx="2" fill="#7F1D1D" stroke="black" strokeWidth="2"/>
-                <rect x="4" y="11" width="16" height="2" fill="#22C55E" stroke="black" strokeWidth="1"/>
-                <path d="M4 19h16v3H4z" fill="#FBBF24" stroke="black" strokeWidth="2"/>
+                <path d="M4 9c0-4 4-6 8-6s8 2 8 6H4z" fill="#FBBF24" stroke={strokeColor} strokeWidth="2"/>
+                <rect x="3" y="15" width="18" height="4" rx="2" fill="#7F1D1D" stroke={strokeColor} strokeWidth="2"/>
+                <rect x="4" y="13" width="16" height="2" fill="#22C55E" stroke={strokeColor} strokeWidth="1"/>
+                <path d="M4 19h16v3H4z" fill="#FBBF24" stroke={strokeColor} strokeWidth="2"/>
+            </svg>
+        );
+    }
+    // BOOTS
+    if (id.includes('boots')) {
+         return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                 <path d="M6 8h8v12H6z" fill={baseColor} stroke={strokeColor} strokeWidth="2"/>
+                 <path d="M6 20h12v2H6z" fill="black" />
+                 <rect x="14" y="16" width="4" height="4" fill="#FCD34D" stroke={strokeColor} />
+                 <path d="M8 8v-2c0-2 2-3 4-3h2" stroke={strokeColor} strokeWidth="2" fill="none"/>
+                 {item.rarity === 'Legendary' && <path d="M18 10l4-2-4-2" stroke="#FBBF24" strokeWidth="2"/>}
+            </svg>
+        );
+    }
+    // ARMOR / VEST
+    if (id.includes('armor') || id.includes('vest')) {
+        return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                <path d="M5 4h14v14l-7 4-7-4V4z" fill={baseColor} stroke={strokeColor} strokeWidth="2"/>
+                <path d="M9 8h6" stroke={strokeColor} strokeWidth="2"/>
+                <circle cx="12" cy="12" r="3" fill="#3B82F6" stroke={strokeColor} strokeWidth="2"/>
             </svg>
         );
     }
     // DRINK - SODA/POTION
     if (id.includes('soda') || id.includes('potion')) {
-        const color = id.includes('soda') ? '#60A5FA' : id.includes('super') ? '#A855F7' : '#EF4444';
+        const liquidColor = id.includes('soda') ? '#60A5FA' : id.includes('super') ? '#A855F7' : '#EF4444';
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <path d="M8 4h8v4H8z" fill="#9CA3AF" stroke="black" strokeWidth="2"/>
-                <path d="M6 8h12l2 12H4L6 8z" fill="#F3F4F6" stroke="black" strokeWidth="2"/>
-                <path d="M7 11h10l1.5 9h-13L7 11z" fill={color}/>
-                <rect x="10" y="12" width="2" height="6" fill="white" opacity="0.5"/>
+                <path d="M9 3h6v4H9z" fill="#9CA3AF" stroke={strokeColor} strokeWidth="2"/>
+                <path d="M7 7h10l2 13H5L7 7z" fill="#F3F4F6" stroke={strokeColor} strokeWidth="2"/>
+                <path d="M8 10h8l1.5 9h-11L8 10z" fill={liquidColor}/>
+                <rect x="11" y="11" width="2" height="6" fill="white" opacity="0.5"/>
             </svg>
         );
     }
@@ -158,51 +190,45 @@ const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
         if (id.includes('fire')) color = '#EF4444';
         if (id.includes('water')) color = '#3B82F6';
         if (id.includes('grass')) color = '#10B981';
+        if (id.includes('electric')) color = '#FBBF24';
         if (id.includes('metal')) color = '#94A3B8';
+        if (id.includes('dark')) color = '#111827';
+        
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <rect x="4" y="4" width="16" height="16" rx="2" fill="#1F2937" stroke="black" strokeWidth="2"/>
-                <rect x="6" y="6" width="12" height="12" rx="1" fill={color}/>
-                <path d="M8 8h2v2H8zM14 14h2v2h-2zM14 8h2v2h-2zM8 14h2v2H8z" fill="white" opacity="0.8"/>
-                <path d="M2 12h4M18 12h4M12 2v4M12 18v4" stroke="black" strokeWidth="2"/>
+                <rect x="4" y="4" width="16" height="16" rx="3" fill="#1F2937" stroke={strokeColor} strokeWidth="2"/>
+                <rect x="7" y="7" width="10" height="10" rx="1" fill={color}/>
+                <path d="M5 10h3M16 10h3M12 5v3M12 16v3" stroke={strokeColor} strokeWidth="2"/>
+                <circle cx="12" cy="12" r="2" fill="white"/>
             </svg>
         );
     }
-    // GEAR - HELMET
+    // GEAR - HELMET / VISOR
     if (id.includes('helm') || id.includes('visor') || id.includes('crown')) {
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <path d="M4 12c0-5 4-8 8-8s8 3 8 8v6H4v-6z" fill="#9CA3AF" stroke="black" strokeWidth="2"/>
-                <rect x="8" y="10" width="8" height="4" fill="#3B82F6" stroke="black" strokeWidth="2"/>
-                <path d="M12 4v4" stroke="black" strokeWidth="2"/>
+                <path d="M4 13c0-5 4-9 8-9s8 4 8 9v6H4v-6z" fill={baseColor} stroke={strokeColor} strokeWidth="2"/>
+                <rect x="7" y="10" width="10" height="4" fill={id.includes('visor') ? '#EF4444' : '#3B82F6'} stroke={strokeColor} strokeWidth="2"/>
+                <path d="M12 4v4" stroke={strokeColor} strokeWidth="2"/>
             </svg>
         );
     }
-    // GEAR - ARMOR/VEST
-    if (id.includes('armor') || id.includes('vest')) {
+    // ACCESSORY (Rings, Charms, Wings)
+    if (id.includes('wings') || id.includes('ring') || id.includes('pack') || id.includes('charm')) {
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <path d="M6 4h12v16l-6 2-6-2V4z" fill="#60A5FA" stroke="black" strokeWidth="2"/>
-                <path d="M6 8h12" stroke="black" strokeWidth="2"/>
-                <circle cx="12" cy="12" r="2" fill="#FCD34D" stroke="black" strokeWidth="2"/>
-            </svg>
-        );
-    }
-    // GEAR - ACCESSORY (Boots/Wings/Ring)
-    if (id.includes('boots') || id.includes('wings') || id.includes('ring')) {
-        return (
-            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                 <path d="M12 2l8 10-3 8-10 2-3-8z" fill="#F472B6" stroke="black" strokeWidth="2"/>
-                 <circle cx="12" cy="12" r="3" fill="#FDE047" stroke="black" strokeWidth="2"/>
+                 <circle cx="12" cy="12" r="8" fill="none" stroke={baseColor} strokeWidth="3"/>
+                 {id.includes('wings') && <path d="M2 12l8-4v8l-8-4zM22 12l-8-4v8l8-4z" fill={baseColor} stroke={strokeColor} />}
+                 <circle cx="12" cy="12" r="4" fill={item.rarity === 'Legendary' ? '#FCD34D' : '#F472B6'} stroke={strokeColor} strokeWidth="2"/>
             </svg>
         );
     }
     
-    // DEFAULT BOX
+    // MYSTERY BOX / DEFAULT
     return (
         <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-            <rect x="4" y="4" width="16" height="16" rx="2" fill="#D1D5DB" stroke="black" strokeWidth="2"/>
-            <text x="12" y="16" textAnchor="middle" fontSize="14">?</text>
+            <rect x="4" y="4" width="16" height="16" rx="2" fill={baseColor} stroke={strokeColor} strokeWidth="2"/>
+            <text x="12" y="16" textAnchor="middle" fontSize="14" fontWeight="bold" fill="black">?</text>
         </svg>
     );
 };
@@ -325,6 +351,7 @@ export default function App() {
   const [statusText, setStatusText] = useState("System Online");
   const [selectedCard, setSelectedCard] = useState<Pixupet | null>(null);
   const [showGearSelect, setShowGearSelect] = useState<{slot: EquipmentSlot} | null>(null);
+  const [confirmItem, setConfirmItem] = useState<GameItem | null>(null); // For item use confirmation
   
   // Menus
   const [statsOpen, setStatsOpen] = useState(false);
@@ -509,6 +536,15 @@ export default function App() {
       showFloatingText(`+ ${ITEMS_DB[itemId].name}!`, 'text-green-400');
   };
 
+  const removeItem = (index: number) => {
+      setUser(u => {
+          const newInv = [...u.inventory];
+          newInv.splice(index, 1);
+          return { ...u, inventory: newInv };
+      });
+  };
+
+  // Updated to Float Down and be smaller/tighter
   const showFloatingText = (text: string, color: string) => {
       const id = Date.now() + Math.random();
       setNotifs(prev => [...prev, { id, text, x: 50, y: 40, color }]);
@@ -578,6 +614,22 @@ export default function App() {
       pet.equipment[slot === 'HEAD' ? 'head' : slot === 'BODY' ? 'body' : 'accessory'] = itemId;
       setInventory(updated);
       setShowGearSelect(null);
+  };
+
+  const handleUseItem = (item: GameItem, invIndex: number) => {
+      if (item.type === 'Food' || item.type === 'Consumable') {
+          const updated = [...inventory];
+          const pet = updated[activePetIndex];
+          if (item.effect) {
+              updated[activePetIndex] = item.effect(pet);
+              setInventory(updated);
+              removeItem(invIndex);
+              showFloatingText(`Used ${item.name}!`, 'text-green-400');
+              setConfirmItem(null);
+          }
+      } else {
+          showFloatingText("Cannot use this item here.", "text-red-400");
+      }
   };
 
   const handlePurchase = (item: GameItem) => {
@@ -685,10 +737,10 @@ export default function App() {
           </div>
       </div>
 
-      {/* FLOATING NOTIFICATIONS - STACKED */}
+      {/* FLOATING NOTIFICATIONS - STACKED DOWNWARDS */}
       {notifs.map((n, idx) => (
-          <div key={n.id} className={`absolute z-[60] text-3xl font-black ${n.color} float-up pointer-events-none w-full text-center drop-shadow-[3px_3px_0_#000] stroke-black text-stroke`} 
-               style={{top: `${20 + idx * 8}%`, WebkitTextStroke: '1.5px black'}}>
+          <div key={n.id} className={`absolute z-[60] text-lg font-black ${n.color} float-down pointer-events-none w-full text-center drop-shadow-[2px_2px_0_#000] stroke-black text-stroke`} 
+               style={{top: `${100 + idx * 35}px`, left: '0', right: '0', WebkitTextStroke: '0.5px black'}}>
               {n.text}
           </div>
       ))}
@@ -710,6 +762,7 @@ export default function App() {
       </div>
 
       {/* BOTTOM NAVIGATION (FLOATING NEO-POP) */}
+      {/* Updated z-index and shadow to remove black artifacts */}
       <div className="absolute bottom-4 left-4 right-4 bg-white border-4 border-black rounded-2xl p-2 flex justify-between items-end z-20 shadow-[0_10px_20px_rgba(0,0,0,0.4)] h-20 safe-bottom">
           
           <button onClick={()=>{ setGameState('COLLECTION') }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
@@ -722,10 +775,10 @@ export default function App() {
               <span className="text-[9px] font-black uppercase mt-1">Items</span>
           </button>
 
-          {/* CENTER SCAN BUTTON */}
-          <div className="relative w-1/5 flex justify-center">
-              <button onClick={()=>setShowScan(true)} className="absolute -top-12 bg-yellow-400 w-24 h-24 rounded-full border-4 border-black flex items-center justify-center shadow-[0px_8px_0px_0px_#000] hover:-translate-y-2 hover:shadow-[0px_10px_0px_0px_#000] active:translate-y-1 active:shadow-[0px_2px_0px_0px_#000] transition-all z-30">
-                  <div className="text-white drop-shadow-md"><IconScan /></div>
+          {/* CENTER SCAN BUTTON - CLEANED UP */}
+          <div className="relative w-1/5 flex justify-center z-30">
+              <button onClick={()=>setShowScan(true)} className="absolute -top-12 bg-yellow-400 w-24 h-24 rounded-full border-4 border-black flex items-center justify-center shadow-[0px_6px_0px_0px_#000] hover:-translate-y-2 hover:shadow-[0px_10px_0px_0px_#000] active:translate-y-1 active:shadow-[0px_2px_0px_0px_#000] transition-all overflow-hidden">
+                  <div className="text-white drop-shadow-md relative z-10"><IconScan /></div>
               </button>
           </div>
 
@@ -864,7 +917,9 @@ export default function App() {
                <div className="w-[200%] h-[200%] relative map-grid p-20 pt-32 origin-top-left">
                    {Object.values(LOCATIONS_DB).map(loc => {
                        const isCurrent = user.currentLocation === loc.id;
-                       const isLocked = user.level < loc.levelReq;
+                       // UNLOCK LOGIC FIX: Check ACTIVE PET LEVEL too
+                       const isLocked = Math.max(user.level, activePet?.level || 0) < loc.levelReq;
+                       
                        return (
                            <div key={loc.id} id={loc.id}
                                 className={`absolute w-32 h-32 flex flex-col items-center justify-center text-center rounded-full border-4 transition-all duration-300 cursor-pointer
@@ -988,18 +1043,48 @@ export default function App() {
                        <h2 className="font-black text-xl text-white drop-shadow-md flex items-center gap-2"><IconBag /> BACKPACK</h2>
                        <button onClick={()=>setItemsOpen(false)} className="font-black text-xl w-8 h-8 hover:bg-green-500 rounded text-white">✕</button>
                    </div>
-                   <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-3 content-start bg-green-50">
-                       {user.inventory.map((id, i) => {
-                           const item = ITEMS_DB[id];
-                           return (
-                             <div key={i} className="aspect-square bg-white rounded-xl border-2 border-black flex flex-col items-center justify-center p-1 text-center relative group shadow-[3px_3px_0_#ccc] hover:-translate-y-1 hover:shadow-[4px_4px_0_#999] transition-all">
-                                 <div className="w-8 h-8"><ItemIcon item={item} /></div>
-                                 <div className="text-[8px] font-bold mt-1 truncate w-full px-1">{item.name}</div>
-                             </div>
-                           );
-                       })}
+                   {/* UPDATED TO LIST VIEW WITH DETAILS */}
+                   <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-green-50">
+                       {user.inventory.length === 0 ? (
+                           <div className="text-center text-gray-500 font-bold mt-10">Your bag is empty!</div>
+                       ) : (
+                           user.inventory.map((id, i) => {
+                               const item = ITEMS_DB[id];
+                               return (
+                                 <div key={i} onClick={() => setConfirmItem(item)} className="bg-white rounded-xl border-3 border-black flex items-center p-3 relative group shadow-[3px_3px_0_#ccc] hover:-translate-y-1 hover:shadow-[4px_4px_0_#999] transition-all cursor-pointer">
+                                     <div className="w-12 h-12 mr-4"><ItemIcon item={item} /></div>
+                                     <div className="flex-1">
+                                        <div className="font-black text-base">{item.name}</div>
+                                        <div className="text-xs font-bold text-gray-500">{item.description}</div>
+                                     </div>
+                                     <div className={`text-[9px] font-black px-2 py-1 rounded border border-black uppercase ${item.rarity === 'Legendary' ? 'bg-yellow-300' : item.rarity === 'Epic' ? 'bg-purple-300' : item.rarity === 'Rare' ? 'bg-blue-300' : 'bg-gray-200'}`}>
+                                         {item.rarity}
+                                     </div>
+                                 </div>
+                               );
+                           })
+                       )}
                    </div>
                </div>
+          </div>
+      )}
+
+      {/* ITEM CONFIRMATION POPUP */}
+      {confirmItem && itemsOpen && (
+          <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
+              <div className="bg-white w-full max-w-sm rounded-2xl p-6 border-4 border-black shadow-xl pop-in text-center">
+                  <h3 className="text-xl font-black mb-2">Use {confirmItem.name}?</h3>
+                  <div className="w-20 h-20 mx-auto mb-4"><ItemIcon item={confirmItem} /></div>
+                  <p className="text-sm font-bold text-gray-600 mb-6">{confirmItem.description}</p>
+                  <div className="flex gap-4">
+                      <button onClick={() => setConfirmItem(null)} className="flex-1 bg-gray-200 py-3 rounded-xl border-3 border-black font-black">CANCEL</button>
+                      <button onClick={() => {
+                          // Find index of item to remove specific instance
+                          const idx = user.inventory.indexOf(confirmItem.id);
+                          if (idx !== -1) handleUseItem(confirmItem, idx);
+                      }} className="flex-1 bg-green-400 py-3 rounded-xl border-3 border-black font-black hover:bg-green-500 shadow-[2px_2px_0_black]">USE / EQUIP</button>
+                  </div>
+              </div>
           </div>
       )}
 
