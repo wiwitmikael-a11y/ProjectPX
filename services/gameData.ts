@@ -189,6 +189,26 @@ export const GAME_HINTS = [
     "Matchups: Water > Fire > Grass > Water | Electric > Metal.",
 ];
 
+export const PET_SPEECH = [
+    "Yo Tamer!", "Where are we going?", "I'm hungry...", "Nice shoes!", "Did you hear that?",
+    "My gear is awesome.", "Am I real?", "Is this the matrix?", "I smell loot.",
+    "Let's battle!", "Need upgrades!", "You're the best.", "Pixels look crisp today.",
+    "Scanning...", "No bugs found.", "System optimal.", "Ready for action.",
+    "Don't leave me!", "Infinite world?", "Look at those graphics.", "Can I have a snack?",
+    "Charging...", "Updates pending...", "Hello world!"
+];
+
+export const getPetSpeech = (): string => {
+    return PET_SPEECH[Math.floor(Math.random() * PET_SPEECH.length)];
+};
+
+export const EMOTE_ICONS: Record<string, string> = {
+    'BATTLE': '❗',
+    'TREASURE': '💎',
+    'HAZARD': '💀',
+    'DISCOVERY': '❓'
+};
+
 export interface Move {
     name: string; type: string; power: number; accuracy: number; description: string;
 }

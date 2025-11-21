@@ -105,7 +105,6 @@ export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 
     if (dna.surfaceFinish === 'Glossy') shininess = 100;
     if (dna.surfaceFinish === 'Metallic') shininess = 150;
 
-    // MASSIVE SCALE DIFFERENCE FOR EVOLUTIONS
     const scale = stage === 'Legend' ? 2.4 : stage === 'Elite' ? 1.8 : stage === 'Pro' ? 1.4 : 1.0;
 
     return `<!DOCTYPE html>
@@ -126,10 +125,9 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xD1FAE5); 
-scene.fog = new THREE.FogExp2(0xD1FAE5, 0.02);
+scene.fog = new THREE.FogExp2(0xD1FAE5, 0.025);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
-// DEFAULT CAMERA ANGLE: Diagonal Right Front
 camera.position.set(5, 4, 12);
 
 const renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
@@ -145,10 +143,56 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.05; 
 controls.minDistance = 5;
 controls.maxDistance = 25;
-controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent looking under ground
-// RAISED TARGET TO 1.5
+// CONSTRAINT: Prevent camera from going underground (Math.PI/2 is horizon)
+controls.maxPolarAngle = Math.PI / 2 - 0.1; 
 controls.target.set(0, 1.5, 0);
 controls.enableRotate = true;
+
+// --- RAYCASTER FOR INTERACTION ---
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let isDragging = false;
+
+window.addEventListener('mousedown', () => { isDragging = false; });
+window.addEventListener('mousemove', () => { isDragging = true; });
+window.addEventListener('mouseup', (e) => {
+    if (isDragging) return;
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(charGroup.children, true);
+    if (intersects.length > 0) {
+        triggerPoke();
+    }
+});
+window.addEventListener('touchstart', (e) => { isDragging = false; });
+window.addEventListener('touchmove', () => { isDragging = true; });
+window.addEventListener('touchend', (e) => {
+    if (isDragging) return;
+    const touch = e.changedTouches[0];
+    mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(charGroup.children, true);
+    if (intersects.length > 0) {
+        triggerPoke();
+    }
+});
+
+function triggerPoke() {
+    // Context aware reaction
+    if (currentAction === 'SLEEP') {
+        window.parent.postMessage({ type: 'PET_CLICKED', context: 'WAKE_UP' }, '*');
+        currentAction = 'JUMP'; // Startle
+        overrideTimer = 1.0;
+        isMoving = false;
+    } else {
+        window.parent.postMessage({ type: 'PET_CLICKED', context: 'HAPPY' }, '*');
+        currentAction = 'JUMP';
+        overrideTimer = 1.0;
+        isMoving = false; // Pause briefly
+    }
+}
 
 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.1); 
 scene.add(hemiLight);
@@ -177,6 +221,7 @@ const leafMat = toonMat(0x6BCB77);
 const woodMat = toonMat(0x8D6E63);
 const rockMat = toonMat(0x888888);
 const crystalMat = new THREE.MeshToonMaterial({ color: 0xff00ff, emissive: 0xff00ff, emissiveIntensity: 0.5 });
+const billboardMat = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, side: THREE.DoubleSide });
 
 const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
 const OUTLINE_THICKNESS = 1.025;
@@ -218,7 +263,21 @@ function addGreebles(parent) {
     }
 }
 
-// --- PROCEDURAL GROUND ---
+// --- ROLLING HILLS GROUND ---
+function createHillGeometry() {
+    const geo = new THREE.PlaneGeometry(200, 200, 64, 64);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i); // This is Z in world space
+        // Center is roughly 3.0 high
+        const height = Math.sin(x * 0.1) * 1.5 + Math.cos(y * 0.1) * 1.5;
+        pos.setZ(i, height);
+    }
+    geo.computeVertexNormals();
+    return geo;
+}
+
 function createGroundTexture(hexColor) {
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = 512;
@@ -247,8 +306,10 @@ function createGroundTexture(hexColor) {
 }
 
 const groundMat = new THREE.MeshToonMaterial({ map: createGroundTexture(0x6BCB77) });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), groundMat);
+const ground = new THREE.Mesh(createHillGeometry(), groundMat);
 ground.rotation.x = -Math.PI / 2;
+// Ground Mesh Y is -2. Peak height at 0,0 is +3. So actual floor Y is +1.0
+ground.position.y = -2; 
 ground.receiveShadow = true;
 scene.add(ground);
 
@@ -257,13 +318,7 @@ const charGroup = new THREE.Group();
 scene.add(charGroup);
 charGroup.scale.setScalar(${scale});
 
-// GROUNDING LOGIC
 const bodyType = '${bodyType}';
-let yOffset = 1.0; 
-if (bodyType === 'BIPED') yOffset = 1.35; 
-if (bodyType === 'QUADRUPED') yOffset = 0.8;
-if (bodyType === 'FLOATING') yOffset = 2.0;
-charGroup.position.y = yOffset;
 
 const bodyGeo = new RoundedBoxGeometry(1, 1, 1, 4, 0.15);
 const headGeo = new RoundedBoxGeometry(0.8, 0.8, 0.8, 4, 0.15);
@@ -284,11 +339,15 @@ addGreebles(torso);
 // Head
 const headY = bodyType === 'QUADRUPED' ? 0.6 : 0.8;
 const headZ = bodyType === 'QUADRUPED' ? 0.8 : 0;
-const head = createMesh(headGeo, secMat, torso, 0, headY, headZ);
+const headGroup = new THREE.Group(); 
+headGroup.position.set(0, headY, headZ);
+torso.add(headGroup);
+const head = createMesh(headGeo, secMat, headGroup, 0, 0, 0);
+
 addArmorPlate(head, 0, 0.1, 0.42, 0.7, 0.5, 0.05, primMat);
 
 // Eyes
-const eyeGeo = new THREE.BoxGeometry(0.15, 0.2, 0.05); // Flat eyes
+const eyeGeo = new THREE.BoxGeometry(0.15, 0.2, 0.05);
 const eyeL = createMesh(eyeGeo, accMat, head, 0.2, 0.1, 0.42);
 const eyeR = createMesh(eyeGeo, accMat, head, -0.2, 0.1, 0.42);
 
@@ -333,10 +392,8 @@ function clearSlot(slot) {
     }
 }
 
-// PROCEDURAL GEAR GENERATORS
 function buildCrown(parent) {
     const base = createMesh(new THREE.CylinderGeometry(0.5, 0.5, 0.2, 8), goldMat, parent, 0, 0, 0);
-    // Spikes
     for(let i=0; i<5; i++) {
         const angle = (i/5) * Math.PI * 2;
         const x = Math.sin(angle) * 0.45;
@@ -371,7 +428,6 @@ function buildJetpack(parent) {
     createMesh(flame, fMat, parent, 0.2, -0.3, 0);
     createMesh(flame, fMat, parent, -0.2, -0.3, 0);
 }
-
 
 // Limbs & Animation Logic
 const animatedParts = { legs: [], arms: [], body: torso };
@@ -413,6 +469,34 @@ if (bodyType === 'QUADRUPED') {
     animatedParts.arms.push({ mesh: aGroup2, phase: 0 });
 }
 
+// --- GROUNDING LOGIC (FIX SINKING) ---
+function snapToFloor() {
+    if (bodyType !== 'FLOATING') {
+        // 1. Ensure geometry is initialized
+        scene.updateMatrixWorld(true);
+        
+        // 2. World Height Calculation
+        // Terrain at (0,0) is peak ~3.0. Ground Mesh Y is -2.0.
+        // Actual Floor Level = +1.0
+        
+        const floorY = 1.0;
+        let targetY = 0;
+        
+        if (bodyType === 'BIPED') {
+            // Biped legs extend ~1.1 units down from center
+            // Formula: Floor + LegLength
+            targetY = floorY + (1.1 * ${scale}); 
+        } else if (bodyType === 'QUADRUPED') {
+            // Quadruped legs extend ~0.8 units down
+            targetY = floorY + (0.8 * ${scale});
+        }
+        
+        charGroup.position.y = targetY;
+    }
+}
+setTimeout(snapToFloor, 100);
+
+
 // --- INFINITE GRID SYSTEM ---
 const props = new THREE.Group();
 scene.add(props);
@@ -441,7 +525,6 @@ for(let i=0; i<50; i++) {
     fn(x, z);
 }
 
-// PARTICLES
 const particlesGeo = new THREE.BufferGeometry();
 const particleCount = 150;
 const pPos = new Float32Array(particleCount * 3);
@@ -455,14 +538,37 @@ const particlesMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.1, tran
 const particles = new THREE.Points(particlesGeo, particlesMat);
 scene.add(particles);
 
+// --- EMOTE BILLBOARD ---
+const emoteCanvas = document.createElement('canvas');
+emoteCanvas.width = 128; emoteCanvas.height = 128;
+const emoteCtx = emoteCanvas.getContext('2d');
+const emoteTexture = new THREE.CanvasTexture(emoteCanvas);
+const emoteMat = new THREE.SpriteMaterial({ map: emoteTexture, transparent: true });
+const emoteSprite = new THREE.Sprite(emoteMat);
+emoteSprite.scale.set(2, 2, 1);
+emoteSprite.position.set(0, 2, 0); // Above head
+emoteSprite.visible = false;
+charGroup.add(emoteSprite);
+
+function showEmote(emoji) {
+    emoteCtx.clearRect(0,0,128,128);
+    emoteCtx.font = '80px Arial';
+    emoteCtx.textAlign = 'center';
+    emoteCtx.textBaseline = 'middle';
+    emoteCtx.fillText(emoji, 64, 64);
+    emoteTexture.needsUpdate = true;
+    emoteSprite.visible = true;
+    emoteSprite.position.y = 2;
+}
+
+// Render immediately to avoid blank frame
+renderer.render(scene, camera);
+
 const clock = new THREE.Clock();
 let isBattle = false;
 let currentAction = 'WALK';
-let userInteracting = false;
-let interactionTimeout = null;
-
-controls.addEventListener('start', () => { userInteracting = true; if(interactionTimeout) clearTimeout(interactionTimeout); });
-controls.addEventListener('end', () => { interactionTimeout = setTimeout(() => { userInteracting = false; }, 2000); });
+let isMoving = true; // Used for Walk/Idle cycle
+let overrideTimer = 0; // Used to lock action based on random event text
 
 const targetCamPos = new THREE.Vector3();
 
@@ -498,32 +604,56 @@ window.addEventListener('message', (e) => {
         groundMat.needsUpdate = true;
     }
     if (e.data.type === 'PAUSE') { if (e.data.value) clock.stop(); else clock.start(); }
-    if (e.data.type === 'SET_ACTION') { currentAction = e.data.value; }
+    if (e.data.type === 'SET_ACTION') { 
+        // SYNCHRONIZATION LOGIC
+        currentAction = e.data.value; 
+        overrideTimer = 7.0; // Lock this action for 7 seconds
+        if (currentAction === 'SLEEP' || currentAction === 'SCAN' || currentAction === 'JUMP') {
+            isMoving = false; // Stop walking for these actions
+        } else {
+            isMoving = true;
+        }
+    }
     if (e.data.type === 'SET_EQUIPMENT') {
         const equip = e.data.value || {};
         if (equip.head) { clearSlot(headSlot); if(equip.head.includes('crown')) buildCrown(headSlot); if(equip.head.includes('visor')) buildVisor(headSlot); if(equip.head.includes('iron')) buildHelmetIron(headSlot); }
         if (equip.accessory) { clearSlot(backSlot); if(equip.accessory.includes('wings')) buildWingsAngel(backSlot); if(equip.accessory.includes('pack')) buildJetpack(backSlot); }
     }
+    if (e.data.type === 'PRE_EVENT') {
+        isMoving = false; // STOP
+        currentAction = 'SCAN';
+        overrideTimer = 3.0; // Override normal cycle
+        showEmote(e.data.value || '!');
+    }
+    if (e.data.type === 'RESUME') {
+        isMoving = true;
+        currentAction = 'WALK';
+        emoteSprite.visible = false;
+        cycleTimer = 0;
+        overrideTimer = 0; // Clear override
+        headGroup.rotation.set(0,0,0);
+    }
     if (e.data.type === 'SET_MODE') {
         if (e.data.value.startsWith('BATTLE')) {
             isBattle = true;
+            isMoving = false;
+            emoteSprite.visible = false; // Hide emote
             controls.enabled = false;
             if (e.data.value === 'BATTLE_PLAYER') {
-                // Battle Camera: Diagonal Right (Symmetrical)
                 targetCamPos.set(4, 3, 5);
-                charGroup.rotation.y = Math.PI / 3; // Face Enemy (Center)
+                charGroup.rotation.y = Math.PI / 3;
             } else {
-                // Battle Camera: Diagonal Left (Symmetrical)
                 targetCamPos.set(-4, 3, 5);
-                charGroup.rotation.y = -Math.PI / 3; // Face Player (Center)
+                charGroup.rotation.y = -Math.PI / 3;
             }
         } else {
             isBattle = false;
+            isMoving = true;
+            emoteSprite.visible = false;
             controls.enabled = true;
             props.visible = true;
             particles.visible = true;
             charGroup.rotation.y = 0;
-            // Reset to Standard Walk Cam
             targetCamPos.set(5, 4, 12);
         }
     }
@@ -531,91 +661,122 @@ window.addEventListener('message', (e) => {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
+// --- STATE MACHINE FOR WALK / IDLE CYCLE ---
+let cycleTimer = 0;
+const WALK_DURATION = 15; 
+const IDLE_DURATION = 8;
+
 function animate() {
     requestAnimationFrame(animate);
     const t = clock.getElapsedTime();
     const delta = clock.getDelta();
     
-    // INFINITE MOVEMENT LOGIC (FORWARD)
+    if (emoteSprite.visible) {
+        emoteSprite.position.y = 2 + Math.abs(Math.sin(t * 5)) * 0.3;
+    }
+
     if (!isBattle) {
-        const speed = 8.0 * delta;
-        
-        // Move Character Forward
-        charGroup.position.z += speed;
-        
-        // Move Camera Forward along Z to match
-        if (!userInteracting) {
-            camera.position.z += speed;
-            controls.target.z += speed;
-        }
-
-        // Move Particles with character
-        particles.position.z = charGroup.position.z;
-
-        // Manage Props (Spawn ahead, Remove behind)
-        // We filter existing props to remove ones far behind
-        for (let i = props.children.length - 1; i >= 0; i--) {
-            const prop = props.children[i];
-            if (prop.position.z < charGroup.position.z - 15) {
-                props.remove(prop);
+        // AUTO-CYCLE LOGIC (Only if not overridden by text event)
+        if (overrideTimer > 0) {
+            overrideTimer -= delta;
+            // Action state is already set by SET_ACTION
+        } else {
+            // Normal cycle
+            cycleTimer += delta;
+            if (isMoving && cycleTimer > WALK_DURATION) {
+                isMoving = false;
+                cycleTimer = 0;
+                currentAction = 'IDLE';
+                window.parent.postMessage({ type: 'ENTER_IDLE' }, '*');
+            } else if (!isMoving && cycleTimer > IDLE_DURATION) {
+                isMoving = true;
+                cycleTimer = 0;
+                currentAction = 'WALK';
+                window.parent.postMessage({ type: 'ENTER_WALK' }, '*');
             }
         }
-        
-        // Spawn new props ahead
-        if (Math.random() > 0.85) { // Spawn rate
-           const spawnZ = charGroup.position.z + 40 + Math.random() * 10;
-           const spawnX = (Math.random() - 0.5) * 50;
-           if (Math.abs(spawnX) > 2) { // Clear path
-               const fn = currentBiomeFuncs[Math.floor(Math.random()*currentBiomeFuncs.length)];
-               fn(spawnX, spawnZ);
-           }
-        }
-        
-        // Update ground texture offset to match world movement for visual consistency
-        // ground.position.z = charGroup.position.z; 
-        // Actually simpler: Just move the ground plane with the player
-        ground.position.z = charGroup.position.z;
-        groundMat.map.offset.y = -charGroup.position.z * 0.1; // Sync texture
 
-        // Camera Bob
-        if (!userInteracting) {
-            const bob = Math.sin(t * 10) * 0.05;
-            camera.position.y = lerp(camera.position.y, 4 + bob, 0.05);
-            controls.target.y = lerp(controls.target.y, 1.5 + bob, 0.1);
-        }
-
-        // ANIMATIONS
-        if (currentAction === 'SLEEP') {
-            charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI/2, 0.1);
-            charGroup.position.y = lerp(charGroup.position.y, yOffset - 0.8, 0.1);
-        } 
-        else if (currentAction === 'JUMP') {
-            charGroup.rotation.x = 0;
-            charGroup.position.y = yOffset + Math.abs(Math.sin(t * 15)) * 0.8;
-        }
-        else {
-            charGroup.rotation.x = 0;
-            charGroup.position.y = yOffset + Math.abs(Math.sin(t * 12)) * 0.1;
+        if (isMoving) {
+             // --- TREADMILL ACTIVE ---
+             const speed = 8.0 * delta;
+             for (let i = props.children.length - 1; i >= 0; i--) {
+                const prop = props.children[i];
+                prop.position.z += speed; 
+                if (prop.position.z > 15) { 
+                    prop.position.z = -80; 
+                    prop.position.x = (Math.random()-0.5) * 50;
+                    if (Math.abs(prop.position.x) < 2) prop.position.x += 4;
+                }
+            }
+            if(groundMat.map) groundMat.map.offset.y -= speed * 0.1;
             
-            const limbSpeed = 12;
-            if (bodyType !== 'FLOATING') {
-                // Rotating Groups instead of meshes
-                animatedParts.legs.forEach(l => { l.mesh.rotation.x = Math.sin(t * limbSpeed + l.phase) * 0.8; });
-                animatedParts.arms.forEach(a => { a.mesh.rotation.x = Math.sin(t * limbSpeed + a.phase) * 0.8; });
-            } else {
-                charGroup.position.y = yOffset + Math.sin(t * 2) * 0.3;
-            }
-            if (currentAction === 'SCAN') head.rotation.y = Math.sin(t * 5) * 0.5;
-            else head.rotation.y = 0;
-        }
-    } else {
-        // BATTLE MODE - FORCE ROTATION
-        if (targetCamPos.x > 0) charGroup.rotation.y = Math.PI / 3; // Player
-        else charGroup.rotation.y = -Math.PI / 3; // Enemy
+            // Reset Head
+            if (!userInteracting) headGroup.rotation.set(0,0,0);
 
+        } else {
+            // --- IDLE MODE ---
+            // Smart Head Tracking (Camera Aware)
+             if (!userInteracting) {
+                const cameraDir = camera.position.clone().sub(charGroup.position).normalize();
+                const dot = cameraDir.z; // Check if camera is in front
+                
+                if (dot > 0.2) { // Only track if camera is generally in front
+                    const lookTarget = camera.position.clone();
+                    lookTarget.y -= 1;
+                    headGroup.lookAt(lookTarget);
+                    headGroup.rotation.x = THREE.MathUtils.clamp(headGroup.rotation.x, -0.5, 0.5);
+                    headGroup.rotation.y = THREE.MathUtils.clamp(headGroup.rotation.y, -0.8, 0.8);
+                    headGroup.rotation.z = 0; 
+                } else {
+                    // Reset head smoothly
+                    headGroup.rotation.x = lerp(headGroup.rotation.x, 0, 0.1);
+                    headGroup.rotation.y = lerp(headGroup.rotation.y, 0, 0.1);
+                }
+            }
+            // Breathing Animation
+            torso.scale.y = 1.0 + Math.sin(t * 2) * 0.02; 
+        }
+
+        // --- ANIMATION ACTIONS ---
+        if (currentAction === 'SLEEP') {
+             charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI/2, 0.1); // Lay down
+             charGroup.position.y = lerp(charGroup.position.y, -0.8, 0.1); // Lower
+        } else {
+             charGroup.rotation.x = lerp(charGroup.rotation.x, 0, 0.1); // Stand up
+             // snapToFloor handled initial Y
+        }
+
+        if (currentAction === 'JUMP') {
+             torso.position.y = Math.sin(t * 20) * 0.2;
+        } else if (currentAction === 'SCAN') {
+             headGroup.rotation.y = Math.sin(t * 4) * 0.8;
+        } else if (isMoving) {
+             const limbSpeed = 12;
+             if (bodyType !== 'FLOATING') {
+                animatedParts.legs.forEach(l => { l.mesh.rotation.x = Math.sin(t * limbSpeed + l.phase) * 0.8; });
+                animatedParts.arms.forEach(a => { 
+                    a.mesh.rotation.x = Math.sin(t * limbSpeed + a.phase) * 0.8; 
+                    a.mesh.rotation.z = Math.abs(Math.sin(t * limbSpeed)) * 0.1 + 0.1;
+                    a.mesh.rotation.y = Math.sin(t * limbSpeed) * 0.1;
+                });
+            } else {
+                charGroup.position.y += Math.sin(t * 2) * 0.005; 
+            }
+        } else {
+             // Reset limbs for Idle
+             if (bodyType !== 'FLOATING') {
+                animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
+                animatedParts.arms.forEach(a => { a.mesh.rotation.x = lerp(a.mesh.rotation.x, 0, 0.1); a.mesh.rotation.z = lerp(a.mesh.rotation.z, 0.1, 0.1); });
+             }
+        }
+
+    } else {
+        // BATTLE MODE
+        if (targetCamPos.x > 0) charGroup.rotation.y = Math.PI / 3; 
+        else charGroup.rotation.y = -Math.PI / 3; 
+        headGroup.rotation.set(0,0,0); 
         camera.position.lerp(targetCamPos, 0.05);
         controls.target.lerp(new THREE.Vector3(0, 1.5, 0), 0.1);
-        charGroup.position.y = yOffset + Math.sin(t * 4) * 0.05; 
     }
     
     controls.update();
@@ -625,7 +786,7 @@ animate();
 window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 </script>
 </body>
-</html>`;
+</html>`
 };
 
 export const evolveVoxelScene = async (pet: any) => {

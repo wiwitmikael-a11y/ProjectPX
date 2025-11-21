@@ -7,12 +7,12 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { analyzeObject, getGenericVoxel, evolveVoxelScene } from './services/gemini';
 import { makeBackgroundTransparent } from './utils/html';
-import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, MonsterStats, LOCATIONS_DB, LocationNode, STARTER_PACKS, determineEvolutionPath, EVO_THRESHOLDS, getProceduralMonsterArt, getRandomEventText, getRandomSpecialEvent, getActionFromText, EquipmentSlot } from './services/gameData';
+import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, MonsterStats, LOCATIONS_DB, LocationNode, STARTER_PACKS, determineEvolutionPath, EVO_THRESHOLDS, getProceduralMonsterArt, getRandomEventText, getRandomSpecialEvent, getActionFromText, EquipmentSlot, getPetSpeech, EMOTE_ICONS } from './services/gameData';
 
 // --- TYPES ---
 type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP' | 'ITEMS' | 'EXPLORE';
 
-const SAVE_VERSION = 'v13.6_VECTOR_POLISH'; 
+const SAVE_VERSION = 'v13.9_VECTOR_CHIP_FIX'; 
 
 interface UserProfile {
   name: string;
@@ -184,10 +184,10 @@ const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
             </svg>
         );
     }
-    // CHIPS / MATERIALS
-    if (id.includes('chip')) {
+    // CHIPS / DRIVERS / MATERIALS - MEMORY CHIP STYLE
+    if (id.includes('chip') || id.includes('driver')) {
         let color = '#A78BFA';
-        if (id.includes('fire')) color = '#EF4444';
+        if (id.includes('fire') || id.includes('crimson')) color = '#EF4444';
         if (id.includes('water')) color = '#3B82F6';
         if (id.includes('grass')) color = '#10B981';
         if (id.includes('electric')) color = '#FBBF24';
@@ -196,10 +196,15 @@ const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
         
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <rect x="4" y="4" width="16" height="16" rx="3" fill="#1F2937" stroke={strokeColor} strokeWidth="2"/>
-                <rect x="7" y="7" width="10" height="10" rx="1" fill={color}/>
-                <path d="M5 10h3M16 10h3M12 5v3M12 16v3" stroke={strokeColor} strokeWidth="2"/>
-                <circle cx="12" cy="12" r="2" fill="white"/>
+                {/* Main Chip Body */}
+                <rect x="4" y="4" width="16" height="16" rx="2" fill="#1F2937" stroke={strokeColor} strokeWidth="2"/>
+                {/* Inner Core */}
+                <rect x="8" y="8" width="8" height="8" rx="1" fill={color}/>
+                {/* Gold Pins */}
+                <path d="M2 6h2 M2 9h2 M2 12h2 M2 15h2 M2 18h2" stroke="#FBBF24" strokeWidth="2" />
+                <path d="M20 6h2 M20 9h2 M20 12h2 M20 15h2 M20 18h2" stroke="#FBBF24" strokeWidth="2" />
+                {/* Circuit Lines */}
+                <path d="M12 8v-2 M8 12H6 M16 12h2 M12 16v2" stroke="#4B5563" strokeWidth="1"/>
             </svg>
         );
     }
@@ -235,8 +240,17 @@ const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
 
 // --- COMPONENTS ---
 
-const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Grass', equipment }: { code: string, mode?: string, action?: string, theme?: string, equipment?: any }) => {
+const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Grass', equipment, onInteract, onStateChange, preEvent, eventActive }: { code: string, mode?: string, action?: string, theme?: string, equipment?: any, onInteract?: (ctx?:any)=>void, onStateChange?: (s:string)=>void, preEvent?: string, eventActive?: boolean }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+        if (e.data.type === 'PET_CLICKED' && onInteract) onInteract(e.data.context);
+        if ((e.data.type === 'ENTER_IDLE' || e.data.type === 'ENTER_WALK') && onStateChange) onStateChange(e.data.type);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [onInteract, onStateChange]);
 
   useEffect(() => {
     if (iframeRef.current && iframeRef.current.contentWindow) {
@@ -261,6 +275,19 @@ const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Gr
         iframeRef.current.contentWindow.postMessage({ type: 'SET_EQUIPMENT', value: equipment }, '*');
     }
   }, [equipment]);
+  
+  useEffect(() => {
+    if (preEvent && iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'PRE_EVENT', value: preEvent }, '*');
+    }
+  }, [preEvent]);
+
+  // Send RESUME signal when eventActive becomes false
+  useEffect(() => {
+    if (!eventActive && iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'RESUME' }, '*');
+    }
+  }, [eventActive]);
 
   return (
     <div className="w-full h-full relative">
@@ -271,6 +298,8 @@ const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Gr
         title="Voxel Viewer"
         sandbox="allow-scripts allow-same-origin"
       />
+      {/* Click overlay for simple touches if raycasting fails or for general area clicks */}
+      <div className="absolute inset-0 pointer-events-none" />
     </div>
   );
 });
@@ -351,13 +380,19 @@ export default function App() {
   const [statusText, setStatusText] = useState("System Online");
   const [selectedCard, setSelectedCard] = useState<Pixupet | null>(null);
   const [showGearSelect, setShowGearSelect] = useState<{slot: EquipmentSlot} | null>(null);
-  const [confirmItem, setConfirmItem] = useState<GameItem | null>(null); // For item use confirmation
-  
+  const [confirmItem, setConfirmItem] = useState<GameItem | null>(null);
+  const [preEventEmote, setPreEventEmote] = useState<string | null>(null);
+
   // Menus
   const [statsOpen, setStatsOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [exploreOpen, setExploreOpen] = useState(false);
+
+  // Interactive State
+  const [isPetIdle, setIsPetIdle] = useState(false);
+  const [speechBubble, setSpeechBubble] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState('WALK');
 
   // FX
   const [purchaseAnim, setPurchaseAnim] = useState<string | null>(null);
@@ -373,7 +408,7 @@ export default function App() {
           const data = JSON.parse(saved);
           setUser(data.user);
           setInventory(data.inventory);
-          setGameState('NEXUS');
+          // Removed auto-setGameState to 'NEXUS' to allow user choice on Splash screen
       }
   }, []);
 
@@ -385,19 +420,34 @@ export default function App() {
 
   // --- GAME LOOP ---
   useEffect(() => {
-      if (gameState !== 'NEXUS' || activeBattle || activeEvent || isAnalyzing) return;
+      if (gameState !== 'NEXUS' || activeBattle || activeEvent || isAnalyzing || preEventEmote) return;
       
+      // Slower interval for more natural pacing (8 seconds)
       const interval = setInterval(() => {
-          if (Math.random() > 0.7) {
+          if (Math.random() > 0.7 && !isPetIdle) { 
               const txt = getRandomEventText(user.currentLocation);
               setStatusText(txt);
+              
+              // Force visual sync immediately
+              const act = getActionFromText(txt);
+              setActiveAction(act);
           }
           if (Math.random() > 0.85) { 
              triggerRandomEvent();
           }
-      }, 3000);
+      }, 8000); // SLOWED DOWN FROM 3000
       return () => clearInterval(interval);
-  }, [gameState, activeBattle, activeEvent, user.currentLocation, isAnalyzing]);
+  }, [gameState, activeBattle, activeEvent, user.currentLocation, isAnalyzing, isPetIdle, preEventEmote]);
+
+  // Speech Bubble Logic
+  useEffect(() => {
+      if (isPetIdle && !speechBubble && Math.random() > 0.6) {
+          setSpeechBubble(getPetSpeech());
+          setTimeout(() => setSpeechBubble(null), 3000);
+      } else if (!isPetIdle) {
+          setSpeechBubble(null);
+      }
+  }, [isPetIdle, speechBubble]);
 
   useEffect(() => {
       if (logScrollRef.current) {
@@ -407,23 +457,57 @@ export default function App() {
 
   // --- LOGIC ---
 
-  const triggerRandomEvent = () => {
+  const handleNewGame = () => {
+      if(window.confirm("Delete current save data and start over?")) {
+          localStorage.removeItem(`pixupet_save_${SAVE_VERSION}`);
+          setUser({ name: 'Tamer', level: 1, exp: 0, coins: 100, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob' });
+          setInventory([]);
+          setGameState('ONBOARDING');
+      }
+  };
+
+  const triggerRandomEvent = async () => {
       const rand = Math.random();
-      if (rand > 0.60) {
+      
+      // Determine type first
+      let type: 'BATTLE' | 'TREASURE' | 'SPECIAL' = 'SPECIAL';
+      if (rand > 0.60) type = 'BATTLE';
+      else if (rand > 0.30) type = 'TREASURE';
+      
+      let emote = '❓';
+      if (type === 'BATTLE') emote = EMOTE_ICONS.BATTLE;
+      else if (type === 'TREASURE') emote = EMOTE_ICONS.TREASURE;
+      else emote = EMOTE_ICONS.DISCOVERY; 
+
+      // 1. PRE-EVENT PHASE
+      setPreEventEmote(emote);
+      
+      // Wait 2 seconds for "Anticipation" animation
+      await new Promise(r => setTimeout(r, 2500));
+      
+      // 2. TRIGGER ACTUAL EVENT
+      if (type === 'BATTLE') {
           startAutoBattle();
-      } else if (rand > 0.30) {
+      } else if (type === 'TREASURE') {
           const item = getLootDrop(user.currentLocation);
           if(item) {
             const ev: any = { type: 'TREASURE', title: 'SECRET STASH', description: 'You found something shiny!', logs: ['Scanning area...', 'Ping detected!', `Uncovered: ${ITEMS_DB[item].name}`], resultText: 'LOOT SECURED!' };
             startAutoEvent(ev, () => addItem(item));
+          } else {
+             const ev: any = { type: 'TREASURE', title: 'EMPTY STASH', description: 'Nothing here.', logs: ['Scanning...', 'Dust.'], resultText: 'EMPTY' };
+             startAutoEvent(ev, () => {});
           }
       } else {
           const ev = getRandomSpecialEvent(user.currentLocation);
+          if (ev.type === 'HAZARD') { /* handled */ } 
           startAutoEvent(ev, () => {
              if(ev.type === 'DISCOVERY') { addExp(ev.effectValue); addCoins(20); }
              if(ev.type === 'HAZARD') { damagePet(ev.effectValue); }
           });
       }
+      
+      // Clear emote AFTER setting event state so eventActive stays true
+      setPreEventEmote(null); 
   };
 
   const startAutoEvent = (ev: any, onComplete: () => void) => {
@@ -544,7 +628,6 @@ export default function App() {
       });
   };
 
-  // Updated to Float Down and be smaller/tighter
   const showFloatingText = (text: string, color: string) => {
       const id = Date.now() + Math.random();
       setNotifs(prev => [...prev, { id, text, x: 50, y: 40, color }]);
@@ -636,12 +719,22 @@ export default function App() {
       if (user.coins >= item.price) {
           addCoins(-item.price);
           addItem(item.id);
-          // Trigger purchase animation
-          setPurchaseAnim(item.id); // Use ID to check if animation should show, but render ItemIcon
+          setPurchaseAnim(item.id);
           setTimeout(() => setPurchaseAnim(null), 1000);
       } else {
           alert("Not enough coins!");
       }
+  };
+
+  const handlePetInteraction = (context?: string) => {
+      if (context === 'WAKE_UP') {
+          setSpeechBubble("Wha-?! I was sleeping!");
+          showFloatingText("!", "text-red-500");
+      } else {
+          setSpeechBubble("Hey! Don't poke me!");
+          showFloatingText("♥", "text-pink-500");
+      }
+      setTimeout(() => setSpeechBubble(null), 2000);
   };
 
   // --- RENDER ---
@@ -657,10 +750,26 @@ export default function App() {
           <div className="neo-pop-box px-6 py-3 mb-8 rotate-2 bg-white max-w-xs sm:max-w-md text-center">
                <h2 className="font-['Bangers'] text-2xl sm:text-3xl text-black tracking-wide">Turn Anything into a Pet!</h2>
           </div>
-          <button onClick={() => setGameState(inventory.length > 0 ? 'NEXUS' : 'ONBOARDING')} 
-              className="pop-btn btn-primary text-xl sm:text-2xl px-12 sm:px-16 py-4 sm:py-6 pop-in hover:scale-105 active:scale-95 transition-all">
-              PRESS START
-          </button>
+          
+          <div className="flex flex-col gap-4 w-full max-w-xs sm:max-w-md z-20">
+              {inventory.length > 0 ? (
+                  <>
+                      <button onClick={() => setGameState('NEXUS')} 
+                          className="pop-btn btn-success text-xl sm:text-2xl px-12 py-4 pop-in hover:scale-105 active:scale-95 transition-all w-full">
+                          RESUME GAME
+                      </button>
+                      <button onClick={handleNewGame} 
+                          className="pop-btn btn-danger text-sm px-12 py-3 pop-in hover:scale-105 active:scale-95 transition-all w-full">
+                          NEW GAME
+                      </button>
+                  </>
+              ) : (
+                  <button onClick={() => setGameState('ONBOARDING')} 
+                      className="pop-btn btn-primary text-xl sm:text-2xl px-12 py-4 pop-in hover:scale-105 active:scale-95 transition-all w-full">
+                      NEW GAME
+                  </button>
+              )}
+          </div>
       </div>
   );
 
@@ -709,9 +818,29 @@ export default function App() {
   return (
     <div className="w-full h-screen relative bg-black overflow-hidden font-sans select-none">
       {/* VOXEL LAYER */}
-      <div className="absolute inset-0 z-0">
-        {activePet && <VoxelViewer code={activePet.voxelCode} action={getActionFromText(statusText)} theme={location.environmentType} equipment={activePet.equipment} />}
+      <div className="absolute inset-0 z-0 w-full h-full">
+        {activePet && <VoxelViewer 
+            code={activePet.voxelCode} 
+            action={activeAction} 
+            theme={location.environmentType} 
+            equipment={activePet.equipment} 
+            onInteract={handlePetInteraction}
+            onStateChange={(state) => setIsPetIdle(state === 'ENTER_IDLE')}
+            preEvent={preEventEmote || undefined}
+            eventActive={!!activeBattle || !!activeEvent || !!preEventEmote}
+        />}
       </div>
+
+      {/* SPEECH BUBBLE */}
+      {speechBubble && (
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pop-in pointer-events-none">
+              <div className="bg-white border-4 border-black rounded-2xl p-3 relative shadow-[4px_4px_0_#000] max-w-[200px] text-center">
+                  <p className="text-black font-black text-sm">{speechBubble}</p>
+                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[10px] border-t-black"></div>
+                  <div className="absolute -bottom-[6px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
+              </div>
+          </div>
+      )}
 
       {/* HUD TOP (NEO-POP STYLE) */}
       <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-10 pointer-events-none safe-top">
@@ -762,7 +891,6 @@ export default function App() {
       </div>
 
       {/* BOTTOM NAVIGATION (FLOATING NEO-POP) */}
-      {/* Updated z-index and shadow to remove black artifacts */}
       <div className="absolute bottom-4 left-4 right-4 bg-white border-4 border-black rounded-2xl p-2 flex justify-between items-end z-20 shadow-[0_10px_20px_rgba(0,0,0,0.4)] h-20 safe-bottom">
           
           <button onClick={()=>{ setGameState('COLLECTION') }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
@@ -775,7 +903,7 @@ export default function App() {
               <span className="text-[9px] font-black uppercase mt-1">Items</span>
           </button>
 
-          {/* CENTER SCAN BUTTON - CLEANED UP */}
+          {/* CENTER SCAN BUTTON */}
           <div className="relative w-1/5 flex justify-center z-30">
               <button onClick={()=>setShowScan(true)} className="absolute -top-12 bg-yellow-400 w-24 h-24 rounded-full border-4 border-black flex items-center justify-center shadow-[0px_6px_0px_0px_#000] hover:-translate-y-2 hover:shadow-[0px_10px_0px_0px_#000] active:translate-y-1 active:shadow-[0px_2px_0px_0px_#000] transition-all overflow-hidden">
                   <div className="text-white drop-shadow-md relative z-10"><IconScan /></div>
