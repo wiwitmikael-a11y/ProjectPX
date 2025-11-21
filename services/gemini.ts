@@ -8,6 +8,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { extractHtmlFromText } from "../utils/html";
 import { BodyType, AITactic, determineEvolutionPath, MonsterStage } from "./gameData";
 
+// Ensure we use the API key from the environment
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const generateId = () => {
@@ -32,7 +33,6 @@ const parseGeminiJson = (text: string) => {
 };
 
 // --- THE ENGINE CORE ---
-// This prompt instructs the model to build a high-fidelity "AAA Indie" engine
 export const VOXEL_PROMPT = `
   You are a Senior Graphics Engineer specializing in WebGL and "Juicy" Game Feel.
   Create a **High-Fidelity Voxel Habitat**.
@@ -119,9 +119,9 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
     const mimeMatch = imageBase64.match(/^data:(.*?);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-    // ENHANCED PROMPT: STRICT GAMIFICATION ANALYSIS FOR "SPARK" FORM
+    // Standard Flash model is most reliable for API keys
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-1.5-flash',
       contents: {
         parts: [
           { inlineData: { mimeType, data: base64Data } },
@@ -188,8 +188,8 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
       ...data, 
       id: generateId(),
       dateCreated: Date.now(),
-      tactic: 'BALANCED', // Default Tactic
-      stage: 'Spark', // Force Spark
+      tactic: 'BALANCED',
+      stage: 'Spark', 
       happiness: 50
     };
   } catch (error) {
@@ -198,37 +198,45 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
   }
 };
 
+// Fallback SVG generator to prevent crashes if API fails
+const getFallbackImage = (seed: string) => {
+    const hue = Math.floor(Math.random() * 360);
+    return `data:image/svg+xml;base64,${btoa(`
+        <svg width="300" height="400" viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg">
+            <rect width="300" height="400" fill="#111"/>
+            <circle cx="150" cy="200" r="100" fill="hsl(${hue}, 70%, 50%)" opacity="0.5"/>
+            <text x="150" y="200" fill="white" text-anchor="middle" font-family="monospace" font-size="20">IMAGE SYSTEM OFFLINE</text>
+            <text x="150" y="230" fill="#666" text-anchor="middle" font-family="monospace" font-size="12">${seed}</text>
+        </svg>
+    `)}`;
+}
+
 export const generateImage = async (prompt: string, aspectRatio: string = '1:1', optimize: boolean = true): Promise<string> => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: prompt }] },
-      config: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio } },
+    // Try Imagen 3
+    const response = await ai.models.generateImages({
+        model: 'imagen-3.0-generate-001',
+        prompt: prompt,
+        config: {
+            numberOfImages: 1,
+            aspectRatio: aspectRatio as any,
+            outputMimeType: 'image/jpeg'
+        }
     });
-    const part = response.candidates?.[0]?.content?.parts?.[0];
-    if (part?.inlineData) return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
-    throw new Error("No image generated.");
+    
+    const base64 = response.generatedImages?.[0]?.image?.imageBytes;
+    if (base64) {
+        return `data:image/jpeg;base64,${base64}`;
+    }
+    throw new Error("No image data returned");
   } catch (error) {
-    return "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    console.warn("Art Generation Failed (Likely API Key Permission), using fallback.", error);
+    return getFallbackImage(prompt.substring(0, 10));
   }
 };
 
 export const generateCardArt = async (monsterDescription: string, objectName: string, visualDesign: string): Promise<string> => {
-    const prompt = `
-    High-quality Anime Trading Card Art of a Monster.
-    
-    **CHARACTER DESIGN (STRICT):**
-    ${visualDesign}
-    
-    **STYLE GUIDE:**
-    - **Neo-Pop Anime:** Vibrant colors, flat shading, thick bold black outlines (Cel-Shaded).
-    - **Dynamic:** Shows the scale and power appropriate for the description.
-    - **Composition:** Center frame, full body.
-    - **Background:** Abstract digital data stream patterns (minimalist).
-    
-    No text.
-    `;
-    
+    const prompt = `Anime Trading Card Art. Character: ${visualDesign}. Style: Neo-Pop, Bold Outlines, Cyberpunk Background.`;
     return generateImage(prompt, '3:4', false);
 };
 
@@ -247,10 +255,10 @@ export const generateVoxelScene = async (imageBase64: string, visualDescription:
   contentsPart.push({ text: PROMPT_WITH_CONTEXT });
 
   try {
+    // Use standard flash for reliable code generation
     const response = await ai.models.generateContentStream({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-1.5-flash',
       contents: { parts: contentsPart },
-      config: { thinkingConfig: { includeThoughts: true, thinkingBudget: 2048 } },
     });
     let fullHtml = "";
     for await (const chunk of response) {
@@ -264,6 +272,7 @@ export const generateVoxelScene = async (imageBase64: string, visualDescription:
     }
     return extractHtmlFromText(fullHtml);
   } catch (error) {
+    console.error("Voxel generation error:", error);
     return getGenericVoxel('Dark'); 
   }
 };
@@ -274,7 +283,6 @@ export const fuseVoxelScene = async (petA: MonsterStats, petB: MonsterStats) => 
     return { code, visual_design, name: `${petA.name.substring(0, 3)}${petB.name.substring(petB.name.length-3)}`, element: petA.element };
 };
 
-// --- COMPLEX EVOLUTION LOGIC (PROTOCOL BRANCHING) ---
 export const evolveVoxelScene = async (pet: MonsterStats) => {
     const { dominant, alignment, protocolName } = determineEvolutionPath({ 
         atk: pet.atk, 
@@ -283,11 +291,9 @@ export const evolveVoxelScene = async (pet: MonsterStats) => {
         happiness: pet.happiness || 50 
     });
 
-    // STAGE LOGIC: Spark -> Surge -> Turbo -> Nova
     let nextStage: MonsterStage = 'Surge';
     let scaleMultiplier = 1.0;
     
-    // Fallback if older save data uses "Rookie" etc.
     const currentStage = pet.stage as string;
     
     if (currentStage === 'Spark' || currentStage === 'Rookie') {
@@ -301,7 +307,6 @@ export const evolveVoxelScene = async (pet: MonsterStats) => {
         scaleMultiplier = 3.0;
     }
 
-    // Generate Narrative for the prompt based on Protocol
     let evolutionPrompt = `Current Stage: ${pet.stage}. Next Stage: ${nextStage}. Protocol: ${protocolName}.`;
 
     if (dominant === 'ATTACK') {
@@ -328,7 +333,6 @@ export const evolveVoxelScene = async (pet: MonsterStats) => {
         - **Theme:** ${evolutionPrompt}
     `;
 
-    // Name Evolution Logic
     let prefix = "";
     if (nextStage === 'Surge') prefix = alignment === 'CORRUPTED' ? "Dark" : "Neo";
     if (nextStage === 'Turbo') prefix = dominant === 'ATTACK' ? "War" : dominant === 'DEFENSE' ? "Iron" : "Jet";
