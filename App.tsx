@@ -7,13 +7,13 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { generateVoxelScene, analyzeObject, fuseVoxelScene, generateCardArt, getGenericVoxel, evolveVoxelScene } from './services/gemini';
 import { hideBodyText, zoomCamera, makeBackgroundTransparent } from './utils/html';
-import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, AITactic, calculateOfflineProgress, OfflineReport, EVO_THRESHOLDS, MonsterStage, determineEvolutionPath, STARTER_PACKS, getProceduralMonsterArt, MonsterStats } from './services/gameData';
+import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, AITactic, calculateOfflineProgress, OfflineReport, EVO_THRESHOLDS, MonsterStage, determineEvolutionPath, STARTER_PACKS, getProceduralMonsterArt, MonsterStats, GAME_HINTS } from './services/gameData';
 
 // --- TYPES ---
 type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP';
 type EventType = 'WILD_BATTLE' | 'LOOT_FOUND' | 'NOTHING';
 
-const SAVE_VERSION = 'v5.0_CASUAL'; 
+const SAVE_VERSION = 'v5.1_EVO_RESTORED'; 
 
 interface UserProfile {
   name: string;
@@ -56,7 +56,8 @@ const ICONS = {
     CARDS: "M4,2H20A2,2 0 0,1 22,4V16A2,2 0 0,1 20,18H4A2,2 0 0,1 2,16V4A2,2 0 0,1 4,2M4,4V16H20V4H4M6,6H18V14H6V6Z",
     SWORD: "M6,2L2,6L6,10L10,6L6,2M6,16L2,20L6,24L10,20L6,16M20,6L16,2L12,6L16,10L20,6M16,16L12,20L16,24L20,20L16,16M9,12L12,9L15,12L12,15L9,12Z",
     SHOP: "M4,4H20V6H4V4M4,9H20V19H4V9M6,12V16H8V12H6M10,12V16H12V12H10M14,12V16H16V12H14M2,2V22H22V2H2Z",
-    BAG: "M12,2C12,2 6,4 6,10V22H18V10C18,4 12,2 12,2M12,6C13.1,6 14,6.9 14,8V10H10V8C10,6.9 10.9,6 12,6Z"
+    BAG: "M12,2C12,2 6,4 6,10V22H18V10C18,4 12,2 12,2M12,6C13.1,6 14,6.9 14,8V10H10V8C10,6.9 10.9,6 12,6Z",
+    HINT: "M11,18H13V16H11V18M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,6A4,4 0 0,0 8,10H10A2,2 0 0,1 12,8A2,2 0 0,1 14,10C14,12 11,11.75 11,15H13C13,12.75 16,12.5 16,10A4,4 0 0,0 12,6Z"
 };
 
 const NeonIcon: React.FC<{ path: string, size?: number, className?: string }> = ({ path, size = 24, className = "" }) => (
@@ -88,8 +89,6 @@ const VoxelViewer = memo(({ code, onRef, className, mode = 'HABITAT', paused = f
         const iframe = localRef.current;
         if (iframe && iframe.contentWindow) {
             iframe.contentWindow.postMessage({ type: 'SET_MODE', value: mode }, '*');
-            // Don't fully pause, just slow down or stop rotation if needed, but we want them "alive"
-            // iframe.contentWindow.postMessage({ type: 'PAUSE', value: paused }, '*'); 
         }
     }, [mode, paused]);
     return (
@@ -136,20 +135,122 @@ const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolea
     );
 }
 
+const PetStatsPanel = ({ pet }: { pet: Pixupet }) => {
+    const [expanded, setExpanded] = useState(false);
+    
+    if (!expanded) {
+        return (
+            <div onClick={() => setExpanded(true)} className="pop-card absolute top-20 right-4 bg-white p-2 z-30 cursor-pointer hover:bg-gray-50 w-40">
+                <div className="text-xs font-black uppercase flex justify-between">
+                    <span>Stats</span>
+                    <span>▼</span>
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                    <div className="h-2 w-full bg-gray-200 rounded-full border border-black overflow-hidden">
+                         <div className="h-full bg-green-500" style={{width: `${(pet.currentHp!/pet.maxHp!)*100}%`}}></div>
+                    </div>
+                    <span className="text-[10px] font-bold">HP</span>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="pop-card absolute top-20 right-4 bg-white p-4 z-30 w-56 animate-pop-in">
+            <div className="flex justify-between items-center mb-2 border-b-2 border-black pb-1">
+                <span className="font-black text-sm">PET STATS</span>
+                <button onClick={(e) => {e.stopPropagation(); setExpanded(false);}} className="font-bold text-xs hover:text-red-500">CLOSE ▲</button>
+            </div>
+            
+            <div className="space-y-2">
+                 <div className="flex justify-between text-xs font-bold">
+                     <span>HP</span>
+                     <span>{pet.currentHp}/{pet.maxHp}</span>
+                 </div>
+                 <div className="h-2 w-full bg-gray-200 rounded-full border border-black overflow-hidden">
+                     <div className="h-full bg-green-500" style={{width: `${(pet.currentHp!/pet.maxHp!)*100}%`}}></div>
+                 </div>
+
+                 <div className="flex justify-between text-xs font-bold">
+                     <span>XP</span>
+                     <span>{pet.exp}/{pet.maxExp}</span>
+                 </div>
+                 <div className="h-2 w-full bg-gray-200 rounded-full border border-black overflow-hidden">
+                     <div className="h-full bg-blue-400" style={{width: `${(pet.exp/pet.maxExp)*100}%`}}></div>
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-dashed border-gray-300">
+                     <div className="bg-red-100 p-1 rounded text-center">
+                         <div className="text-[10px] font-bold text-red-800">ATK</div>
+                         <div className="font-black text-sm">{pet.atk}</div>
+                     </div>
+                     <div className="bg-blue-100 p-1 rounded text-center">
+                         <div className="text-[10px] font-bold text-blue-800">DEF</div>
+                         <div className="font-black text-sm">{pet.def}</div>
+                     </div>
+                     <div className="bg-yellow-100 p-1 rounded text-center">
+                         <div className="text-[10px] font-bold text-yellow-800">SPD</div>
+                         <div className="font-black text-sm">{pet.spd}</div>
+                     </div>
+                     <div className="bg-pink-100 p-1 rounded text-center">
+                         <div className="text-[10px] font-bold text-pink-800">HAP</div>
+                         <div className="font-black text-sm">{pet.happiness}</div>
+                     </div>
+                 </div>
+            </div>
+        </div>
+    );
+}
+
+const HintsModal = ({ onClose }: { onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white border-4 border-black rounded-2xl shadow-[12px_12px_0_#000] w-full max-w-md overflow-hidden animate-pop-in">
+                <div className="bg-yellow-300 p-4 border-b-4 border-black flex justify-between items-center">
+                    <h2 className="text-xl font-black">GAME HINTS</h2>
+                    <button onClick={onClose} className="font-black text-xl">X</button>
+                </div>
+                <div className="p-6 max-h-[60vh] overflow-y-auto">
+                    <ul className="space-y-3">
+                        {GAME_HINTS.map((hint, i) => (
+                            <li key={i} className="flex gap-2 items-start text-sm font-bold text-gray-700">
+                                <span className="text-blue-500">💡</span>
+                                {hint}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const AutoBattleModal = ({ player, enemy, onComplete, logs }: { player: Pixupet, enemy: Pixupet, onComplete: (win: boolean) => void, logs: string[] }) => {
     const [result, setResult] = useState<'WIN'|'LOSE'|null>(null);
+    const logRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (logs.length > 0 && (logs[logs.length-1].includes("WIN"))) {
-             setTimeout(() => { setResult('WIN'); setTimeout(() => onComplete(true), 1500); }, 1000);
-        } else if (logs.length > 0 && (logs[logs.length-1].includes("LOSE"))) {
-             setTimeout(() => { setResult('LOSE'); setTimeout(() => onComplete(false), 1500); }, 1000);
+        if (logRef.current) {
+            logRef.current.scrollTop = logRef.current.scrollHeight;
+        }
+    }, [logs]);
+
+    useEffect(() => {
+        if (logs && logs.length > 0) {
+             const lastLog = logs[logs.length - 1];
+             if (lastLog && typeof lastLog === 'string') {
+                 if (lastLog.includes("WIN")) {
+                      setTimeout(() => { setResult('WIN'); setTimeout(() => onComplete(true), 1500); }, 1000);
+                 } else if (lastLog.includes("LOSE")) {
+                      setTimeout(() => { setResult('LOSE'); setTimeout(() => onComplete(false), 1500); }, 1000);
+                 }
+             }
         }
     }, [logs]);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 transition-opacity duration-300">
-            <div className={`w-full max-w-2xl h-[60vh] bg-white border-4 border-black rounded-2xl shadow-[12px_12px_0_#000] overflow-hidden flex flex-col relative animate-pop-in ${result ? 'scale-95 opacity-90' : 'scale-100'}`}>
+            <div className={`w-full max-w-2xl h-[70vh] bg-white border-4 border-black rounded-2xl shadow-[12px_12px_0_#000] overflow-hidden flex flex-col relative animate-pop-in ${result ? 'scale-95 opacity-90' : 'scale-100'}`}>
                  
                  {/* HEADER */}
                  <div className="bg-red-500 text-white font-black p-3 text-center text-xl border-b-4 border-black flex justify-between items-center">
@@ -196,7 +297,7 @@ const AutoBattleModal = ({ player, enemy, onComplete, logs }: { player: Pixupet,
                  </div>
 
                  {/* BATTLE LOG */}
-                 <div className="h-32 bg-black text-green-400 font-mono text-xs p-4 border-t-4 border-black overflow-y-auto">
+                 <div ref={logRef} className="h-32 bg-black text-green-400 font-mono text-xs p-4 border-t-4 border-black overflow-y-auto scroll-smooth">
                      {logs.map((l, i) => (
                          <div key={i} className="mb-1 border-b border-green-900 pb-1 last:border-0 animate-fade-in">
                              {l}
@@ -208,15 +309,34 @@ const AutoBattleModal = ({ player, enemy, onComplete, logs }: { player: Pixupet,
     );
 }
 
-const CardDetailModal = ({ pet, onClose, onEquip, isEquipped }: { pet: Pixupet, onClose: () => void, onEquip: () => void, isEquipped: boolean }) => {
+const CardDetailModal = ({ pet, onClose, onEquip, isEquipped, onEvolve }: { pet: Pixupet, onClose: () => void, onEquip: () => void, isEquipped: boolean, onEvolve: (p: Pixupet) => void }) => {
     const { protocolName, icon, desc, color } = determineEvolutionPath({ atk: pet.atk, def: pet.def, spd: pet.spd, happiness: pet.happiness || 50 });
+    
+    const canEvolve = (pet.stage === 'Noob' && pet.level >= EVO_THRESHOLDS.PRO) ||
+                      (pet.stage === 'Pro' && pet.level >= EVO_THRESHOLDS.ELITE) ||
+                      (pet.stage === 'Elite' && pet.level >= EVO_THRESHOLDS.LEGEND);
+
+    const [evolving, setEvolving] = useState(false);
+
+    const handleEvolveClick = async () => {
+        setEvolving(true);
+        await onEvolve(pet);
+        setEvolving(false);
+    };
     
     return (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
             <div className="w-full max-w-2xl bg-white border-4 border-black rounded-2xl shadow-[12px_12px_0_#000] flex flex-col md:flex-row overflow-hidden animate-pop-in max-h-[90vh]">
                 <div className={`md:w-1/2 ${ELEMENT_THEMES[pet.element].bg} p-8 flex items-center justify-center relative border-b-4 md:border-b-0 md:border-r-4 border-black`}>
                     <div className="w-full h-64 bg-white border-4 border-black shadow-lg rounded-xl overflow-hidden">
-                         <VoxelViewer code={pet.voxelCode} mode="BATTLE" />
+                         {evolving ? (
+                             <div className="w-full h-full flex items-center justify-center flex-col">
+                                 <div className="text-4xl animate-spin">🧬</div>
+                                 <div className="font-black mt-4">EVOLVING...</div>
+                             </div>
+                         ) : (
+                             <VoxelViewer code={pet.voxelCode} mode="BATTLE" />
+                         )}
                     </div>
                     <button onClick={onClose} className="absolute top-4 right-4 bg-white border-2 border-black w-8 h-8 font-black rounded-full hover:bg-red-100">X</button>
                 </div>
@@ -229,6 +349,14 @@ const CardDetailModal = ({ pet, onClose, onEquip, isEquipped }: { pet: Pixupet, 
                              <div className={`font-black ${color} flex items-center gap-2`}>{icon} {protocolName}</div>
                              <div className="text-xs text-gray-600">{desc}</div>
                          </div>
+                         
+                         {canEvolve && !evolving && (
+                             <div className="p-3 bg-yellow-50 border-2 border-yellow-500 rounded-lg animate-pulse">
+                                 <div className="text-xs font-black text-yellow-600 uppercase mb-1">EVOLUTION AVAILABLE</div>
+                                 <PopButton label="EVOLVE NOW!" onClick={handleEvolveClick} variant="warning" className="w-full" />
+                             </div>
+                         )}
+
                          <div className="space-y-2">
                             <div className="flex items-center text-xs font-bold"><span className="w-8">HP</span><div className="h-3 bg-gray-200 flex-1 rounded border border-black overflow-hidden"><div className="h-full bg-green-400" style={{width: `${Math.min(100, (pet.currentHp!/pet.maxHp!)*100)}%`}}></div></div></div>
                             <div className="flex items-center text-xs font-bold"><span className="w-8">ATK</span><div className="h-3 bg-gray-200 flex-1 rounded border border-black overflow-hidden"><div className="h-full bg-red-400" style={{width: `${Math.min(100, pet.atk)}%`}}></div></div></div>
@@ -251,6 +379,7 @@ const App: React.FC = () => {
   const [activeBattle, setActiveBattle] = useState<{enemy: Pixupet, logs: string[]} | null>(null);
   const [selectedCard, setSelectedCard] = useState<Pixupet | null>(null);
   const [eventLog, setEventLog] = useState<string[]>([]);
+  const [showHints, setShowHints] = useState(false);
 
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -287,6 +416,32 @@ const App: React.FC = () => {
       setEventLog(prev => [msg, ...prev].slice(0, 3));
   }
 
+  const handleEvolve = async (pet: Pixupet) => {
+      try {
+          const evolvedData = await evolveVoxelScene(pet);
+          const updatedPet: Pixupet = {
+              ...pet,
+              name: evolvedData.nextName,
+              stage: evolvedData.nextStage,
+              visual_design: evolvedData.visual_design,
+              voxelCode: makeBackgroundTransparent(zoomCamera(hideBodyText(evolvedData.code), 0.9)),
+              atk: pet.atk + 15,
+              def: pet.def + 15,
+              spd: pet.spd + 15,
+              maxHp: (pet.maxHp || 100) + 50,
+              currentHp: (pet.maxHp || 100) + 50
+          };
+          
+          const newInv = inventory.map(p => p.id === pet.id ? updatedPet : p);
+          setInventory(newInv);
+          spawnFloatText("EVOLUTION COMPLETE!", "text-purple-500");
+          logEvent(`${pet.name} evolved into ${updatedPet.name}!`);
+      } catch (e) {
+          console.error(e);
+          spawnFloatText("Evolution Failed...", "text-red-500");
+      }
+  };
+
   // --- EXPLORATION LOOP ---
   useEffect(() => {
       if (gameState !== 'NEXUS' || !inventory[0] || activeBattle) return;
@@ -295,7 +450,7 @@ const App: React.FC = () => {
           if (Math.random() > 0.7) { // More frequent events
               const eventRoll = Math.random();
               
-              if (eventRoll > 0.6) {
+              if (eventRoll > 0.7) {
                   // LOOT
                   const loot = getLootDrop(user?.currentRank || 'E');
                   if (loot) {
@@ -304,7 +459,7 @@ const App: React.FC = () => {
                       spawnFloatText(`+ ${item.name}`, "text-green-600");
                       logEvent(`Found ${item.name}!`);
                   }
-              } else if (eventRoll > 0.3) {
+              } else if (eventRoll > 0.4) {
                   // BATTLE
                   const enemy = getRandomEnemy(user?.currentRank || 'E', inventory[0].level, getGenericVoxel);
                   setExplorationStatus("COMBAT!");
@@ -331,7 +486,7 @@ const App: React.FC = () => {
       let round = 1;
       const battleSteps: string[] = [];
 
-      while (pHP > 0 && eHP > 0 && round < 8) {
+      while (pHP > 0 && eHP > 0 && round < 10) {
           const pDmg = Math.floor(player.atk * (1 + Math.random()));
           eHP -= pDmg;
           battleSteps.push(`You hit for ${pDmg}!`);
@@ -426,7 +581,7 @@ const App: React.FC = () => {
       if (!pack) return;
 
       const art = getProceduralMonsterArt(pack.name, pack.element);
-      const voxel = getGenericVoxel(pack.element, pack.bodyType); 
+      const voxel = getGenericVoxel(pack.element, pack.bodyType, 'Noob'); 
 
       const starterPet: Pixupet = {
           id: `starter_${Date.now()}`,
@@ -559,6 +714,9 @@ const App: React.FC = () => {
                        <button onClick={() => setGameState('SHOP')} className="w-12 h-12 bg-yellow-300 border-2 border-black rounded-xl shadow-[3px_3px_0_#000] flex items-center justify-center hover:scale-105">
                           <NeonIcon path={ICONS.SHOP} size={20} />
                        </button>
+                       <button onClick={() => setShowHints(true)} className="w-12 h-12 bg-blue-200 border-2 border-black rounded-xl shadow-[3px_3px_0_#000] flex items-center justify-center hover:scale-105">
+                          <NeonIcon path={ICONS.HINT} size={20} />
+                       </button>
                   </div>
               </div>
           </div>
@@ -568,6 +726,11 @@ const App: React.FC = () => {
               <div className="absolute inset-0 z-0">
                   <VoxelViewer code={activePet.voxelCode} mode="HABITAT" paused={gameState !== 'NEXUS'} />
                   
+                  {/* Floating Pet Stats */}
+                  <div className="pointer-events-auto">
+                      <PetStatsPanel pet={activePet} />
+                  </div>
+
                   <div className="absolute inset-0 pointer-events-none">
                       {floatingTexts.map(ft => (
                           <div key={ft.id} className={`absolute font-black text-2xl ${ft.color} float-up drop-shadow-md z-50`} style={{ left: `${ft.x}%`, top: `${ft.y}%` }}>{ft.text}</div>
@@ -592,6 +755,8 @@ const App: React.FC = () => {
           </div>
 
           {/* MODALS */}
+          {showHints && <HintsModal onClose={() => setShowHints(false)} />}
+          
           {activeBattle && inventory[0] && (
               <AutoBattleModal 
                   player={inventory[0]} 
@@ -622,6 +787,7 @@ const App: React.FC = () => {
                   pet={selectedCard} 
                   onClose={() => setSelectedCard(null)} 
                   isEquipped={selectedCard.id === activePet?.id}
+                  onEvolve={handleEvolve}
                   onEquip={() => {
                       const newInv = [selectedCard, ...inventory.filter(x => x.id !== selectedCard.id)];
                       setInventory(newInv);
@@ -647,7 +813,8 @@ const App: React.FC = () => {
                                           <div className="text-3xl bg-gray-100 p-2 rounded-full border border-black">{item.icon}</div>
                                           <div>
                                               <div className="font-black text-sm">{item.name}</div>
-                                              <div className="text-xs text-gray-500 font-bold">{item.type} • {item.price} G</div>
+                                              <div className="text-xs text-gray-500 font-bold">{item.description}</div>
+                                              <div className="text-xs font-black mt-1">{item.price} G</div>
                                           </div>
                                       </div>
                                       <PopButton 

@@ -18,6 +18,19 @@ export const EVO_THRESHOLDS = {
     LEGEND: 50
 };
 
+export const GAME_HINTS = [
+    "Feed your pet before closing the game! They explore while you are away.",
+    "Different starter pets have different growth stats.",
+    "Evolution happens at Level 10, 25, and 50. Check your pet's card!",
+    "Gear chips (Drivers) provide PERMANENT stat boosts.",
+    "The 'Path' of your pet (Striker, Guardian, Speedster) changes based on its highest stat.",
+    "Happiness affects your pet's alignment (Holy vs Dark). Feed them candy!",
+    "You can find rare loot by letting your pet Auto-Explore in the Nexus.",
+    "Use Potions during battle or from the inventory to heal up.",
+    "Type Matchups matter! Water beats Fire, Fire beats Grass.",
+    "Scan everyday objects to build a diverse army."
+];
+
 export interface Move {
     name: string;
     type: string;
@@ -77,29 +90,29 @@ export interface OfflineReport {
 export const STARTER_PACKS = [
     {
         id: 'starter_fire',
-        name: 'Ember Bot',
+        name: 'Blaze Kid',
         element: 'Fire',
-        description: 'A feisty little robot powered by a coal furnace.',
-        stats: { hp: 80, atk: 15, def: 8, spd: 12 },
-        visual_design: 'A small bipedal robot with a glowing red furnace chest and flame vents on shoulders. Cute but hot.',
+        description: 'A hot-headed bipedal fighter. Great attack potential.',
+        stats: { hp: 80, atk: 18, def: 8, spd: 12 },
+        visual_design: 'A small bipedal robot with a glowing red furnace chest and flame vents on shoulders.',
         bodyType: 'BIPED'
     },
     {
         id: 'starter_water',
-        name: 'Bubble Drone',
+        name: 'Aqua Drone',
         element: 'Water',
-        description: 'An aquatic surveillance unit that loves to splash.',
-        stats: { hp: 100, atk: 10, def: 10, spd: 10 },
-        visual_design: 'A round floating spherical drone with blue glass dome, small propeller on bottom, and bubble particles.',
+        description: 'Balanced stats and loves to float. Hard to hit.',
+        stats: { hp: 100, atk: 10, def: 10, spd: 14 },
+        visual_design: 'A round floating spherical drone with blue glass dome and bubbles.',
         bodyType: 'FLOATING'
     },
     {
         id: 'starter_grass',
-        name: 'Leaf Pup',
+        name: 'Moss Pup',
         element: 'Grass',
-        description: 'Half dog, half plant. 100% good boy.',
-        stats: { hp: 120, atk: 8, def: 15, spd: 6 },
-        visual_design: 'A quadruped cyber-dog with mossy green armor plates and a flower blooming on its back.',
+        description: 'Tanky quadruped. High defense and HP.',
+        stats: { hp: 120, atk: 8, def: 18, spd: 6 },
+        visual_design: 'A quadruped cyber-dog with mossy green armor plates.',
         bodyType: 'QUADRUPED'
     }
 ];
@@ -259,98 +272,98 @@ export const ELEMENT_THEMES: any = {
 
 export const ITEMS_DB: Record<string, GameItem> = {
     'pixel_pizza': {
-        id: 'pixel_pizza', name: 'Pizza Slice', type: 'Food',
-        description: 'Tasty snack. +40 Energy, +5 Happy.',
+        id: 'pixel_pizza', name: 'Pixel Pizza', type: 'Food',
+        description: 'Restores 40 Hunger. Pets love cheese.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 40); pet.happiness = Math.min(100, (pet.happiness || 50) + 5); return pet; },
         icon: '🍕', rarity: 'Common', price: 30
     },
     'data_burger': {
-        id: 'data_burger', name: 'Mega Burger', type: 'Food',
-        description: 'Big meal. +60 Energy, +10 Happy.',
+        id: 'data_burger', name: 'Data Burger', type: 'Food',
+        description: 'Restores 60 Hunger. A hearty digital meal.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 60); pet.happiness = Math.min(100, (pet.happiness || 50) + 10); return pet; },
         icon: '🍔', rarity: 'Common', price: 60
     },
     'glitch_candy': {
-        id: 'glitch_candy', name: 'Rainbow Candy', type: 'Food',
-        description: 'Super sweet! +20 Happy.',
+        id: 'glitch_candy', name: 'Glitch Candy', type: 'Food',
+        description: 'Restores 10 Hunger but greatly boosts Happiness (+20).',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 10); pet.happiness = Math.min(100, (pet.happiness || 50) + 20); return pet; },
         icon: '🍬', rarity: 'Rare', price: 80
     },
     'neon_soda': {
-        id: 'neon_soda', name: 'Zap Soda', type: 'Food',
-        description: 'Fizzy drink. +20 Energy.',
+        id: 'neon_soda', name: 'Neon Soda', type: 'Food',
+        description: 'Restores 20 Hunger and a bit of energy.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 20); pet.happiness += 5; return pet; },
         icon: '🥤', rarity: 'Common', price: 40
     },
     'potion_small': {
-        id: 'potion_small', name: 'Mini Potion', type: 'Consumable',
-        description: 'Heals 20 HP.',
+        id: 'potion_small', name: 'Small Potion', type: 'Consumable',
+        description: 'Restores 20 HP. Good for quick fixes.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 20); return pet; },
         icon: '🧪', rarity: 'Common', price: 50
     },
     'potion_super': {
-        id: 'potion_super', name: 'Max Potion', type: 'Consumable',
-        description: 'Heals 60 HP.',
+        id: 'potion_super', name: 'Super Potion', type: 'Consumable',
+        description: 'Restores 60 HP. Essential for boss fights.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 60); return pet; },
         icon: '💉', rarity: 'Rare', price: 150
     },
     'revive_chip': {
-        id: 'revive_chip', name: 'Revive Kit', type: 'Consumable',
-        description: 'Wakes up fainted pet.',
+        id: 'revive_chip', name: 'Revive Chip', type: 'Consumable',
+        description: 'Revives a fainted pet with 50% HP.',
         effect: (pet: any) => { if(pet.currentHp <= 0) pet.currentHp = Math.floor(pet.maxHp * 0.5); return pet; },
         icon: '❤️', rarity: 'Epic', price: 500
     },
     'energy_drink': {
-        id: 'energy_drink', name: 'Coffee', type: 'Consumable',
-        description: 'Wake up! -50 Fatigue.',
+        id: 'energy_drink', name: 'Black Coffee', type: 'Consumable',
+        description: 'Reduces Fatigue by 50. Keep grinding!',
         effect: (pet: any) => { pet.fatigue = Math.max(0, pet.fatigue - 50); return pet; },
         icon: '☕', rarity: 'Common', price: 100
     },
     'mystery_box': {
         id: 'mystery_box', name: 'Mystery Box', type: 'Consumable',
-        description: 'What\'s inside??',
+        description: 'Contains random high-value loot.',
         effect: (pet: any) => { return pet; }, 
         icon: '🎁', rarity: 'Epic', price: 500
     },
     'driver_crimson': {
-        id: 'driver_crimson', name: 'Power Chip', type: 'Gear',
-        description: 'Permanently adds +5 ATK.',
+        id: 'driver_crimson', name: 'Crimson Driver', type: 'Gear',
+        description: 'Mod Chip: Permanently increases ATK by 5.',
         effect: (pet: any) => { pet.atk += 5; return pet; },
         icon: '⚔️', rarity: 'Rare', price: 1200
     },
     'driver_titanium': {
-        id: 'driver_titanium', name: 'Armor Chip', type: 'Gear',
-        description: 'Permanently adds +5 DEF.',
+        id: 'driver_titanium', name: 'Titanium Driver', type: 'Gear',
+        description: 'Mod Chip: Permanently increases DEF by 5.',
         effect: (pet: any) => { pet.def += 5; return pet; },
         icon: '🛡️', rarity: 'Rare', price: 1200
     },
     'driver_azure': {
-        id: 'driver_azure', name: 'Speed Chip', type: 'Gear',
-        description: 'Permanently adds +5 SPD.',
+        id: 'driver_azure', name: 'Azure Driver', type: 'Gear',
+        description: 'Mod Chip: Permanently increases SPD by 5.',
         effect: (pet: any) => { pet.spd += 5; return pet; },
         icon: '👟', rarity: 'Rare', price: 1200
     }
 };
 
 const ENEMY_PREFIXES: Record<string, string[]> = {
-    Fire: ["Hot", "Flaming", "Spicy", "Burnt", "Inferno"],
-    Water: ["Wet", "Soggy", "Splashy", "Deep", "Tidal"],
-    Grass: ["Leafy", "Wild", "Mossy", "Green", "Jungle"],
-    Electric: ["Zappy", "Static", "Wired", "Buzzing", "Volt"],
-    Metal: ["Heavy", "Rusty", "Shiny", "Hard", "Alloy"],
-    Psychic: ["Floaty", "Brainy", "Zen", "Magic", "Cosmic"],
-    Dark: ["Gloomy", "Shadow", "Edgy", "Void", "Abyss"],
-    Light: ["Shiny", "Bright", "Flashy", "Holy", "Solar"],
-    Toxic: ["Yucky", "Slimy", "Gross", "Stinky", "Acid"],
-    Spirit: ["Ghostly", "Spooky", "Faded", "Hollow", "Phantom"]
+    Fire: ["Magma", "Inferno", "Ember", "Blaze", "Pyro"],
+    Water: ["Tidal", "Abyssal", "Hydro", "Aqua", "Mist"],
+    Grass: ["Thorn", "Vine", "Gaia", "Verdant", "Wild"],
+    Electric: ["Voltaic", "Static", "Thunder", "Zap", "Neon"],
+    Metal: ["Iron", "Steel", "Cyber", "Mecha", "Titan"],
+    Psychic: ["Astral", "Mind", "Cosmic", "Zen", "Void"],
+    Dark: ["Shadow", "Night", "Dusk", "Grim", "Null"],
+    Light: ["Solar", "Lumen", "Radiant", "Holy", "Star"],
+    Toxic: ["Venom", "Acid", "Noxious", "Sludge", "Bio"],
+    Spirit: ["Phantom", "Ghost", "Soul", "Specter", "Ethereal"]
 };
 
-const ENEMY_SUFFIXES = ["Bot", "Blob", "Critter", "Bug", "Walker", "Drone", "Beast", "Glitch"];
+const ENEMY_SUFFIXES = ["Gargoyle", "Construct", "Stalker", "Guardian", "Sentinel", "Behemoth", "Wyvern", "Glitch"];
 
 export const getRandomEnemy = (rank: string, playerLevel: number, genVoxelFunc: any): any => {
     const elements = Object.keys(ELEMENT_THEMES);
     const element = elements[Math.floor(Math.random() * elements.length)];
-    const types: BodyType[] = ['BIPED', 'QUADRUPED', 'FLOATING', 'WHEELED'];
+    const types: BodyType[] = ['BIPED', 'QUADRUPED', 'FLOATING'];
     const bodyType = types[Math.floor(Math.random() * types.length)];
     
     const prefixes = ENEMY_PREFIXES[element] || ["Random"];
@@ -360,16 +373,19 @@ export const getRandomEnemy = (rank: string, playerLevel: number, genVoxelFunc: 
     
     const levelVariance = Math.floor(Math.random() * 3) - 1; 
     const level = Math.max(1, playerLevel + levelVariance); 
+    
+    // Enemies are roughly 'Pro' or 'Elite' stage visually
+    const enemyStage = level > 20 ? 'Elite' : 'Pro';
 
     const art = getProceduralMonsterArt(name, element);
-    const voxelCode = genVoxelFunc(element, bodyType); // Now generates 3D body
+    const voxelCode = genVoxelFunc(element, bodyType, enemyStage); // Pass stage for better enemies
 
     return {
         id: `wild_${Date.now()}`,
         name: name,
         element,
         rarity: 'Common',
-        stage: 'Noob', 
+        stage: enemyStage, 
         rank: 'E',
         nature: 'Wild',
         personality: 'Angry',

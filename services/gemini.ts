@@ -31,22 +31,29 @@ const parseGeminiJson = (text: string) => {
     }
 };
 
-// Improved Generic Voxel builder to handle specific body types and elements
-export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 'BIPED'): string => {
+// --- ADVANCED VOXEL ENGINE (DIGIMON STYLE) ---
+export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 'BIPED', stage: string = 'Noob'): string => {
+    // 1. Color Palette Definition
     const colors: Record<string, number> = {
-        Fire: 0xff4400, Water: 0x0088ff, Grass: 0x00cc44,
-        Electric: 0xffcc00, Psychic: 0xaa00ff, Metal: 0x888888,
-        Dark: 0x220044, Light: 0xffffee, Spirit: 0x6600cc, Toxic: 0x88cc00
+        Fire: 0xff4400, Water: 0x0088ff, Grass: 0x44cc00, Electric: 0xffcc00,
+        Psychic: 0xaa00ff, Metal: 0x999999, Dark: 0x220044, Light: 0xffffee,
+        Spirit: 0x6600cc, Toxic: 0x88cc00
+    };
+    const secColors: Record<string, number> = {
+        Fire: 0x550000, Water: 0x002266, Grass: 0x115500, Electric: 0x664400,
+        Psychic: 0x220044, Metal: 0x444444, Dark: 0x000000, Light: 0xffeecc,
+        Spirit: 0x110022, Toxic: 0x224400
     };
     const skyColors: Record<string, number> = {
-        Fire: 0x551100, Water: 0x001133, Grass: 0x003311,
-        Electric: 0x332200, Psychic: 0x220033, Metal: 0x333333,
-        Dark: 0x000000, Light: 0xffeecc, Spirit: 0x110022, Toxic: 0x223300
+        Fire: 0x442211, Water: 0x112244, Grass: 0x113311, Electric: 0x333311,
+        Psychic: 0x221133, Metal: 0x222222, Dark: 0x111111, Light: 0xccddff,
+        Spirit: 0x111122, Toxic: 0x222211
     };
 
-    const c = colors[element] || 0xcccccc;
-    const sky = skyColors[element] || 0x87CEEB;
-    const acc = 0xffffff; 
+    const primC = colors[element] || 0x888888;
+    const secC = secColors[element] || 0x333333;
+    const skyC = skyColors[element] || 0x87CEEB;
+    const glowC = 0xffffff; 
 
     return `<!DOCTYPE html>
 <html>
@@ -58,223 +65,288 @@ export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+// --- SETUP ---
 const scene = new THREE.Scene();
-// FOG for illusion of depth
-scene.fog = new THREE.FogExp2(${sky}, 0.015);
+const FOG_COLOR = ${skyC};
+scene.fog = new THREE.FogExp2(FOG_COLOR, 0.02); 
+// scene.background = new THREE.Color(FOG_COLOR); // Removed to keep transparent capability, but Fog handles horizon
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(15,15,15);
+camera.position.set(12, 8, 16);
 
 const renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.setClearColor(0x000000, 0);
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enablePan = false; controls.autoRotate = true; controls.autoRotateSpeed = 1.0;
-controls.minDistance = 8; controls.maxDistance = 40;
+controls.enablePan = false; 
+controls.autoRotate = true; 
+controls.autoRotateSpeed = 0.8;
+controls.minDistance = 5;
+controls.maxDistance = 30;
+controls.target.set(0, 3, 0);
 
-// Lights
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-dirLight.position.set(20,50,20);
+// --- LIGHTING ---
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+scene.add(hemiLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(20, 40, 20);
 dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 1024;
-dirLight.shadow.mapSize.height = 1024;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+dirLight.shadow.camera.near = 0.5;
+dirLight.shadow.camera.far = 100;
+dirLight.shadow.camera.left = -50;
+dirLight.shadow.camera.right = 50;
+dirLight.shadow.camera.top = 50;
+dirLight.shadow.camera.bottom = -50;
 scene.add(dirLight);
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
-// GROUPS
+// --- GROUPS ---
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
-
 const habitatGroup = new THREE.Group();
 worldGroup.add(habitatGroup);
-
 const charGroup = new THREE.Group();
 worldGroup.add(charGroup);
 
-// Materials
-const mainMat = new THREE.MeshStandardMaterial({color: ${c}, roughness: 0.3, metalness: 0.1});
-const accMat = new THREE.MeshStandardMaterial({color: ${acc}, roughness: 0.2});
-const blackMat = new THREE.MeshBasicMaterial({color:0x111111});
-const groundMat = new THREE.MeshStandardMaterial({color: 0x444444, roughness: 1});
+// --- MATERIALS ---
+const primMat = new THREE.MeshStandardMaterial({color: ${primC}, roughness: 0.4, metalness: 0.2});
+const secMat = new THREE.MeshStandardMaterial({color: ${secC}, roughness: 0.7, metalness: 0.1});
+const glowMat = new THREE.MeshBasicMaterial({color: ${glowC}});
+const eyeMat = new THREE.MeshBasicMaterial({color: 0x00ff00});
+const groundMat = new THREE.MeshStandardMaterial({color: 0x333333, roughness: 1});
 
-// --- HABITAT GENERATION (LIVING WORLD) ---
+// --- INFINITE HABITAT GENERATION ---
 
-// 1. Sky Dome (Horizon Illusion)
-const hemiLight = new THREE.HemisphereLight(${c}, ${sky}, 0.6);
-scene.add(hemiLight);
-
-const skyGeo = new THREE.SphereGeometry(60, 32, 32);
-const skyMat = new THREE.MeshBasicMaterial({color: ${sky}, side: THREE.BackSide});
-const skyMesh = new THREE.Mesh(skyGeo, skyMat);
-habitatGroup.add(skyMesh);
-
-// 2. Dynamic Terrain
-const groundGeo = new THREE.CylinderGeometry(25, 20, 4, 16);
+// 1. Ground Plane (Massive)
+const groundGeo = new THREE.PlaneGeometry(400, 400, 64, 64);
+// Deform ground with noise for hills, but keep center flat
+const pos = groundGeo.attributes.position;
+for(let i=0; i<pos.count; i++){
+    const x = pos.getX(i);
+    const y = pos.getY(i); // Actually Z in plane space
+    const dist = Math.sqrt(x*x + y*y);
+    let zHeight = 0;
+    
+    if(dist > 8) {
+        zHeight = Math.sin(x*0.1) * Math.cos(y*0.1) * 2 + Math.random() * 0.5;
+    }
+    pos.setZ(i, zHeight);
+}
+groundGeo.computeVertexNormals();
 const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.position.y = -3;
+ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 habitatGroup.add(ground);
 
-// Props
-const propCount = 12;
+// 2. Biome Props (Scattered away from center)
+const propCount = 40;
+const element = "${element}";
 for(let i=0; i<propCount; i++) {
-    const angle = (i / propCount) * Math.PI * 2;
-    const r = 10 + Math.random() * 10;
-    const x = Math.cos(angle) * r;
-    const z = Math.sin(angle) * r;
-    
-    if ('${element}' === 'Grass') {
-        const h = 2 + Math.random() * 3;
-        const tree = new THREE.Mesh(new THREE.ConeGeometry(1, h, 4), new THREE.MeshStandardMaterial({color:0x00aa00}));
-        tree.position.set(x, -1 + h/2, z); 
-        tree.castShadow = true;
+    const r = 15 + Math.random() * 40;
+    const theta = Math.random() * Math.PI * 2;
+    const x = r * Math.cos(theta);
+    const z = r * Math.sin(theta);
+    const y = 0; // Should sample terrain height ideally, but simple logic ensures they poke up
+
+    if (element === 'Grass') {
+        // Trees
+        const h = 4 + Math.random() * 6;
+        const tree = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, h/2), secMat);
+        trunk.position.y = h/4;
+        const leaves = new THREE.Mesh(new THREE.ConeGeometry(3, h/1.5, 8), primMat);
+        leaves.position.y = h/2 + h/4;
+        tree.add(trunk); tree.add(leaves);
+        tree.position.set(x, y, z);
         habitatGroup.add(tree);
-    } else if ('${element}' === 'Fire') {
-        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(Math.random()), new THREE.MeshStandardMaterial({color:0x550000}));
-        rock.position.set(x, -0.5, z); 
-        habitatGroup.add(rock);
-    } else if ('${element}' === 'Water') {
-         // Bubbles
-         const bub = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshStandardMaterial({color:0x0088ff, transparent:true, opacity:0.5}));
-         bub.position.set(x, Math.random()*5, z);
-         habitatGroup.add(bub);
+    } else if (element === 'Fire') {
+        // Spikes/Rocks
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(1, 4, 4), secMat);
+        spike.position.set(x, 2, z);
+        spike.rotation.x = (Math.random()-0.5);
+        spike.rotation.z = (Math.random()-0.5);
+        habitatGroup.add(spike);
+    } else if (element === 'Water') {
+        // Coral/Crystals
+        const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(1 + Math.random()), primMat);
+        crystal.position.set(x, 1 + Math.random(), z);
+        habitatGroup.add(crystal);
     } else {
-        // Generic crystal
-        const cry = new THREE.Mesh(new THREE.OctahedronGeometry(0.8), new THREE.MeshStandardMaterial({color: ${c}}));
-        cry.position.set(x, 0, z);
-        habitatGroup.add(cry);
+        // Generic Cubes
+        const cube = new THREE.Mesh(new THREE.BoxGeometry(2,2,2), secMat);
+        cube.position.set(x, 1, z);
+        habitatGroup.add(cube);
     }
 }
 
-// --- ARCADE STYLE BODY GENERATOR ---
+// --- COMPLEX CREATURE GENERATOR (SEGMENTED) ---
 const bodyType = "${bodyType}";
+const stage = "${stage}"; // Noob, Pro, Elite, Legend
 
-// Helper for parts
-const createPart = (geo, mat, parent, pos, rot) => {
-    const mesh = new THREE.Mesh(geo, mat);
-    if(pos) mesh.position.set(pos[0], pos[1], pos[2]);
-    if(rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    parent.add(mesh);
-    return mesh;
-};
-
-const animParts = { legs: [], arms: [], floaters: [] };
-
-if (bodyType === 'FLOATING') {
-    // Core
-    const core = createPart(new THREE.IcosahedronGeometry(2.5, 0), mainMat, charGroup, [0,0,0]);
-    
-    // Rotating Rings
-    const ringGeo = new THREE.TorusGeometry(3.5, 0.2, 8, 32);
-    const ring = createPart(ringGeo, accMat, charGroup, [0,0,0], [Math.PI/2, 0, 0]);
-    animParts.floaters.push(ring);
-
-    // Thruster
-    createPart(new THREE.ConeGeometry(1, 2, 8), blackMat, charGroup, [0, -2.5, 0], [Math.PI, 0, 0]);
-
-} else if (bodyType === 'QUADRUPED') {
-    // Body
-    createPart(new THREE.BoxGeometry(3, 2, 5), mainMat, charGroup, [0,0,0]);
-    // Head
-    createPart(new THREE.BoxGeometry(2, 2, 2.5), mainMat, charGroup, [0, 1.5, 2.5]);
-    
-    // Legs
-    const legGeo = new THREE.CylinderGeometry(0.4, 0.4, 2.5);
-    animParts.legs.push(createPart(legGeo, accMat, charGroup, [1.5, -1.5, 2]));
-    animParts.legs.push(createPart(legGeo, accMat, charGroup, [-1.5, -1.5, 2]));
-    animParts.legs.push(createPart(legGeo, accMat, charGroup, [1.5, -1.5, -2]));
-    animParts.legs.push(createPart(legGeo, accMat, charGroup, [-1.5, -1.5, -2]));
-
-    // Tail
-    createPart(new THREE.ConeGeometry(0.5, 3, 4), mainMat, charGroup, [0, 0.5, -3], [-Math.PI/2, 0, 0]);
-
-} else {
-    // BIPED (Mech Style)
-    // Torso
-    createPart(new THREE.CylinderGeometry(2, 1.5, 3, 6), mainMat, charGroup, [0, 0, 0]);
-    
-    // Head
-    createPart(new THREE.BoxGeometry(1.8, 1.5, 1.8), mainMat, charGroup, [0, 2.5, 0]);
-    
-    // Shoulders
-    createPart(new THREE.SphereGeometry(1.2), accMat, charGroup, [2.2, 1, 0]);
-    createPart(new THREE.SphereGeometry(1.2), accMat, charGroup, [-2.2, 1, 0]);
-
-    // Arms
-    animParts.arms.push(createPart(new THREE.BoxGeometry(0.8, 2.5, 0.8), mainMat, charGroup, [2.8, -0.5, 0]));
-    animParts.arms.push(createPart(new THREE.BoxGeometry(0.8, 2.5, 0.8), mainMat, charGroup, [-2.8, -0.5, 0]));
-    
-    // Legs
-    animParts.legs.push(createPart(new THREE.BoxGeometry(1, 3, 1), accMat, charGroup, [1, -2.5, 0]));
-    animParts.legs.push(createPart(new THREE.BoxGeometry(1, 3, 1), accMat, charGroup, [-1, -2.5, 0]));
+// Helpers
+function createMesh(geo, mat, parent, pos, rot, scale) {
+    const m = new THREE.Mesh(geo, mat);
+    if(pos) m.position.set(...pos);
+    if(rot) m.rotation.set(...rot);
+    if(scale) m.scale.set(...scale);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    if(parent) parent.add(m);
+    return m;
 }
 
-// Universal Eyes
-const eyeGeo = new THREE.BoxGeometry(0.5, 0.5, 0.2);
-const eyePos = bodyType === 'QUADRUPED' ? [0.6, 1.8, 3.7] : bodyType === 'FLOATING' ? [0.8, 0.5, 2.2] : [0.5, 2.6, 0.9];
-createPart(eyeGeo, new THREE.MeshBasicMaterial({color:0x00ff00}), charGroup, eyePos);
-createPart(eyeGeo, new THREE.MeshBasicMaterial({color:0x00ff00}), charGroup, [-eyePos[0], eyePos[1], eyePos[2]]);
+// Animation Rigs
+const rig = {
+    head: null,
+    torso: null,
+    arms: { left: null, right: null },
+    legs: { left: null, right: null },
+    tail: null,
+    floaters: []
+};
 
+// SCALE FACTORS BASED ON STAGE
+let sScale = 1;
+if (stage === 'Pro') sScale = 1.2;
+if (stage === 'Elite') sScale = 1.5;
+if (stage === 'Legend') sScale = 2.0;
 
-// --- ANIMATION LOOP (PHYSICS & MOVEMENT) ---
+// BUILD FUNCTION
+function buildCreature() {
+    // 1. TORSO (Root of body)
+    const torsoGeo = stage === 'Noob' 
+        ? new THREE.SphereGeometry(1.5 * sScale, 16, 16) // Round cute body for noobs
+        : new THREE.CylinderGeometry(1.5 * sScale, 1.2 * sScale, 3 * sScale, 8); // Robust body for others
+    
+    rig.torso = createMesh(torsoGeo, primMat, charGroup, [0, bodyType==='QUADRUPED'? 2*sScale : 3*sScale, 0]);
+    
+    // Armor Plate
+    if (stage !== 'Noob') {
+        createMesh(new THREE.BoxGeometry(2*sScale, 1.5*sScale, 0.5*sScale), secMat, rig.torso, [0, 0, 1.2*sScale]);
+    }
+
+    // 2. HEAD
+    const headGeo = stage === 'Noob'
+        ? new THREE.BoxGeometry(2.2*sScale, 2.2*sScale, 2.2*sScale) // Big head for noob
+        : new THREE.BoxGeometry(1.8*sScale, 2*sScale, 2*sScale);
+        
+    const headY = stage === 'Noob' ? 1.5*sScale : 2.5*sScale;
+    const headZ = bodyType === 'QUADRUPED' ? 1.5*sScale : 0;
+    
+    rig.head = createMesh(headGeo, primMat, rig.torso, [0, headY, headZ]);
+    
+    // Face
+    createMesh(new THREE.BoxGeometry(0.5*sScale, 0.5*sScale, 0.1), eyeMat, rig.head, [0.5*sScale, 0.2*sScale, 1*sScale]); // Eye R
+    createMesh(new THREE.BoxGeometry(0.5*sScale, 0.5*sScale, 0.1), eyeMat, rig.head, [-0.5*sScale, 0.2*sScale, 1*sScale]); // Eye L
+    
+    // Accessories (Horns/Ears) based on Element
+    if (element === 'Fire' || element === 'Dark') {
+        createMesh(new THREE.ConeGeometry(0.3*sScale, 1*sScale, 4), secMat, rig.head, [0.8*sScale, 1*sScale, 0], [0,0,-0.5]);
+        createMesh(new THREE.ConeGeometry(0.3*sScale, 1*sScale, 4), secMat, rig.head, [-0.8*sScale, 1*sScale, 0], [0,0,0.5]);
+    } else if (element === 'Grass' || element === 'Electric') {
+        createMesh(new THREE.BoxGeometry(0.2*sScale, 1*sScale, 0.5*sScale), secMat, rig.head, [1*sScale, 0.5*sScale, 0]);
+        createMesh(new THREE.BoxGeometry(0.2*sScale, 1*sScale, 0.5*sScale), secMat, rig.head, [-1*sScale, 0.5*sScale, 0]);
+    }
+
+    // 3. LIMBS
+    if (bodyType === 'BIPED') {
+        // Arms
+        const armGeo = new THREE.BoxGeometry(0.6*sScale, 2*sScale, 0.6*sScale);
+        rig.arms.left = createMesh(armGeo, secMat, rig.torso, [1.8*sScale, 0.5*sScale, 0], [0,0,-0.2]);
+        rig.arms.right = createMesh(armGeo, secMat, rig.torso, [-1.8*sScale, 0.5*sScale, 0], [0,0,0.2]);
+        
+        // Legs
+        const legGeo = new THREE.BoxGeometry(0.8*sScale, 2.5*sScale, 0.8*sScale);
+        rig.legs.left = createMesh(legGeo, secMat, charGroup, [1*sScale, 1.2*sScale, 0]);
+        rig.legs.right = createMesh(legGeo, secMat, charGroup, [-1*sScale, 1.2*sScale, 0]);
+        
+    } else if (bodyType === 'QUADRUPED') {
+        rig.torso.rotation.x = Math.PI/2; // Horizontal body
+        
+        const legGeo = new THREE.CylinderGeometry(0.4*sScale, 0.3*sScale, 2*sScale);
+        rig.legs.left = createMesh(legGeo, secMat, charGroup, [1.2*sScale, 1*sScale, 1.5*sScale]); // Front L
+        rig.legs.right = createMesh(legGeo, secMat, charGroup, [-1.2*sScale, 1*sScale, 1.5*sScale]); // Front R
+        // Back legs reused in anim loop logic differently but stored here
+        // Actually let's just add them directly for simplicity in this procedural rig
+        createMesh(legGeo, secMat, charGroup, [1.2*sScale, 1*sScale, -1.5*sScale]);
+        createMesh(legGeo, secMat, charGroup, [-1.2*sScale, 1*sScale, -1.5*sScale]);
+    } else if (bodyType === 'FLOATING') {
+        // Rings or Thrusters
+        const ring = createMesh(new THREE.TorusGeometry(2.5*sScale, 0.2*sScale, 8, 16), secMat, rig.torso, [0,0,0], [Math.PI/2, 0, 0]);
+        rig.floaters.push(ring);
+        // No legs
+    }
+
+    // 4. WINGS / BACK PROP (Elite/Legend only)
+    if (stage === 'Elite' || stage === 'Legend') {
+        const wingGeo = new THREE.BoxGeometry(0.2*sScale, 4*sScale, 1.5*sScale);
+        const wingL = createMesh(wingGeo, glowMat, rig.torso, [1*sScale, 1*sScale, -1*sScale], [0.5, 0, -0.5]);
+        const wingR = createMesh(wingGeo, glowMat, rig.torso, [-1*sScale, 1*sScale, -1*sScale], [0.5, 0, 0.5]);
+        rig.floaters.push(wingL, wingR); // Hack to animate them
+    }
+}
+
+buildCreature();
+
+// --- ANIMATION LOOP ---
 let time = 0;
 function animate() {
   requestAnimationFrame(animate);
   time += 0.05;
   
-  // Camera Follow (Soft Anchor)
-  // We keep the camera orbiting, but shift focus if char moves
-  controls.target.lerp(charGroup.position, 0.1);
   controls.update();
 
-  // 1. Breathing/Floating
-  charGroup.position.y = Math.sin(time * 0.5) * 0.3;
-  
-  // 2. Specific Animations
-  if (bodyType === 'BIPED') {
-      // Walking swing
-      animParts.legs[0].rotation.x = Math.sin(time) * 0.5;
-      animParts.legs[1].rotation.x = Math.sin(time + Math.PI) * 0.5;
-      animParts.arms[0].rotation.x = Math.sin(time + Math.PI) * 0.3;
-      animParts.arms[1].rotation.x = Math.sin(time) * 0.3;
-  } else if (bodyType === 'QUADRUPED') {
-      // Trot
-      animParts.legs[0].rotation.x = Math.sin(time) * 0.5;
-      animParts.legs[1].rotation.x = Math.sin(time + Math.PI) * 0.5;
-      animParts.legs[2].rotation.x = Math.sin(time + Math.PI) * 0.5;
-      animParts.legs[3].rotation.x = Math.sin(time) * 0.5;
-  } else if (bodyType === 'FLOATING') {
+  // Floating / Breathing
+  const hover = Math.sin(time * 1.5) * 0.2;
+  if (bodyType === 'FLOATING') {
+      charGroup.position.y = 3 + hover;
+      charGroup.rotation.z = Math.sin(time) * 0.1;
       // Spin rings
-      if(animParts.floaters[0]) animParts.floaters[0].rotation.z += 0.05;
-      charGroup.rotation.z = Math.sin(time * 0.5) * 0.1;
+      rig.floaters.forEach(f => f.rotation.z += 0.1);
+  } else {
+      // Grounded breathing
+      rig.torso.position.y = (bodyType==='QUADRUPED'? 2*sScale : 3*sScale) + hover * 0.5;
+  }
+
+  // Walk Cycle
+  if (bodyType === 'BIPED') {
+      if (rig.legs.left && rig.legs.right) {
+          rig.legs.left.rotation.x = Math.sin(time * 2) * 0.5;
+          rig.legs.right.rotation.x = Math.sin(time * 2 + Math.PI) * 0.5;
+      }
+      if (rig.arms.left && rig.arms.right) {
+          rig.arms.left.rotation.x = Math.sin(time * 2 + Math.PI) * 0.5;
+          rig.arms.right.rotation.x = Math.sin(time * 2) * 0.5;
+      }
+  }
+
+  // Wing Flap
+  if (stage === 'Elite' || stage === 'Legend') {
+     // Simple flutter if we added wings to floaters array
   }
 
   renderer.render(scene, camera);
 }
 animate();
 
-// --- MODE HANDLING ---
+// --- MESSAGING ---
 window.addEventListener('message', (event) => {
     const { type, value } = event.data;
     if (type === 'SET_MODE') {
         if (value === 'BATTLE') {
-            // BATTLE MODE: Hide Environment, Lock Camera
             habitatGroup.visible = false;
             controls.autoRotate = false;
-            controls.enabled = true; 
-            // Zoom in front view for battle
-            camera.position.set(4, 2, 8); 
-            camera.lookAt(0,0,0);
+            camera.position.set(5, 3, 8);
+            camera.lookAt(0, 2, 0);
         } else {
-            // HABITAT MODE
             habitatGroup.visible = true;
             controls.autoRotate = true;
-            camera.position.set(15,15,15);
+            camera.position.set(12, 8, 16);
         }
     }
 });
@@ -289,7 +361,6 @@ window.onresize = () => {
 
 // NOTE: analyzeObject, generateCardArt, generateVoxelScene, etc. remain unchanged but import above used
 export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> => {
-    // ... (Implementation same as before, just preserving imports)
      try {
     if (!imageBase64) throw new Error("Image data is missing");
     const base64Data = imageBase64.split(',')[1] || imageBase64;
@@ -363,33 +434,35 @@ export const generateCardArt = async (monsterDescription: string, objectName: st
 };
 
 export const generateVoxelScene = async (imageBase64: string, visualDescription: string, bodyType: string = 'BIPED'): Promise<string> => {
-    // Reuse generic builder for consistency in style, but ideally this uses AI for unique details
-    // For now, we return the "Smart Arcade" builder
-    return getGenericVoxel('Metal', bodyType);
+    // Initial generation is always Noob stage
+    return getGenericVoxel('Metal', bodyType, 'Noob');
 };
 
 export const fuseVoxelScene = async (petA: MonsterStats, petB: MonsterStats) => {
     const visual_design = `A fusion of ${petA.name} and ${petB.name}.`;
-    const code = getGenericVoxel(petA.element, petA.bodyType);
+    const code = getGenericVoxel(petA.element, petA.bodyType, 'Pro');
     return { code, visual_design, name: `${petA.name.substring(0, 3)}${petB.name.substring(petB.name.length-3)}`, element: petA.element };
 };
 
 export const evolveVoxelScene = async (pet: MonsterStats) => {
-    const { dominant, protocolName } = determineEvolutionPath({ 
-        atk: pet.atk, def: pet.def, spd: pet.spd, happiness: pet.happiness || 50 
-    });
+    // Determine next stage
     let nextStage: MonsterStage = 'Pro';
     if (pet.stage === 'Noob') nextStage = 'Pro';
     else if (pet.stage === 'Pro') nextStage = 'Elite';
     else if (pet.stage === 'Elite') nextStage = 'Legend';
 
-    const code = getGenericVoxel(pet.element, pet.bodyType); // In real app, AI would make it bigger/cooler
+    // Generate new complex model code
+    const code = getGenericVoxel(pet.element, pet.bodyType, nextStage);
     
+    const { protocolName } = determineEvolutionPath({ 
+        atk: pet.atk, def: pet.def, spd: pet.spd, happiness: pet.happiness || 50 
+    });
+
     return { 
         code, 
-        visual_design: "Evolved Form", 
+        visual_design: `Evolved ${nextStage} form.`, 
         nextStage,
-        nextName: `Neo ${pet.name}`,
+        nextName: nextStage === 'Legend' ? `Mega ${pet.name}` : pet.name,
         protocolName
     };
 }
