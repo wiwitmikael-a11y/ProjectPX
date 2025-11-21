@@ -12,7 +12,7 @@ import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, AITact
 // --- TYPES ---
 type GameState = 'SPLASH' | 'NEXUS' | 'SCAN' | 'INVENTORY' | 'ARENA' | 'SYNTHESIS' | 'TRAINING' | 'SHOP' | 'ERROR';
 type EventType = 'WILD_BATTLE' | 'TREASURE' | 'WEATHER_CHANGE' | 'MERCHANT' | 'MYSTERY_SIGNAL';
-type BattleCommand = 'ATTACK' | 'DEFEND' | 'CHARGE' | 'HEAL';
+type BattleCommand = 'ATTACK' | 'DEFEND' | 'CHARGE' | 'HEAL' | 'OVERCLOCK';
 
 const SAVE_VERSION = 'v3.0_PROTOCOLS'; // Version Bump for New Stage System
 
@@ -183,6 +183,30 @@ const StatBar = ({ label, value, max, color }: any) => (
     </div>
 );
 
+// VISUAL COMPONENT FOR PROTOCOL TRACKING
+const ProtocolMonitor = ({ pet }: { pet: Pixupet }) => {
+    const { protocolName, color, icon, dominant } = determineEvolutionPath({ 
+        atk: pet.atk, 
+        def: pet.def, 
+        spd: pet.spd, 
+        happiness: pet.happiness || 50 
+    });
+
+    return (
+        <div className="bg-black text-white p-2 rounded border border-gray-700 mb-2 text-[10px] font-mono flex justify-between items-center shadow-inner">
+            <div className="flex flex-col">
+                <span className="opacity-50 text-[8px] uppercase tracking-widest">SYNCED PROTOCOL</span>
+                <span className={`font-bold ${color} flex items-center gap-1`}>{icon} {protocolName}</span>
+            </div>
+            <div className="flex gap-1 h-4 items-end">
+                <div className={`w-1 bg-red-500 transition-all duration-500 ${dominant === 'ATTACK' ? 'h-4 animate-pulse' : 'h-2 opacity-30'}`} title="ATK"></div>
+                <div className={`w-1 bg-gray-500 transition-all duration-500 ${dominant === 'DEFENSE' ? 'h-4 animate-pulse' : 'h-2 opacity-30'}`} title="DEF"></div>
+                <div className={`w-1 bg-blue-500 transition-all duration-500 ${dominant === 'SPEED' ? 'h-4 animate-pulse' : 'h-2 opacity-30'}`} title="SPD"></div>
+            </div>
+        </div>
+    );
+};
+
 const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolean, small?: boolean, onEvolve?: () => void }> = ({ pet, onClick, selected, small, onEvolve }) => {
     
     // Evolution Eligibility Check & Normalize old save data stages
@@ -194,15 +218,6 @@ const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolea
     else if ((stage === 'Surge' || stage === 'Champion') && pet.level >= EVO_THRESHOLDS.TURBO) { canEvolve = true; nextStage = 'Turbo'; }
     else if ((stage === 'Turbo' || stage === 'Ultimate') && pet.level >= EVO_THRESHOLDS.NOVA) { canEvolve = true; nextStage = 'Nova'; }
 
-    // Predict Evolution Path for UI hint
-    const { protocolName, alignment } = determineEvolutionPath({ atk: pet.atk, def: pet.def, spd: pet.spd, happiness: pet.happiness || 50 });
-    
-    // Dynamic Path Color
-    let protocolColor = "text-gray-500";
-    if (protocolName.includes('Crimson')) protocolColor = "text-red-500";
-    if (protocolName.includes('Azure')) protocolColor = "text-blue-500";
-    if (protocolName.includes('Titanium')) protocolColor = "text-gray-700";
-    
     return (
     <div onClick={onClick} className={`w-full aspect-[3/4.2] neo-card flex flex-col p-2 cursor-pointer relative bg-white ${selected ? 'ring-4 ring-yellow-400' : ''} ${!small && 'hover:scale-105'} transition-transform`}>
          <div className={`flex items-center justify-between px-2 py-1 rounded border-2 border-black ${ELEMENT_THEMES[pet.element]?.bg} ${ELEMENT_THEMES[pet.element]?.text} mb-2`}>
@@ -217,15 +232,10 @@ const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolea
          </div>
          <div className="flex-1 border-2 border-black rounded bg-gray-100 overflow-hidden relative mb-2 group">
              <img src={pet.cardArtUrl || pet.imageSource} className="w-full h-full object-cover" style={{imageRendering: 'pixelated'}} />
-             
-             {/* Evolution Hint Overlay */}
-             {!small && !canEvolve && pet.stage !== 'Nova' && (
-                 <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white text-[8px] p-1 text-center backdrop-blur-sm transform translate-y-full group-hover:translate-y-0 transition-transform">
-                     Path: <span className={`font-bold ${protocolColor}`}>{protocolName}</span>
-                     {alignment === 'CORRUPTED' && <span className="text-red-500 animate-pulse block">⚠️ UNSTABLE</span>}
-                 </div>
-             )}
          </div>
+         
+         {!small && <ProtocolMonitor pet={pet} />}
+
          {!small && (
              <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-1">
                  <StatBar label="HP" value={pet.currentHp || pet.hp} max={pet.maxHp || pet.hp} color="bg-green-400" />
@@ -353,6 +363,7 @@ const App: React.FC = () => {
   // Battle Tactics
   const [battleCommand, setBattleCommand] = useState<BattleCommand | null>(null);
   const [playerCharged, setPlayerCharged] = useState(false);
+  const [isOverclocked, setIsOverclocked] = useState(false); // NEW MECHANIC
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -451,18 +462,36 @@ const App: React.FC = () => {
               let logMsg = "";
               let isDefending = false;
 
-              if (battleCommand === 'ATTACK') {
+              // NEW: Overclock Calculation (Sacrifice 30 Hunger for 2x Dmg this turn)
+              let ocMultiplier = 1;
+              if (battleCommand === 'OVERCLOCK') {
+                  if (playerPet.hunger >= 30) {
+                       ocMultiplier = 2.5;
+                       setPlayerPet(prev => prev ? ({...prev, hunger: prev.hunger - 30}) : null);
+                       logMsg = "SYSTEM OVERCLOCK! ";
+                       setIsOverclocked(true);
+                  } else {
+                       logMsg = "NOT ENOUGH ENERGY! ";
+                  }
+              }
+
+              if (battleCommand === 'ATTACK' || battleCommand === 'OVERCLOCK') {
                   pDmg = Math.max(5, Math.floor((playerPet.atk * 0.5) - (enemyPet.def * 0.1)));
                   const pCrit = Math.random() < (playerPet.happiness || 50) / 500;
-                  if (pCrit) { pDmg = Math.floor(pDmg * 1.5); logMsg = "CRITICAL HIT! "; }
-                  if (playerCharged) { pDmg *= 2; logMsg += "SUPER CHARGED! "; setPlayerCharged(false); }
-                  logMsg += `${playerPet.name} attacks!`;
+                  if (pCrit) { pDmg = Math.floor(pDmg * 1.5); logMsg += "CRIT! "; }
+                  
+                  if (playerCharged) { pDmg *= 2; logMsg += "CHARGED! "; setPlayerCharged(false); }
+                  
+                  pDmg = Math.floor(pDmg * ocMultiplier);
+                  if (battleCommand === 'ATTACK') logMsg += `${playerPet.name} attacks!`;
+                  else logMsg += `${playerPet.name} UNLEASHED!`;
+
               } else if (battleCommand === 'DEFEND') {
                   isDefending = true;
-                  logMsg = `${playerPet.name} is bracing!`;
+                  logMsg = `${playerPet.name} braces!`;
               } else if (battleCommand === 'CHARGE') {
                   setPlayerCharged(true);
-                  logMsg = `${playerPet.name} is charging power!`;
+                  logMsg = `${playerPet.name} charges power!`;
               }
 
               setBattleLog(prev => [logMsg, ...prev]);
@@ -478,6 +507,16 @@ const App: React.FC = () => {
                       setBattleLog(prev => ["ENEMY DEFEATED!", ...prev]);
                       const xp = 50;
                       const coins = 50;
+                      
+                      // --- LOOT LOGIC ---
+                      const lootItem = getLootDrop(user?.currentRank || 'E');
+                      let rewardMsg = "";
+                      if (lootItem) {
+                          const item = ITEMS_DB[lootItem];
+                          setUser(prev => prev ? ({...prev, inventory: [...prev.inventory, lootItem]}) : null);
+                          rewardMsg = `Found ${item.name}!`;
+                      }
+
                       const updatedPlayer = { ...playerPet, exp: playerPet.exp + xp, battlesWon: (user?.battlesWon||0) + 1 };
                       if (updatedPlayer.exp >= updatedPlayer.maxExp) {
                            updatedPlayer.level++;
@@ -489,6 +528,7 @@ const App: React.FC = () => {
                       setUser(prev => prev ? ({...prev, coins: prev.coins + coins}) : null);
                       saveGame(user!, newInv);
                       setBattleCommand(null);
+                      if(rewardMsg) setBattleLog(prev => [rewardMsg, ...prev]);
                       return;
                   }
               }
@@ -500,7 +540,7 @@ const App: React.FC = () => {
                   
                   if (isDefending) {
                       eDmg = Math.floor(eDmg * 0.5);
-                      setBattleLog(prev => ["Blocked the attack!", ...prev]);
+                      setBattleLog(prev => ["Blocked!", ...prev]);
                   }
 
                   const newPlayerHp = Math.max(0, (playerPet.currentHp || playerPet.hp) - eDmg);
@@ -516,7 +556,7 @@ const App: React.FC = () => {
                       saveGame(user!, newInv);
                   }
                   
-                  // Reset Command to allow next turn
+                  setIsOverclocked(false); // Reset overclock
                   setBattleCommand(null);
 
               }, 1000);
@@ -548,6 +588,12 @@ const App: React.FC = () => {
           return;
       }
       let newPet = { ...pet };
+      
+      // Special Visual for Drivers
+      if (item.type === 'Driver') {
+          spawnFloatText("PROTOCOL UPDATED", "text-cyan-400");
+      }
+
       if (item.effect) newPet = item.effect(newPet);
       const newInvList = [...user!.inventory];
       const idx = newInvList.indexOf(itemKey);
@@ -555,9 +601,11 @@ const App: React.FC = () => {
       const newUser = { ...user!, inventory: newInvList };
       const newInventory = [newPet, ...inventory.slice(1)];
       saveGame(newUser, newInventory);
-      setIsFeeding(false);
+      
+      // Visual Feedback
+      if (item.type !== 'Driver') setIsFeeding(false);
       triggerShake();
-      spawnFloatText("YUMMY!", "text-green-400");
+      spawnFloatText(item.name + " USED!", "text-green-400");
   };
 
   const handleBuy = (itemKey: string) => {
@@ -850,7 +898,7 @@ const App: React.FC = () => {
                   <div className="bg-yellow-300 px-4 py-2 border-2 border-black font-black rounded-full shadow-[2px_2px_0px_0px_black]">💰 {user?.coins}</div>
               </div>
               <div className="grid grid-cols-2 gap-4 overflow-y-auto py-6">
-                  {Object.values(ITEMS_DB).map(item => (
+                  {Object.values(ITEMS_DB).filter(i => i.type !== 'Driver').map(item => (
                       <div key={item.id} className="bg-white border-4 border-black p-3 shadow-[4px_4px_0px_0px_black] flex flex-col justify-between hover:-translate-y-1 transition-transform">
                           <div className="text-center text-4xl mb-2">{item.icon}</div>
                           <div className="font-black text-sm mb-1">{item.name}</div>
@@ -967,14 +1015,14 @@ const App: React.FC = () => {
                    
                    {!isBattleOver && (
                        <div className="flex gap-2 justify-center items-center h-full">
-                           <button onClick={() => setBattleCommand('ATTACK')} disabled={!!battleCommand} className={`neo-btn bg-red-500 text-white w-24 h-20 text-xs disabled:opacity-50 ${battleCommand === 'ATTACK' ? 'bg-red-300' : ''}`}>
-                               ATTACK<br/><span className="text-[8px] font-normal opacity-80">Normal Dmg</span>
+                           <button onClick={() => setBattleCommand('ATTACK')} disabled={!!battleCommand} className={`neo-btn bg-red-500 text-white w-20 h-20 text-xs disabled:opacity-50 ${battleCommand === 'ATTACK' ? 'bg-red-300' : ''}`}>
+                               ATTACK
                            </button>
-                           <button onClick={() => setBattleCommand('DEFEND')} disabled={!!battleCommand} className={`neo-btn bg-blue-500 text-white w-24 h-20 text-xs disabled:opacity-50 ${battleCommand === 'DEFEND' ? 'bg-blue-300' : ''}`}>
-                               DEFEND<br/><span className="text-[8px] font-normal opacity-80">-50% Dmg</span>
+                           <button onClick={() => setBattleCommand('DEFEND')} disabled={!!battleCommand} className={`neo-btn bg-blue-500 text-white w-20 h-20 text-xs disabled:opacity-50 ${battleCommand === 'DEFEND' ? 'bg-blue-300' : ''}`}>
+                               DEFEND
                            </button>
-                           <button onClick={() => setBattleCommand('CHARGE')} disabled={!!battleCommand} className={`neo-btn bg-yellow-500 text-black w-24 h-20 text-xs disabled:opacity-50 ${battleCommand === 'CHARGE' ? 'bg-yellow-300' : ''}`}>
-                               CHARGE<br/><span className="text-[8px] font-normal opacity-80">x2 Next Hit</span>
+                           <button onClick={() => setBattleCommand('OVERCLOCK')} disabled={!!battleCommand} className={`neo-btn bg-purple-500 text-white w-20 h-20 text-xs disabled:opacity-50 ${battleCommand === 'OVERCLOCK' ? 'bg-purple-300' : ''}`}>
+                               OVERCLOCK<br/><span className="text-[8px] font-normal opacity-80">-30 Hunger<br/>2.5x DMG</span>
                            </button>
                        </div>
                    )}
@@ -1025,17 +1073,36 @@ const App: React.FC = () => {
                 {activeEvent && <EventModal event={activeEvent} onClose={() => { setActiveEvent(null); setGameState('NEXUS'); }} playerPet={activePet} />}
                 {isFeeding && (
                     <div className="absolute inset-0 z-40 bg-black/50 flex items-end justify-center pointer-events-auto">
-                        <div className="bg-white w-full p-4 rounded-t-3xl border-t-4 border-black animate-slide-up h-1/2 overflow-y-auto shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
-                            <h3 className="font-black text-xl mb-4">SELECT FOOD</h3>
-                            <div className="grid grid-cols-3 gap-2">
-                                {user?.inventory.filter(id => ITEMS_DB[id].type === 'Food' || ITEMS_DB[id].type === 'Consumable').map((id, idx) => (
-                                    <button key={idx} onClick={() => handleFeed(id)} className="border-2 border-black p-2 rounded flex flex-col items-center hover:bg-yellow-100 transition-colors">
-                                        <span className="text-2xl">{ITEMS_DB[id].icon}</span>
-                                        <span className="text-[10px] font-bold text-center leading-tight mt-1">{ITEMS_DB[id].name}</span>
-                                    </button>
-                                ))}
-                                {user?.inventory.filter(id => ITEMS_DB[id].type === 'Food').length === 0 && <div className="col-span-3 text-center text-gray-500 italic">No food! Buy some in the Shop.</div>}
+                        <div className="bg-white w-full p-4 rounded-t-3xl border-t-4 border-black animate-slide-up h-2/3 overflow-y-auto shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
+                            <h3 className="font-black text-xl mb-4">INVENTORY</h3>
+                            
+                            {/* Driver Section */}
+                            <div className="mb-4">
+                                <h4 className="text-xs font-black text-gray-500 mb-2">PROTOCOL DRIVERS</h4>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {user?.inventory.filter(id => ITEMS_DB[id].type === 'Driver').map((id, idx) => (
+                                        <button key={idx} onClick={() => handleFeed(id)} className="border-2 border-black p-2 rounded flex flex-col items-center hover:bg-purple-100 transition-colors bg-gray-50">
+                                            <span className="text-2xl">{ITEMS_DB[id].icon}</span>
+                                            <span className="text-[10px] font-bold text-center leading-tight mt-1">{ITEMS_DB[id].name}</span>
+                                        </button>
+                                    ))}
+                                    {user?.inventory.filter(id => ITEMS_DB[id].type === 'Driver').length === 0 && <div className="col-span-3 text-center text-[10px] text-gray-400 italic p-2 border-2 border-dashed">Hunt monsters to find Drivers.</div>}
+                                </div>
                             </div>
+
+                            {/* Food Section */}
+                            <div className="mb-4">
+                                <h4 className="text-xs font-black text-gray-500 mb-2">CONSUMABLES</h4>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {user?.inventory.filter(id => ITEMS_DB[id].type !== 'Driver').map((id, idx) => (
+                                        <button key={idx} onClick={() => handleFeed(id)} className="border-2 border-black p-2 rounded flex flex-col items-center hover:bg-yellow-100 transition-colors">
+                                            <span className="text-2xl">{ITEMS_DB[id].icon}</span>
+                                            <span className="text-[10px] font-bold text-center leading-tight mt-1">{ITEMS_DB[id].name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            
                             <button onClick={() => setIsFeeding(false)} className="mt-4 w-full py-3 font-bold bg-gray-200 rounded hover:bg-gray-300">CANCEL</button>
                         </div>
                     </div>
@@ -1044,10 +1111,12 @@ const App: React.FC = () => {
                     <div className="bg-white border-2 border-black px-4 py-2 rounded-full shadow-[4px_4px_0px_0px_black] pointer-events-auto flex gap-4 items-center min-w-[200px]">
                         <div className="w-full">
                             <div className="font-black text-lg flex justify-between"><span>{activePet.name}</span><span className="text-xs text-gray-500">{activePet.stage} Lv.{activePet.level}</span></div>
+                            
+                            <ProtocolMonitor pet={activePet} />
+
                             <div className="flex flex-col gap-1 mt-1">
                                 <StatBar label="HP" value={activePet.currentHp} max={activePet.maxHp} color="bg-green-500" />
                                 <StatBar label="HUN" value={activePet.hunger} max={100} color="bg-orange-400" />
-                                <StatBar label="HAP" value={activePet.happiness || 50} max={100} color="bg-pink-400" />
                             </div>
                         </div>
                     </div>
@@ -1070,7 +1139,7 @@ const App: React.FC = () => {
                     </div>
                     <div className="bg-white border-t-4 border-x-4 border-black rounded-t-3xl p-4 grid grid-cols-4 gap-2 shadow-[0px_-10px_0px_0px_rgba(0,0,0,0.1)] pointer-events-auto">
                         <NavButton label="ARENA" icon={ICONS.SWORD} onClick={startArenaBattle} />
-                        <NavButton label="FEED" icon={ICONS.FOOD} onClick={() => setIsFeeding(true)} />
+                        <NavButton label="ITEMS" icon={ICONS.FOOD} onClick={() => setIsFeeding(true)} />
                         <NavButton label="TRAIN" icon={ICONS.TRAIN} onClick={() => handleTrain('atk')} />
                         <NavButton label="CARDS" icon={ICONS.CARDS} onClick={() => setGameState('INVENTORY')} />
                     </div>

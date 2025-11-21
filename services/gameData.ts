@@ -19,7 +19,7 @@ export const EVO_THRESHOLDS = {
 export interface GameItem {
     id: string;
     name: string;
-    type: 'Consumable' | 'Material' | 'Key' | 'Food';
+    type: 'Consumable' | 'Material' | 'Key' | 'Food' | 'Driver';
     description: string;
     effect?: (pet: any) => any;
     icon: string;
@@ -98,16 +98,24 @@ export const determineEvolutionPath = (stats: {atk: number, def: number, spd: nu
     // 1. Determine Dominant Protocol based on highest stat
     let dominant = 'BALANCED';
     let protocolName = 'Core Protocol';
+    let color = 'text-gray-500';
+    let icon = '⚪';
     
     if (atk >= def && atk >= spd) {
         dominant = 'ATTACK';
         protocolName = 'Crimson Protocol'; // Striker
+        color = 'text-red-500';
+        icon = '🔴';
     } else if (def > atk && def > spd) {
         dominant = 'DEFENSE';
         protocolName = 'Titanium Protocol'; // Tank
+        color = 'text-slate-600';
+        icon = '🛡️';
     } else if (spd > atk && spd > def) {
         dominant = 'SPEED';
         protocolName = 'Azure Protocol'; // Speedster
+        color = 'text-blue-500';
+        icon = '⚡';
     }
     
     // 2. Determine Alignment (Corruption vs Ascension)
@@ -115,7 +123,7 @@ export const determineEvolutionPath = (stats: {atk: number, def: number, spd: nu
     if (happiness >= 85) alignment = 'LUMINOUS'; // Holy/Ascended
     if (happiness <= 25) alignment = 'CORRUPTED'; // Dark/Glitch
 
-    return { dominant, alignment, protocolName };
+    return { dominant, alignment, protocolName, color, icon };
 };
 
 // --- PROCEDURAL ART GENERATOR ---
@@ -202,12 +210,6 @@ export const ITEMS_DB: Record<string, GameItem> = {
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 10); pet.happiness = Math.min(100, (pet.happiness || 50) + 20); return pet; },
         icon: '🍬', rarity: 'Rare', price: 80
     },
-    'void_soup': {
-        id: 'void_soup', name: 'Void Soup', type: 'Food',
-        description: 'Dark matter broth. +80 Hunger, chance to confuse.',
-        effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 80); return pet; },
-        icon: '🍲', rarity: 'Epic', price: 120
-    },
     'neon_soda': {
         id: 'neon_soda', name: 'Neon Soda', type: 'Food',
         description: 'Glowing fizz. +20 Hunger, +20 Speed boost (temp).',
@@ -240,23 +242,31 @@ export const ITEMS_DB: Record<string, GameItem> = {
         effect: (pet: any) => { pet.fatigue = Math.max(0, pet.fatigue - 50); return pet; },
         icon: '⚡', rarity: 'Common', price: 100
     },
-    'atk_boost': {
-        id: 'atk_boost', name: 'Crimson Drive', type: 'Consumable',
-        description: 'Permanently increases ATK by 5.',
-        effect: (pet: any) => { pet.atk += 5; return pet; },
-        icon: '⚔️', rarity: 'Rare', price: 1000
-    },
-    'spd_boost': {
-        id: 'spd_boost', name: 'Azure Drive', type: 'Consumable',
-        description: 'Permanently increases SPD by 5.',
-        effect: (pet: any) => { pet.spd += 5; return pet; },
-        icon: '⏩', rarity: 'Rare', price: 1000
-    },
     'mystery_box': {
         id: 'mystery_box', name: 'Mystery Box', type: 'Consumable',
         description: 'Contains a random item.',
         effect: (pet: any) => { return pet; }, // Logic handled in app
         icon: '🎁', rarity: 'Epic', price: 500
+    },
+
+    // PROTOCOL DRIVERS (The Grinding Loop Rewards)
+    'driver_crimson': {
+        id: 'driver_crimson', name: 'Crimson Driver', type: 'Driver',
+        description: 'Forces logic circuits to prioritize violence. +5 ATK.',
+        effect: (pet: any) => { pet.atk += 5; return pet; },
+        icon: '🔴', rarity: 'Rare', price: 800
+    },
+    'driver_titanium': {
+        id: 'driver_titanium', name: 'Titanium Driver', type: 'Driver',
+        description: 'Reinforces chassis integrity. +5 DEF.',
+        effect: (pet: any) => { pet.def += 5; return pet; },
+        icon: '🛡️', rarity: 'Rare', price: 800
+    },
+    'driver_azure': {
+        id: 'driver_azure', name: 'Azure Driver', type: 'Driver',
+        description: 'Overclocks motor refresh rates. +5 SPD.',
+        effect: (pet: any) => { pet.spd += 5; return pet; },
+        icon: '⚡', rarity: 'Rare', price: 800
     }
 };
 
@@ -324,11 +334,20 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
 
 export const getLootDrop = (rank: string): string | null => {
     const rand = Math.random();
-    if (rand > 0.98) return 'revive_chip';
-    if (rand > 0.90) return 'mystery_box';
-    if (rand > 0.85) return 'potion_super';
-    if (rand > 0.60) return 'potion_small';
+    // High End Loot
+    if (rand > 0.97) return 'revive_chip';
+    if (rand > 0.92) return 'mystery_box';
+    
+    // Drivers (The Evolution Grinding Loop)
+    if (rand > 0.88) return 'driver_crimson';
+    if (rand > 0.84) return 'driver_titanium';
+    if (rand > 0.80) return 'driver_azure';
+
+    // Mid Tier
+    if (rand > 0.60) return 'potion_super';
     if (rand > 0.50) return 'energy_drink';
+    
+    // Common
     if (rand > 0.30) return 'data_burger';
     if (rand > 0.15) return 'pixel_pizza';
     return null;
