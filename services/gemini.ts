@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -6,7 +5,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { extractHtmlFromText } from "../utils/html";
-import { BodyType, AITactic, determineEvolutionPath, MonsterStage } from "./gameData";
+import { BodyType, AITactic, determineEvolutionPath, MonsterStage, getProceduralMonsterArt } from "./gameData";
 
 // Ensure we use the API key from the environment
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -52,6 +51,7 @@ export const VOXEL_PROMPT = `
     - Material: \`new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });\`
     - Scale: \`outline.scale.multiplyScalar(1.06);\`
     - Add outline to the same parent group.
+  - **COLORS:** Use BRIGHT, SATURATED colors (Pastels, Neon). Avoid dark muddy colors.
   - **PROCEDURAL IK (Inverse Kinematics):**
     - Use \`SimplexNoise\` to generate the floor height \`y\` at any \`x, z\`.
     - In \`animate()\`:
@@ -112,6 +112,79 @@ export interface MonsterStats {
   happiness?: number;
 }
 
+export const getGenericVoxel = (element: string = 'Neutral'): string => {
+    const colors: Record<string, string> = {
+        Fire: '0xff4400', Water: '0x0088ff', Grass: '0x00cc44',
+        Electric: '0xffcc00', Psychic: '0xaa00ff', Metal: '0x888888',
+        Dark: '0x220044', Light: '0xffffee', Spirit: '0x6600cc', Toxic: '0x88cc00'
+    };
+    const c = colors[element] || '0xcccccc';
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+<style>body{margin:0;overflow:hidden;background:transparent;}</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(15,15,15);
+const renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000000, 0);
+document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false; controls.autoRotate = true; controls.autoRotateSpeed = 2.0;
+controls.minDistance = 10; controls.maxDistance = 30;
+
+const light = new THREE.DirectionalLight(0xffffff, 2);
+light.position.set(10,20,10);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+
+const group = new THREE.Group();
+scene.add(group);
+
+// Base body
+const mat = new THREE.MeshStandardMaterial({color: ${c}});
+const geo = new THREE.BoxGeometry(4,4,4);
+const mesh = new THREE.Mesh(geo, mat);
+group.add(mesh);
+
+// Eyes
+const eyeGeo = new THREE.BoxGeometry(1,1,0.5);
+const eyeMat = new THREE.MeshBasicMaterial({color:0x000000});
+const e1 = new THREE.Mesh(eyeGeo, eyeMat); e1.position.set(-1, 0.5, 2); group.add(e1);
+const e2 = new THREE.Mesh(eyeGeo, eyeMat); e2.position.set(1, 0.5, 2); group.add(e2);
+
+// Outline
+const outlineMat = new THREE.MeshBasicMaterial({color:0x000000, side:THREE.BackSide});
+const outline = new THREE.Mesh(geo, outlineMat);
+outline.scale.set(1.05,1.05,1.05);
+group.add(outline);
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  group.position.y = Math.sin(Date.now() * 0.003) * 0.5;
+  renderer.render(scene, camera);
+}
+animate();
+window.onresize = () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+</script>
+</body>
+</html>`;
+};
+
 export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> => {
   try {
     if (!imageBase64) throw new Error("Image data is missing");
@@ -128,18 +201,18 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
           {
             text: `Analyze this object and **TRANSFORM IT** into a "Pixupet" Digital Monster.
             
-            **CRITICAL RULE: ALL NEW SCANS START AS "SPARK" STAGE.**
-            Sparks are the "Baby/Rookie" data form. They are SMALL, CHIBI, COMPACT, and Cute. They NEVER have heavy armor or complex weapons yet.
+            **CRITICAL RULES FOR NAME & COPYRIGHT:**
+            1. **IGNORE TEXT:** Do NOT use brand names or text written on the object. (e.g., if it says "Coca Cola", call it "Soda Bot").
+            2. **CONCEPT ONLY:** Name the monster based on the object's FUNCTION or SHAPE.
+            3. **NAMING STYLE:** Use a "Tech/Gamer" suffix: -Bot, -Droid, -Unit, -Pixel, -Glitch, -Bit.
+               - *Example:* Shoe -> "Sprint Unit Noob".
+               - *Example:* Plant -> "Eco Droid Noob".
+               - *Example:* Mug -> "Ceramic Vessel Noob".
             
-            TASK:
-            1. Identify the base object (e.g., Bottle, Shoe, Plant).
-            2. **GAMIFY (SPARK FORM):** Reimagine it as a small digital creature.
-               - *Example:* Bottle -> "Aqua Slime Spark".
-               - *Example:* Shoe -> "Speedy Pup Spark".
-            
-            3. VISUAL_DESIGN: Write a prompt for a voxel artist. Describe a SMALL, BIG-HEADED, SIMPLE geometry creature.
-               Focus on the core essence of the object, not the details.
-            
+            **VISUAL RULES:**
+            - All scans start as "Noob" Stage (Small, cute, chibi).
+            - Visual design should be "Voxel Pop Art".
+
             Return JSON.`
           }
         ]
@@ -152,7 +225,7 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
             name: { type: Type.STRING },
             element: { type: Type.STRING, enum: ['Fire', 'Water', 'Grass', 'Electric', 'Psychic', 'Metal', 'Dark', 'Light', 'Spirit', 'Toxic'] },
             rarity: { type: Type.STRING, enum: ['Common', 'Rare', 'Epic', 'Legendary', 'Glitch'] },
-            stage: { type: Type.STRING, enum: ['Spark'] }, // STRICTLY SPARK
+            stage: { type: Type.STRING, enum: ['Noob'] }, // STRICTLY NOOB
             rank: { type: Type.STRING }, 
             nature: { type: Type.STRING },
             visual_design: { type: Type.STRING },
@@ -189,7 +262,7 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
       id: generateId(),
       dateCreated: Date.now(),
       tactic: 'BALANCED',
-      stage: 'Spark', 
+      stage: 'Noob', 
       happiness: 50
     };
   } catch (error) {
@@ -198,46 +271,11 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
   }
 };
 
-// Fallback SVG generator to prevent crashes if API fails
-const getFallbackImage = (seed: string) => {
-    const hue = Math.floor(Math.random() * 360);
-    return `data:image/svg+xml;base64,${btoa(`
-        <svg width="300" height="400" viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg">
-            <rect width="300" height="400" fill="#111"/>
-            <circle cx="150" cy="200" r="100" fill="hsl(${hue}, 70%, 50%)" opacity="0.5"/>
-            <text x="150" y="200" fill="white" text-anchor="middle" font-family="monospace" font-size="20">IMAGE SYSTEM OFFLINE</text>
-            <text x="150" y="230" fill="#666" text-anchor="middle" font-family="monospace" font-size="12">${seed}</text>
-        </svg>
-    `)}`;
-}
-
-export const generateImage = async (prompt: string, aspectRatio: string = '1:1', optimize: boolean = true): Promise<string> => {
-  try {
-    // Try Imagen 3
-    const response = await ai.models.generateImages({
-        model: 'imagen-3.0-generate-001',
-        prompt: prompt,
-        config: {
-            numberOfImages: 1,
-            aspectRatio: aspectRatio as any,
-            outputMimeType: 'image/jpeg'
-        }
-    });
-    
-    const base64 = response.generatedImages?.[0]?.image?.imageBytes;
-    if (base64) {
-        return `data:image/jpeg;base64,${base64}`;
-    }
-    throw new Error("No image data returned");
-  } catch (error) {
-    console.warn("Art Generation Failed (Likely API Key Permission), using fallback.", error);
-    return getFallbackImage(prompt.substring(0, 10));
-  }
-};
-
 export const generateCardArt = async (monsterDescription: string, objectName: string, visualDesign: string): Promise<string> => {
-    const prompt = `Anime Trading Card Art. Character: ${visualDesign}. Style: Neo-Pop, Bold Outlines, Cyberpunk Background.`;
-    return generateImage(prompt, '3:4', false);
+    // Since we can't easily use Imagen with API keys reliably, use the procedural generator
+    // This ensures copyright safety and 100% uptime.
+    // We use the objectName to seed the procedural generation
+    return getProceduralMonsterArt(objectName, "Psychic"); // Defaulting element or need to pass it.
 };
 
 export const generateVoxelScene = async (imageBase64: string, visualDescription: string, bodyType: string = 'BIPED'): Promise<string> => {
@@ -246,11 +284,18 @@ export const generateVoxelScene = async (imageBase64: string, visualDescription:
   const JUICE_INSTRUCTIONS = `
     ## CRITICAL ART DIRECTION:
     1. **GAMIFY:** Build the "Pixupet" described.
-    2. **STAGE AWARENESS:** If description says "Spark", keep voxels chunky and simple (8-bit style). If "Turbo" or "Nova", use high voxel density and complex attachments.
+    2. **STAGE AWARENESS:**
+       - **NOOB:** Chunky, 8-bit vibe, simple, big head, small body.
+       - **PRO:** Defined limbs, cool props, teenager vibe.
+       - **ELITE:** High detail, armor, weapons, serious look.
+       - **LEGEND:** God-tier, massive scale, aura, floating parts.
     3. **OUTLINES:** You MUST implement the 'Inverted Hull' method.
     4. **PHYSICS/IK:** Feet/Base must track ground noise height.
+    5. **COLORS:** Use BRIGHT, HAPPY COLORS. Avoid dark sci-fi tones. Think Splatoon or Nintendo.
   `;
   
+  // NOTE: We do NOT pass imageBase64 anymore to avoid the model just reconstructing the photo.
+  // We rely purely on the text description generated by the analysis phase.
   const PROMPT_WITH_CONTEXT = `${VOXEL_PROMPT}\n\n### TARGET VISUAL_DESIGN:\n"${visualDescription}"\n### BODY_TYPE: ${bodyType}\n### INSTRUCTIONS: ${JUICE_INSTRUCTIONS}`;
   contentsPart.push({ text: PROMPT_WITH_CONTEXT });
 
@@ -291,36 +336,36 @@ export const evolveVoxelScene = async (pet: MonsterStats) => {
         happiness: pet.happiness || 50 
     });
 
-    let nextStage: MonsterStage = 'Surge';
+    let nextStage: MonsterStage = 'Pro';
     let scaleMultiplier = 1.0;
     
     const currentStage = pet.stage as string;
     
-    if (currentStage === 'Spark' || currentStage === 'Rookie') {
-        nextStage = 'Surge';
+    if (currentStage === 'Noob' || currentStage === 'Spark') {
+        nextStage = 'Pro';
         scaleMultiplier = 1.5;
-    } else if (currentStage === 'Surge' || currentStage === 'Champion') {
-        nextStage = 'Turbo';
+    } else if (currentStage === 'Pro' || currentStage === 'Surge') {
+        nextStage = 'Elite';
         scaleMultiplier = 2.0;
-    } else if (currentStage === 'Turbo' || currentStage === 'Ultimate') {
-        nextStage = 'Nova';
+    } else if (currentStage === 'Elite' || currentStage === 'Turbo') {
+        nextStage = 'Legend';
         scaleMultiplier = 3.0;
     }
 
-    let evolutionPrompt = `Current Stage: ${pet.stage}. Next Stage: ${nextStage}. Protocol: ${protocolName}.`;
+    let evolutionPrompt = `Current Stage: ${pet.stage}. Next Stage: ${nextStage}. Build Type: ${protocolName}.`;
 
     if (dominant === 'ATTACK') {
-        evolutionPrompt += " The creature evolves via CRIMSON PROTOCOL. Physical weapons manifest: Energy Blades, Giant Claws, or Cannons. Stance is aggressive and predatory.";
+        evolutionPrompt += " The creature evolves via DPS BUILD. Big fists, weapons, aggressive look.";
     } else if (dominant === 'DEFENSE') {
-        evolutionPrompt += " The creature evolves via TITANIUM PROTOCOL. Heavy Armor plating manifests. Shields, domes, or crystallized skin. Stance is unmovable.";
+        evolutionPrompt += " The creature evolves via TANK BUILD. Heavy shell, shields, sturdy legs.";
     } else if (dominant === 'SPEED') {
-        evolutionPrompt += " The creature evolves via AZURE PROTOCOL. Thrusters, Wings, Wheels, or Hover-Tech manifest. Body becomes streamlined and aerodynamic.";
+        evolutionPrompt += " The creature evolves via SPEEDRUN BUILD. Wheels, wings, thrusters, sleek.";
     }
 
     if (alignment === 'CORRUPTED') {
-        evolutionPrompt += " WARNING: HAPPINESS CRITICAL. Evolution is GLITCHED/VIRUS type. Broken geometry, dark aura, jagged red eyes, erratic appearance.";
+        evolutionPrompt += " WARNING: TOXIC PLAYER VIBES. Evolution is Glitchy/Edgy.";
     } else if (alignment === 'LUMINOUS') {
-        evolutionPrompt += " HAPPINESS MAXIMAL. Evolution is ASCENDED/DATA-ANGEL type. Golden rings, white aura, majestic floating elements.";
+        evolutionPrompt += " GG WP VIBES. Evolution is Angelic/Clean.";
     }
 
     const visual_design = `
@@ -328,15 +373,16 @@ export const evolveVoxelScene = async (pet: MonsterStats) => {
         Base Form: ${pet.visual_design}.
         
         ART DIRECTION:
-        - **Complexity:** ${nextStage === 'Surge' ? 'Medium (Teenager)' : nextStage === 'Turbo' ? 'High (Mecha/Armored)' : 'God-Tier (Complex Geometry)'}.
+        - **Complexity:** ${nextStage === 'Pro' ? 'Medium (Teenager)' : nextStage === 'Elite' ? 'High (Cool Gear)' : 'God-Tier (Massive)'}.
         - **Scale:** This model should look ${scaleMultiplier}x larger/taller than the previous one.
         - **Theme:** ${evolutionPrompt}
+        - **Style:** Vector Pop Art Voxel.
     `;
 
     let prefix = "";
-    if (nextStage === 'Surge') prefix = alignment === 'CORRUPTED' ? "Dark" : "Neo";
-    if (nextStage === 'Turbo') prefix = dominant === 'ATTACK' ? "War" : dominant === 'DEFENSE' ? "Iron" : "Jet";
-    if (nextStage === 'Nova') prefix = "Omega";
+    if (nextStage === 'Pro') prefix = alignment === 'CORRUPTED' ? "Edgy" : "Neo";
+    if (nextStage === 'Elite') prefix = dominant === 'ATTACK' ? "Striker" : dominant === 'DEFENSE' ? "Guardian" : "Dasher";
+    if (nextStage === 'Legend') prefix = "Omega";
 
     const nextName = `${prefix} ${pet.name}`;
 
@@ -350,105 +396,3 @@ export const evolveVoxelScene = async (pet: MonsterStats) => {
         protocolName
     };
 }
-
-export const getGenericVoxel = (element: string) => {
-    const colors: any = {
-        Fire: '0xFF5555', Water: '0x5555FF', Grass: '0x55FF55', Electric: '0xFFFF55',
-        Psychic: '0xFF55FF', Metal: '0xAAAAAA', Dark: '0x333333', Light: '0xFFFFFF',
-        Spirit: '0xAA55FF', Toxic: '0xAAFF55'
-    };
-    const colorHex = colors[element] || '0xAAAAAA';
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <style>body { margin: 0; overflow: hidden; background: transparent !important; }</style>
-    <script type="importmap">
-    {
-        "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-        }
-    }
-    </script>
-</head>
-<body>
-<script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
-    const scene = new THREE.Scene();
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 8, 18); 
-    
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.enablePan = false; 
-    controls.minDistance = 8;
-    controls.maxDistance = 20;
-    controls.maxPolarAngle = Math.PI / 2;
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(5, 10, 5);
-    scene.add(dirLight);
-
-    const heroGroup = new THREE.Group();
-    scene.add(heroGroup);
-
-    // Slime Body
-    const geometry = new THREE.SphereGeometry(0.8, 16, 16);
-    const material = new THREE.MeshStandardMaterial({ color: ${colorHex}, roughness: 0.2, metalness: 0.1 });
-    const body = new THREE.Mesh(geometry, material);
-    body.scale.y = 0.8; 
-    heroGroup.add(body);
-    
-    const outlineGeo = geometry.clone();
-    const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
-    const outline = new THREE.Mesh(outlineGeo, outlineMat);
-    outline.scale.setScalar(1.05); 
-    heroGroup.add(outline);
-    
-    const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
-    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(-0.3, 0.3, 0.6);
-    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(0.3, 0.3, 0.6);
-    
-    heroGroup.add(leftEye);
-    heroGroup.add(rightEye);
-
-    let paused = false;
-    window.addEventListener('message', (e) => {
-        if(e.data.type === 'PAUSE') paused = e.data.value;
-    });
-
-    const clock = new THREE.Clock();
-
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        if(paused) return;
-
-        const t = clock.getElapsedTime();
-        heroGroup.position.y = Math.abs(Math.sin(t * 3)) * 0.2;
-        
-        renderer.render(scene, camera);
-    }
-    animate();
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-</script>
-</body>
-</html>`;
-};

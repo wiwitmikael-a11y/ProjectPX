@@ -6,35 +6,26 @@
 
 export type BodyType = 'BIPED' | 'QUADRUPED' | 'FLOATING' | 'WHEELED' | 'SERPENTINE';
 export type AITactic = 'BALANCED' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SPEEDSTER';
-// NEW STAGE NAMES: Cyber-Organic Theme
-export type MonsterStage = 'Spark' | 'Surge' | 'Turbo' | 'Nova';
+
+// NEW STAGE NAMES: Casual Gamer Lingo
+export type MonsterStage = 'Noob' | 'Pro' | 'Elite' | 'Legend';
 
 export const EVO_THRESHOLDS = {
-    SURGE: 10,
-    TURBO: 25,
-    NOVA: 50
+    PRO: 10,
+    ELITE: 25,
+    LEGEND: 50
 };
 
 export interface GameItem {
     id: string;
     name: string;
-    type: 'Consumable' | 'Material' | 'Key' | 'Food' | 'Driver';
+    type: 'Consumable' | 'Material' | 'Key' | 'Food' | 'Mod';
     description: string;
     effect?: (pet: any) => any;
     icon: string;
     rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
     price: number;
     value?: number; 
-}
-
-export interface ObjectArchetype {
-    element: string;
-    defaultBodyType: BodyType;
-    hp?: number;
-    atk?: number;
-    def?: number;
-    spd?: number;
-    int?: number;
 }
 
 export interface OfflineReport {
@@ -45,6 +36,37 @@ export interface OfflineReport {
     hpLost: number;
     events: string[];
 }
+
+// --- STARTER PACKS (PROCEDURAL DUMMY PETS) ---
+export const STARTER_PACKS = [
+    {
+        id: 'starter_fire',
+        name: 'Pyro Bit',
+        element: 'Fire',
+        description: 'A fiery glitch in the system. Loves to burn CPU cycles.',
+        stats: { hp: 80, atk: 15, def: 8, spd: 12 },
+        visual_design: 'Small flame spirit, voxel ember particles, glowing red core.',
+        bodyType: 'BIPED'
+    },
+    {
+        id: 'starter_water',
+        name: 'Aqua Byte',
+        element: 'Water',
+        description: 'Fluid data stream. Cool under pressure.',
+        stats: { hp: 100, atk: 10, def: 10, spd: 10 },
+        visual_design: 'Blue droplet shape, floating bubbles, liquid texture.',
+        bodyType: 'FLOATING'
+    },
+    {
+        id: 'starter_grass',
+        name: 'Terra Pixel',
+        element: 'Grass',
+        description: 'Rooted in the mainframe. High defense capabilities.',
+        stats: { hp: 120, atk: 8, def: 15, spd: 6 },
+        visual_design: 'Blocky moss creature, flower on head, sturdy legs.',
+        bodyType: 'QUADRUPED'
+    }
+];
 
 export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineReport => {
     const now = Date.now();
@@ -65,7 +87,7 @@ export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineRep
         xpGained = Math.floor(diffSeconds * xpRate);
         coinsFound = Math.floor(diffSeconds * (10/3600)); 
         pet.hunger = Math.max(0, remainingHunger);
-        events.push(`Explored for ${(diffSeconds/60).toFixed(0)} mins.`);
+        events.push(`AFK Farming: ${(diffSeconds/60).toFixed(0)} mins.`);
     } else {
         const safeTime = pet.hunger / hungerDropRate;
         const starvingTime = diffSeconds - safeTime;
@@ -76,8 +98,8 @@ export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineRep
         hpLost = Math.floor(starvingTime * (5/3600));
         pet.currentHp = Math.max(0, pet.currentHp - hpLost);
         
-        events.push("Ran out of food and got weak...");
-        if (pet.currentHp === 0) events.push("Fainted from hunger!");
+        events.push("AFK failed. Ran out of snacks.");
+        if (pet.currentHp === 0) events.push("Passed out. GG.");
     }
 
     return {
@@ -90,45 +112,45 @@ export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineRep
     };
 };
 
-// --- EVOLUTION PATH LOGIC (THE PROTOCOLS) ---
+// --- EVOLUTION PATH LOGIC (THE BUILD CHECK) ---
 export const determineEvolutionPath = (stats: {atk: number, def: number, spd: number, happiness: number}) => {
     const { atk, def, spd, happiness } = stats;
     
-    // 1. Determine Dominant Protocol based on highest stat
+    // 1. Determine Dominant Build
     let dominant = 'BALANCED';
-    let protocolName = 'Core Protocol';
+    let protocolName = 'Basic Build';
     let color = 'text-gray-500';
     let borderColor = 'border-gray-500';
-    let icon = '⚪';
-    let desc = "Balanced growth. No specialized evolution detected.";
+    let icon = '😐';
+    let desc = "Noob stats. Grind more.";
     
     if (atk >= def && atk >= spd) {
         dominant = 'ATTACK';
-        protocolName = 'Crimson Protocol'; // Striker
+        protocolName = 'DPS Build'; // High Damage
         color = 'text-red-500';
         borderColor = 'border-red-500';
-        icon = '🔴';
-        desc = "Evolution Path: STRIKER (High Damage)";
+        icon = '⚔️';
+        desc = "Next Rank: GLASS CANNON (Full Damage)";
     } else if (def > atk && def > spd) {
         dominant = 'DEFENSE';
-        protocolName = 'Titanium Protocol'; // Tank
-        color = 'text-slate-400';
-        borderColor = 'border-slate-400';
+        protocolName = 'Tank Build'; // High Def
+        color = 'text-blue-500';
+        borderColor = 'border-blue-500';
         icon = '🛡️';
-        desc = "Evolution Path: GUARDIAN (High Armor)";
+        desc = "Next Rank: THE WALL (Unkillable)";
     } else if (spd > atk && spd > def) {
         dominant = 'SPEED';
-        protocolName = 'Azure Protocol'; // Speedster
-        color = 'text-cyan-400';
-        borderColor = 'border-cyan-400';
-        icon = '⚡';
-        desc = "Evolution Path: VELOCITY (High Evasion)";
+        protocolName = 'Speedrun Build'; // High Speed
+        color = 'text-yellow-500';
+        borderColor = 'border-yellow-500';
+        icon = '👟';
+        desc = "Next Rank: SPEEDSTER (Dodge Everything)";
     }
     
-    // 2. Determine Alignment (Corruption vs Ascension)
+    // 2. Determine Alignment
     let alignment = 'NEUTRAL';
-    if (happiness >= 85) alignment = 'LUMINOUS'; // Holy/Ascended
-    if (happiness <= 25) alignment = 'CORRUPTED'; // Dark/Glitch
+    if (happiness >= 85) alignment = 'LUMINOUS'; // Good Vibes
+    if (happiness <= 25) alignment = 'CORRUPTED'; // Toxic Vibes
 
     return { dominant, alignment, protocolName, color, borderColor, icon, desc };
 };
@@ -140,44 +162,30 @@ export const getProceduralMonsterArt = (name: string, element: string): string =
         hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     
-    const colors = ELEMENT_THEMES[element as keyof typeof ELEMENT_THEMES] || { bg: '#888', text: '#fff' };
-    const primaryColor = colors.bg.replace('bg-', '').replace('-400', ''); 
-    
     const hexMap: any = {
-        Fire: '#F87171', Water: '#60A5FA', Grass: '#4ADE80', Electric: '#FACC15',
-        Psychic: '#C084FC', Metal: '#9CA3AF', Dark: '#1F2937', Light: '#FEF08A',
-        Spirit: '#818CF8', Toxic: '#A3E635'
+        Fire: '#FCA5A5', Water: '#93C5FD', Grass: '#86EFAC', Electric: '#FDE047',
+        Psychic: '#D8B4FE', Metal: '#D1D5DB', Dark: '#4B5563', Light: '#FEF9C3',
+        Spirit: '#A5B4FC', Toxic: '#BEF264'
     };
-    const baseHex = hexMap[element] || '#999';
+    const baseHex = hexMap[element] || '#CBD5E1';
 
-    const shapes = [];
-    for(let i=0; i<5; i++) {
-        const sX = Math.abs((hash * (i+1) * 345) % 100);
-        const sY = Math.abs((hash * (i+2) * 678) % 100);
-        const sR = Math.abs((hash * (i+3) * 123) % 30) + 10;
-        shapes.push(`<circle cx="${sX}" cy="${sY}" r="${sR}" fill="${baseHex}" fill-opacity="0.4" />`);
-        shapes.push(`<rect x="${100-sX}" y="${100-sY}" width="${sR}" height="${sR}" fill="#fff" fill-opacity="0.2" transform="rotate(${sX} ${100-sX} ${100-sY})" />`);
+    // Generate a pattern of pixel blocks
+    const blocks = [];
+    for(let i=0; i<8; i++) {
+         for(let j=0; j<8; j++) {
+             if (Math.abs(Math.sin(hash * i * j)) > 0.5) {
+                 blocks.push(`<rect x="${20 + i*8}" y="${40 + j*8}" width="8" height="8" fill="rgba(0,0,0,0.2)" />`);
+             }
+         }
     }
 
     const svg = `
-    <svg width="200" height="280" viewBox="0 0 100 140" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-            <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:${baseHex};stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#000;stop-opacity:1" />
-            </linearGradient>
-            <filter id="glitch">
-                <feTurbulence type="fractalNoise" baseFrequency="0.1" numOctaves="1" result="noise" />
-                <feDisplacementMap in="SourceGraphic" in2="noise" scale="2" />
-            </filter>
-        </defs>
-        <rect width="100" height="140" fill="url(#grad)" />
-        <g filter="url(#glitch)">
-            ${shapes.join('')}
-            <text x="50" y="70" font-family="monospace" font-size="40" text-anchor="middle" fill="white" opacity="0.5">?</text>
-            <path d="M20,120 L80,120 L50,20 Z" fill="none" stroke="white" stroke-width="2" />
-        </g>
-        <rect x="10" y="10" width="80" height="80" fill="none" stroke="white" stroke-width="1" stroke-dasharray="4 2" />
+    <svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" fill="${baseHex}" />
+        <rect x="5" y="5" width="90" height="90" fill="none" stroke="white" stroke-width="2" stroke-dasharray="5,5" />
+        ${blocks.join('')}
+        <text x="50" y="85" font-family="monospace" font-weight="bold" font-size="10" text-anchor="middle" fill="black">${element.toUpperCase()} TYPE</text>
+        <text x="50" y="30" font-family="monospace" font-weight="bold" font-size="12" text-anchor="middle" fill="black">${name.substring(0,8)}</text>
     </svg>
     `;
     
@@ -186,114 +194,114 @@ export const getProceduralMonsterArt = (name: string, element: string): string =
 
 
 export const ELEMENT_THEMES: any = {
-  Fire: { bg: 'bg-red-500', text: 'text-white', icon: '🔥' },
-  Water: { bg: 'bg-blue-500', text: 'text-white', icon: '💧' },
-  Grass: { bg: 'bg-green-500', text: 'text-black', icon: '🌿' },
-  Electric: { bg: 'bg-yellow-400', text: 'text-black', icon: '⚡' },
-  Psychic: { bg: 'bg-purple-500', text: 'text-white', icon: '🔮' },
-  Metal: { bg: 'bg-gray-400', text: 'text-black', icon: '⚙️' },
+  Fire: { bg: 'bg-red-400', text: 'text-white', icon: '🔥' },
+  Water: { bg: 'bg-blue-400', text: 'text-white', icon: '💧' },
+  Grass: { bg: 'bg-green-400', text: 'text-black', icon: '🌿' },
+  Electric: { bg: 'bg-yellow-300', text: 'text-black', icon: '⚡' },
+  Psychic: { bg: 'bg-purple-400', text: 'text-white', icon: '🔮' },
+  Metal: { bg: 'bg-gray-300', text: 'text-black', icon: '⚙️' },
   Dark: { bg: 'bg-gray-800', text: 'text-white', icon: '🌑' },
   Light: { bg: 'bg-yellow-100', text: 'text-black', icon: '✨' },
-  Spirit: { bg: 'bg-indigo-500', text: 'text-white', icon: '👻' },
-  Toxic: { bg: 'bg-lime-500', text: 'text-black', icon: '☣️' },
+  Spirit: { bg: 'bg-indigo-400', text: 'text-white', icon: '👻' },
+  Toxic: { bg: 'bg-lime-400', text: 'text-black', icon: '☣️' },
 };
 
 export const ITEMS_DB: Record<string, GameItem> = {
     'pixel_pizza': {
-        id: 'pixel_pizza', name: 'Pixel Pizza', type: 'Food',
-        description: 'Greasy, blocky goodness. +40 Hunger.',
+        id: 'pixel_pizza', name: 'Cheat Code Pizza', type: 'Food',
+        description: 'Restaores hunger instantly. Devs favorite.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 40); pet.happiness = Math.min(100, (pet.happiness || 50) + 5); return pet; },
         icon: '🍕', rarity: 'Common', price: 30
     },
     'data_burger': {
-        id: 'data_burger', name: 'Data Burger', type: 'Food',
-        description: 'Packed with bytes. +60 Hunger.',
+        id: 'data_burger', name: 'RAM Burger', type: 'Food',
+        description: 'Greasy memory optimization. +60 Energy.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 60); pet.happiness = Math.min(100, (pet.happiness || 50) + 10); return pet; },
         icon: '🍔', rarity: 'Common', price: 60
     },
     'glitch_candy': {
-        id: 'glitch_candy', name: 'Glitch Candy', type: 'Food',
-        description: 'Spicy code errors. +10 Hunger, High Happiness.',
+        id: 'glitch_candy', name: 'Rare Candy (Legal)', type: 'Food',
+        description: 'Tastes like static. Boosts mood significantly.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 10); pet.happiness = Math.min(100, (pet.happiness || 50) + 20); return pet; },
         icon: '🍬', rarity: 'Rare', price: 80
     },
     'neon_soda': {
-        id: 'neon_soda', name: 'Neon Soda', type: 'Food',
-        description: 'Glowing fizz. +20 Hunger, +20 Speed boost (temp).',
+        id: 'neon_soda', name: 'Overclock Soda', type: 'Food',
+        description: 'Warning: May cause jittery pixels. +Energy.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 20); pet.happiness += 5; return pet; },
         icon: '🥤', rarity: 'Common', price: 40
     },
     
     // CONSUMABLES
     'potion_small': {
-        id: 'potion_small', name: 'Nano-Repair Kit', type: 'Consumable',
-        description: 'Restores 20 HP.',
+        id: 'potion_small', name: 'Debug Patch v1', type: 'Consumable',
+        description: 'Fixes minor health bugs. +20 HP.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 20); return pet; },
-        icon: '🩹', rarity: 'Common', price: 50
+        icon: '🧪', rarity: 'Common', price: 50
     },
     'potion_super': {
-        id: 'potion_super', name: 'Full System Restore', type: 'Consumable',
-        description: 'Restores 60 HP.',
+        id: 'potion_super', name: 'System Restore', type: 'Consumable',
+        description: 'Rolls back health to safe state. +60 HP.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 60); return pet; },
         icon: '💉', rarity: 'Rare', price: 150
     },
     'revive_chip': {
-        id: 'revive_chip', name: 'Reboot Chip', type: 'Consumable',
-        description: 'Revives a fainted pet with 50% HP.',
+        id: 'revive_chip', name: '1-UP Chip', type: 'Consumable',
+        description: 'Continue? (Y/N). Revives pet.',
         effect: (pet: any) => { if(pet.currentHp <= 0) pet.currentHp = Math.floor(pet.maxHp * 0.5); return pet; },
-        icon: '💾', rarity: 'Epic', price: 500
+        icon: '🕹️', rarity: 'Epic', price: 500
     },
     'energy_drink': {
-        id: 'energy_drink', name: 'Voltage Cola', type: 'Consumable',
-        description: 'Restores 50 Fatigue.',
+        id: 'energy_drink', name: 'AFK Potion', type: 'Consumable',
+        description: 'Reduces system fatigue. -50 Fatigue.',
         effect: (pet: any) => { pet.fatigue = Math.max(0, pet.fatigue - 50); return pet; },
         icon: '⚡', rarity: 'Common', price: 100
     },
     'mystery_box': {
-        id: 'mystery_box', name: 'Encrypted Cache', type: 'Consumable',
-        description: 'Decrypt to find a random item.',
+        id: 'mystery_box', name: 'Lootbox [RNG]', type: 'Consumable',
+        description: 'Gambling is fun! (Contains random items).',
         effect: (pet: any) => { return pet; }, // Logic handled in app
         icon: '📦', rarity: 'Epic', price: 500
     },
 
-    // PROTOCOL DRIVERS (The Grinding Loop Rewards)
+    // MODS (Formerly Drivers)
     'driver_crimson': {
-        id: 'driver_crimson', name: 'Crimson Driver', type: 'Driver',
-        description: 'Rewrites combat logic. +5 ATK.',
+        id: 'driver_crimson', name: 'Mod: VIOLENCE', type: 'Mod',
+        description: 'Install Aggressive Drivers. +5 ATK.',
         effect: (pet: any) => { pet.atk += 5; return pet; },
-        icon: '🔴', rarity: 'Rare', price: 1200
+        icon: '⚔️', rarity: 'Rare', price: 1200
     },
     'driver_titanium': {
-        id: 'driver_titanium', name: 'Titanium Driver', type: 'Driver',
-        description: 'Hardens hull density. +5 DEF.',
+        id: 'driver_titanium', name: 'Mod: FIREWALL', type: 'Mod',
+        description: 'Install Security Patch. +5 DEF.',
         effect: (pet: any) => { pet.def += 5; return pet; },
         icon: '🛡️', rarity: 'Rare', price: 1200
     },
     'driver_azure': {
-        id: 'driver_azure', name: 'Azure Driver', type: 'Driver',
-        description: 'Overclocks motor systems. +5 SPD.',
+        id: 'driver_azure', name: 'Mod: TURBO', type: 'Mod',
+        description: 'Install Overclock. +5 SPD.',
         effect: (pet: any) => { pet.spd += 5; return pet; },
-        icon: '⚡', rarity: 'Rare', price: 1200
+        icon: '👟', rarity: 'Rare', price: 1200
     }
 };
 
 const ENEMY_PREFIXES: Record<string, string[]> = {
-    Fire: ["Pyro", "Flame", "Blaze", "Magma", "Solar", "Inferno", "Ash", "Cinder", "Volcano", "Scorch"],
-    Water: ["Hydro", "Aqua", "Tide", "Abyss", "Coral", "Frost", "Mist", "Rain", "Storm", "Deep"],
-    Grass: ["Leaf", "Vine", "Root", "Moss", "Bloom", "Spore", "Thorn", "Bark", "Forest", "Wild"],
-    Electric: ["Volt", "Shock", "Zap", "Pulse", "Neon", "Wire", "Spark", "Thunder", "Lightning", "Flash"],
-    Metal: ["Iron", "Steel", "Chrome", "Rust", "Gear", "Mecha", "Alloy", "Titan", "Cyber", "Tech"],
-    Psychic: ["Mind", "Psi", "Zen", "Dream", "Aura", "Soul", "Brain", "Tele", "Mystic", "Void"],
-    Dark: ["Shadow", "Night", "Dusk", "Grim", "Null", "Obsidian", "Terror", "Phantom", "Shade", "Eclipse"],
-    Light: ["Luma", "Star", "Sun", "Holy", "Prism", "Bright", "Photon", "Glory", "Shine", "Dawn"],
-    Toxic: ["Venom", "Acid", "Sludge", "Virus", "Blight", "Rad", "Tox", "Hazard", "Waste", "Ooze"],
-    Spirit: ["Ghost", "Soul", "Phantom", "Specter", "Wisp", "Wraith", "Haunt", "Ecto", "Polter", "Shade"]
+    Fire: ["Overheated", "Flaming", "Thermal", "Blazing", "Spicy"],
+    Water: ["Liquid", "Damp", "Hydrated", "Fluid", "Deep"],
+    Grass: ["Rooted", "Wild", "Overgrown", "Mossy", "Eco"],
+    Electric: ["High-Voltage", "Glitchy", "Static", "Wired", "Shocking"],
+    Metal: ["Hardened", "Heavy", "Metallic", "Shiny", "Solid"],
+    Psychic: ["Wireless", "BigBrain", "Telepathic", "Zen", "Cosmic"],
+    Dark: ["Corrupted", "Shadow", "Dark", "Void", "Null"],
+    Light: ["Bright", "Luminous", "Flashy", "Holy", "Neon"],
+    Toxic: ["Infected", "Radioactive", "Hazardous", "Gross", "Slimy"],
+    Spirit: ["Ethereal", "Ghostly", "Phased", "Spectral", "Hollow"]
 };
 
-const ENEMY_SUFFIXES = ["Fang", "Claw", "Wing", "Bot", "Droid", "Beast", "Guardian", "Drone", "Stalker", "Watcher", "Glitch", "Maw", "Shell", "Core", "Unit", "Rex", "Viper", "Golem", "Scout", "Hunter"];
+const ENEMY_SUFFIXES = ["Unit", "Bot", "Droid", "Glitch", "Main", "V1", "Daemon", "Sprite", "Pixel", "Mesh"];
 
 const getEnemyName = (element: string) => {
-    const prefixes = ENEMY_PREFIXES[element] || ["Data"];
+    const prefixes = ENEMY_PREFIXES[element] || ["Random"];
     const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
     const suffix = ENEMY_SUFFIXES[Math.floor(Math.random() * ENEMY_SUFFIXES.length)];
     return `${prefix} ${suffix}`;
@@ -318,7 +326,7 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
         name: name,
         element,
         rarity: 'Common',
-        stage: 'Spark', // Wild ones are mostly Spark/Rookie
+        stage: 'Noob', // Wild ones are mostly Noob/Rookie
         rank: 'E',
         nature: 'Wild',
         personality: 'Aggressive',
@@ -332,8 +340,8 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
         int: 10,
         level: level,
         exp: 20 * level,
-        description: `A wild ${name} wandering the digital plains.`,
-        ability: "Glitch Aura",
+        description: `A wild ${name} looking for a fight.`,
+        ability: "Lag Switch",
         moves: [],
         bodyType,
         tactic: 'AGGRESSIVE',
@@ -344,9 +352,7 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
 export const getLootDrop = (rank: string): string | null => {
     const rand = Math.random();
     
-    // Adjusted rates for better gameplay loop
-    
-    // Drivers (10% chance - The core grinding goal)
+    // Mods (10% chance - The core grinding goal)
     if (rand > 0.90) return 'driver_crimson';
     if (rand > 0.85) return 'driver_titanium';
     if (rand > 0.80) return 'driver_azure';
