@@ -6,7 +6,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { extractHtmlFromText } from "../utils/html";
-import { BodyType, AITactic } from "./gameData";
+import { BodyType, AITactic, determineEvolutionPath, MonsterStage } from "./gameData";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -93,7 +93,7 @@ export interface MonsterStats {
   name: string;
   element: 'Fire' | 'Water' | 'Grass' | 'Electric' | 'Psychic' | 'Metal' | 'Dark' | 'Light' | 'Spirit' | 'Toxic';
   rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | 'Glitch';
-  stage: 'Rookie' | 'Champion' | 'Ultimate' | 'Mega'; 
+  stage: MonsterStage; 
   rank: 'E' | 'D' | 'C' | 'B' | 'A' | 'S'; 
   nature: string; 
   personality: string; 
@@ -119,25 +119,26 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
     const mimeMatch = imageBase64.match(/^data:(.*?);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-    // ENHANCED PROMPT: STRICT GAMIFICATION ANALYSIS
+    // ENHANCED PROMPT: STRICT GAMIFICATION ANALYSIS FOR "SPARK" FORM
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
           { inlineData: { mimeType, data: base64Data } },
           {
-            text: `Analyze this object and **TRANSFORM IT** into a "Pixupet" Battle Monster.
+            text: `Analyze this object and **TRANSFORM IT** into a "Pixupet" Digital Monster.
+            
+            **CRITICAL RULE: ALL NEW SCANS START AS "SPARK" STAGE.**
+            Sparks are the "Baby/Rookie" data form. They are SMALL, CHIBI, COMPACT, and Cute. They NEVER have heavy armor or complex weapons yet.
             
             TASK:
-            1. Identify the base object.
-            2. **GAMIFY & EQUIP:** Do not just describe the object. Reimagine it as an RPG character.
-               - **Armor:** Add plating, helmets, or shields that match the object's theme.
-               - **Weapons:** Add tails, claws, floating orbs, or energy blades.
-               - **Accessories:** Cybernetic visors, magical runes, scarves, or backpacks.
-               - *Example:* If it's a Shoe, make it a "Speedster Wolf" with lace-whips and rubber sole-armor.
+            1. Identify the base object (e.g., Bottle, Shoe, Plant).
+            2. **GAMIFY (SPARK FORM):** Reimagine it as a small digital creature.
+               - *Example:* Bottle -> "Aqua Slime Spark".
+               - *Example:* Shoe -> "Speedy Pup Spark".
             
-            3. VISUAL_DESIGN: Write a detailed prompt for an artist/3D modeler describing this *enhanced* version. 
-               **CRITICAL:** Explicitly describe the added armor and accessories. (e.g., "A floating teapot with a golden steam-powered jetpack and ceramic shield plating").
+            3. VISUAL_DESIGN: Write a prompt for a voxel artist. Describe a SMALL, BIG-HEADED, SIMPLE geometry creature.
+               Focus on the core essence of the object, not the details.
             
             Return JSON.`
           }
@@ -151,7 +152,7 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
             name: { type: Type.STRING },
             element: { type: Type.STRING, enum: ['Fire', 'Water', 'Grass', 'Electric', 'Psychic', 'Metal', 'Dark', 'Light', 'Spirit', 'Toxic'] },
             rarity: { type: Type.STRING, enum: ['Common', 'Rare', 'Epic', 'Legendary', 'Glitch'] },
-            stage: { type: Type.STRING }, 
+            stage: { type: Type.STRING, enum: ['Spark'] }, // STRICTLY SPARK
             rank: { type: Type.STRING }, 
             nature: { type: Type.STRING },
             visual_design: { type: Type.STRING },
@@ -188,6 +189,7 @@ export const analyzeObject = async (imageBase64: string): Promise<MonsterStats> 
       id: generateId(),
       dateCreated: Date.now(),
       tactic: 'BALANCED', // Default Tactic
+      stage: 'Spark', // Force Spark
       happiness: 50
     };
   } catch (error) {
@@ -212,7 +214,6 @@ export const generateImage = async (prompt: string, aspectRatio: string = '1:1',
 };
 
 export const generateCardArt = async (monsterDescription: string, objectName: string, visualDesign: string): Promise<string> => {
-    // CRITICAL: This prompt forces consistency with the 3D gamified design
     const prompt = `
     High-quality Anime Trading Card Art of a Monster.
     
@@ -221,11 +222,9 @@ export const generateCardArt = async (monsterDescription: string, objectName: st
     
     **STYLE GUIDE:**
     - **Neo-Pop Anime:** Vibrant colors, flat shading, thick bold black outlines (Cel-Shaded).
-    - **Chibi Proportions:** Slightly large head, cute but cool, matching the voxel aesthetic.
-    - **Pose:** Dynamic battle stance, showing off the armor/weapons described.
-    - **Composition:** Center frame, full body or 3/4 view.
-    - **Background:** Abstract elemental energy patterns (minimalist).
-    - **Consistency:** Must look exactly like the description provided. Do not revert to a normal object.
+    - **Dynamic:** Shows the scale and power appropriate for the description.
+    - **Composition:** Center frame, full body.
+    - **Background:** Abstract digital data stream patterns (minimalist).
     
     No text.
     `;
@@ -236,12 +235,11 @@ export const generateCardArt = async (monsterDescription: string, objectName: st
 export const generateVoxelScene = async (imageBase64: string, visualDescription: string, bodyType: string = 'BIPED'): Promise<string> => {
   let contentsPart: any[] = [];
   
-  // INJECT JUICE INSTRUCTIONS
   const JUICE_INSTRUCTIONS = `
     ## CRITICAL ART DIRECTION:
-    1. **GAMIFY:** This is NOT a normal object. You MUST build the "Pixupet" described below using voxels.
-    2. **ARMOR & ACCESSORIES:** Specifically create the armor, visors, and weapons mentioned in the VISUAL_DESIGN. Use distinct colors for these attachments.
-    3. **OUTLINES:** You MUST implement the 'Inverted Hull' method for every body part mesh. Code this explicitly.
+    1. **GAMIFY:** Build the "Pixupet" described.
+    2. **STAGE AWARENESS:** If description says "Spark", keep voxels chunky and simple (8-bit style). If "Turbo" or "Nova", use high voxel density and complex attachments.
+    3. **OUTLINES:** You MUST implement the 'Inverted Hull' method.
     4. **PHYSICS/IK:** Feet/Base must track ground noise height.
   `;
   
@@ -276,14 +274,80 @@ export const fuseVoxelScene = async (petA: MonsterStats, petB: MonsterStats) => 
     return { code, visual_design, name: `${petA.name.substring(0, 3)}${petB.name.substring(petB.name.length-3)}`, element: petA.element };
 };
 
+// --- COMPLEX EVOLUTION LOGIC (PROTOCOL BRANCHING) ---
 export const evolveVoxelScene = async (pet: MonsterStats) => {
-     const visual_design = `Evolved Mega Form of ${pet.name}. ${pet.visual_design} but bigger, with golden armor and glowing energy aura.`;
-     const code = await generateVoxelScene("", visual_design, pet.bodyType);
-     return { code, visual_design };
+    const { dominant, alignment, protocolName } = determineEvolutionPath({ 
+        atk: pet.atk, 
+        def: pet.def, 
+        spd: pet.spd, 
+        happiness: pet.happiness || 50 
+    });
+
+    // STAGE LOGIC: Spark -> Surge -> Turbo -> Nova
+    let nextStage: MonsterStage = 'Surge';
+    let scaleMultiplier = 1.0;
+    
+    // Fallback if older save data uses "Rookie" etc.
+    const currentStage = pet.stage as string;
+    
+    if (currentStage === 'Spark' || currentStage === 'Rookie') {
+        nextStage = 'Surge';
+        scaleMultiplier = 1.5;
+    } else if (currentStage === 'Surge' || currentStage === 'Champion') {
+        nextStage = 'Turbo';
+        scaleMultiplier = 2.0;
+    } else if (currentStage === 'Turbo' || currentStage === 'Ultimate') {
+        nextStage = 'Nova';
+        scaleMultiplier = 3.0;
+    }
+
+    // Generate Narrative for the prompt based on Protocol
+    let evolutionPrompt = `Current Stage: ${pet.stage}. Next Stage: ${nextStage}. Protocol: ${protocolName}.`;
+
+    if (dominant === 'ATTACK') {
+        evolutionPrompt += " The creature evolves via CRIMSON PROTOCOL. Physical weapons manifest: Energy Blades, Giant Claws, or Cannons. Stance is aggressive and predatory.";
+    } else if (dominant === 'DEFENSE') {
+        evolutionPrompt += " The creature evolves via TITANIUM PROTOCOL. Heavy Armor plating manifests. Shields, domes, or crystallized skin. Stance is unmovable.";
+    } else if (dominant === 'SPEED') {
+        evolutionPrompt += " The creature evolves via AZURE PROTOCOL. Thrusters, Wings, Wheels, or Hover-Tech manifest. Body becomes streamlined and aerodynamic.";
+    }
+
+    if (alignment === 'CORRUPTED') {
+        evolutionPrompt += " WARNING: HAPPINESS CRITICAL. Evolution is GLITCHED/VIRUS type. Broken geometry, dark aura, jagged red eyes, erratic appearance.";
+    } else if (alignment === 'LUMINOUS') {
+        evolutionPrompt += " HAPPINESS MAXIMAL. Evolution is ASCENDED/DATA-ANGEL type. Golden rings, white aura, majestic floating elements.";
+    }
+
+    const visual_design = `
+        Evolution: ${pet.name} -> ${nextStage}.
+        Base Form: ${pet.visual_design}.
+        
+        ART DIRECTION:
+        - **Complexity:** ${nextStage === 'Surge' ? 'Medium (Teenager)' : nextStage === 'Turbo' ? 'High (Mecha/Armored)' : 'God-Tier (Complex Geometry)'}.
+        - **Scale:** This model should look ${scaleMultiplier}x larger/taller than the previous one.
+        - **Theme:** ${evolutionPrompt}
+    `;
+
+    // Name Evolution Logic
+    let prefix = "";
+    if (nextStage === 'Surge') prefix = alignment === 'CORRUPTED' ? "Dark" : "Neo";
+    if (nextStage === 'Turbo') prefix = dominant === 'ATTACK' ? "War" : dominant === 'DEFENSE' ? "Iron" : "Jet";
+    if (nextStage === 'Nova') prefix = "Omega";
+
+    const nextName = `${prefix} ${pet.name}`;
+
+    const code = await generateVoxelScene("", visual_design, pet.bodyType);
+    
+    return { 
+        code, 
+        visual_design, 
+        nextStage,
+        nextName,
+        protocolName
+    };
 }
 
 export const getGenericVoxel = (element: string) => {
-    // A simple fallback, but we add the juice instructions to it just in case we expand this later.
     const colors: any = {
         Fire: '0xFF5555', Water: '0x5555FF', Grass: '0x55FF55', Electric: '0xFFFF55',
         Psychic: '0xFF55FF', Metal: '0xAAAAAA', Dark: '0x333333', Light: '0xFFFFFF',
@@ -316,11 +380,11 @@ export const getGenericVoxel = (element: string) => {
     document.body.appendChild(renderer.domElement);
 
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 8, 18); // Tighter frame
+    camera.position.set(0, 8, 18); 
     
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.enablePan = false; // LOCKED
+    controls.enablePan = false; 
     controls.minDistance = 8;
     controls.maxDistance = 20;
     controls.maxPolarAngle = Math.PI / 2;
@@ -341,15 +405,12 @@ export const getGenericVoxel = (element: string) => {
     body.scale.y = 0.8; 
     heroGroup.add(body);
     
-    // --- JUICE: INVERTED HULL OUTLINE ---
     const outlineGeo = geometry.clone();
     const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
     const outline = new THREE.Mesh(outlineGeo, outlineMat);
     outline.scale.setScalar(1.05); 
     heroGroup.add(outline);
-    // ------------------------------------
     
-    // Eyes
     const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
     const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
@@ -373,8 +434,6 @@ export const getGenericVoxel = (element: string) => {
         if(paused) return;
 
         const t = clock.getElapsedTime();
-        
-        // Simple bounce
         heroGroup.position.y = Math.abs(Math.sin(t * 3)) * 0.2;
         
         renderer.render(scene, camera);

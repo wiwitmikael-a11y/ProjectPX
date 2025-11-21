@@ -7,14 +7,14 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { generateVoxelScene, analyzeObject, MonsterStats, fuseVoxelScene, generateCardArt, getGenericVoxel, evolveVoxelScene } from './services/gemini';
 import { hideBodyText, zoomCamera, makeBackgroundTransparent } from './utils/html';
-import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, AITactic, WeatherType, calculateOfflineProgress, OfflineReport, getProceduralMonsterArt } from './services/gameData';
+import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, AITactic, WeatherType, calculateOfflineProgress, OfflineReport, getProceduralMonsterArt, EVO_THRESHOLDS, MonsterStage, determineEvolutionPath } from './services/gameData';
 
 // --- TYPES ---
 type GameState = 'SPLASH' | 'NEXUS' | 'SCAN' | 'INVENTORY' | 'ARENA' | 'SYNTHESIS' | 'TRAINING' | 'SHOP' | 'ERROR';
 type EventType = 'WILD_BATTLE' | 'TREASURE' | 'WEATHER_CHANGE' | 'MERCHANT' | 'MYSTERY_SIGNAL';
 type BattleCommand = 'ATTACK' | 'DEFEND' | 'CHARGE' | 'HEAL';
 
-const SAVE_VERSION = 'v2.1'; // Increment this to force wipe user data on updates
+const SAVE_VERSION = 'v3.0_PROTOCOLS'; // Version Bump for New Stage System
 
 interface UserProfile {
   name: string;
@@ -183,17 +183,48 @@ const StatBar = ({ label, value, max, color }: any) => (
     </div>
 );
 
-const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolean, small?: boolean, onEvolve?: () => void }> = ({ pet, onClick, selected, small, onEvolve }) => (
+const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolean, small?: boolean, onEvolve?: () => void }> = ({ pet, onClick, selected, small, onEvolve }) => {
+    
+    // Evolution Eligibility Check & Normalize old save data stages
+    let canEvolve = false;
+    let nextStage = '';
+    const stage = pet.stage as string;
+
+    if ((stage === 'Spark' || stage === 'Rookie') && pet.level >= EVO_THRESHOLDS.SURGE) { canEvolve = true; nextStage = 'Surge'; }
+    else if ((stage === 'Surge' || stage === 'Champion') && pet.level >= EVO_THRESHOLDS.TURBO) { canEvolve = true; nextStage = 'Turbo'; }
+    else if ((stage === 'Turbo' || stage === 'Ultimate') && pet.level >= EVO_THRESHOLDS.NOVA) { canEvolve = true; nextStage = 'Nova'; }
+
+    // Predict Evolution Path for UI hint
+    const { protocolName, alignment } = determineEvolutionPath({ atk: pet.atk, def: pet.def, spd: pet.spd, happiness: pet.happiness || 50 });
+    
+    // Dynamic Path Color
+    let protocolColor = "text-gray-500";
+    if (protocolName.includes('Crimson')) protocolColor = "text-red-500";
+    if (protocolName.includes('Azure')) protocolColor = "text-blue-500";
+    if (protocolName.includes('Titanium')) protocolColor = "text-gray-700";
+    
+    return (
     <div onClick={onClick} className={`w-full aspect-[3/4.2] neo-card flex flex-col p-2 cursor-pointer relative bg-white ${selected ? 'ring-4 ring-yellow-400' : ''} ${!small && 'hover:scale-105'} transition-transform`}>
          <div className={`flex items-center justify-between px-2 py-1 rounded border-2 border-black ${ELEMENT_THEMES[pet.element]?.bg} ${ELEMENT_THEMES[pet.element]?.text} mb-2`}>
              <div className="flex items-center gap-1">
                  <span>{ELEMENT_THEMES[pet.element]?.icon}</span>
-                 <span className="font-black uppercase text-[10px] truncate max-w-[80px]">{pet.name}</span>
+                 <div className="flex flex-col leading-none">
+                    <span className="font-black uppercase text-[10px] truncate max-w-[80px]">{pet.name}</span>
+                    <span className="text-[8px] opacity-80">{pet.stage}</span>
+                 </div>
              </div>
              <span className="font-black text-[10px]">Lv.{pet.level}</span>
          </div>
-         <div className="flex-1 border-2 border-black rounded bg-gray-100 overflow-hidden relative mb-2">
+         <div className="flex-1 border-2 border-black rounded bg-gray-100 overflow-hidden relative mb-2 group">
              <img src={pet.cardArtUrl || pet.imageSource} className="w-full h-full object-cover" style={{imageRendering: 'pixelated'}} />
+             
+             {/* Evolution Hint Overlay */}
+             {!small && !canEvolve && pet.stage !== 'Nova' && (
+                 <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white text-[8px] p-1 text-center backdrop-blur-sm transform translate-y-full group-hover:translate-y-0 transition-transform">
+                     Path: <span className={`font-bold ${protocolColor}`}>{protocolName}</span>
+                     {alignment === 'CORRUPTED' && <span className="text-red-500 animate-pulse block">⚠️ UNSTABLE</span>}
+                 </div>
+             )}
          </div>
          {!small && (
              <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-1">
@@ -201,13 +232,14 @@ const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolea
                  <StatBar label="ATK" value={pet.atk} max={200} color="bg-red-400" />
              </div>
          )}
-         {onEvolve && pet.level >= 10 && (
+         {onEvolve && canEvolve && (
              <button onClick={(e) => { e.stopPropagation(); onEvolve(); }} className="absolute bottom-2 right-2 bg-cyan-400 border-2 border-black text-xs font-black px-2 py-1 rounded hover:bg-cyan-300 animate-pulse shadow-[2px_2px_0px_0px_black]">
-                 EVOLVE!
+                 INITIALIZE {nextStage.toUpperCase()}!
              </button>
          )}
     </div>
-);
+    );
+};
 
 // --- MODALS ---
 const WelcomeModal: React.FC<{ report: OfflineReport, onClose: () => void }> = ({ report, onClose }) => (
@@ -215,21 +247,21 @@ const WelcomeModal: React.FC<{ report: OfflineReport, onClose: () => void }> = (
          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
          <div className="relative w-full max-w-md bg-white border-4 border-black shadow-[12px_12px_0px_0px_black] p-1 animate-pop-in rounded-2xl overflow-hidden">
              <div className="bg-cyan-400 border-b-4 border-black py-4 text-center">
-                 <h2 className="text-2xl font-black tracking-wider">WELCOME BACK!</h2>
+                 <h2 className="text-2xl font-black tracking-wider">SYSTEM RESUMED</h2>
              </div>
              <div className="p-6 text-center">
                  <div className="mb-4 font-mono text-sm text-gray-600">
-                     You were gone for <span className="font-bold text-black">{(report.secondsAway / 60).toFixed(0)} mins</span>.
+                     Sleep Mode Duration: <span className="font-bold text-black">{(report.secondsAway / 60).toFixed(0)} mins</span>.
                  </div>
                  <div className="bg-gray-100 border-2 border-black p-4 rounded-xl mb-4 grid grid-cols-2 gap-4">
-                     <div><div className="text-xs uppercase font-bold text-gray-500">XP Gained</div><div className="text-2xl font-black text-green-600">+{report.xpGained}</div></div>
-                     <div><div className="text-xs uppercase font-bold text-gray-500">Coins</div><div className="text-2xl font-black text-yellow-600">+{report.coinsFound}</div></div>
-                     <div><div className="text-xs uppercase font-bold text-gray-500">Hunger</div><div className="text-2xl font-black text-red-600">-{report.hungerLost}</div></div>
+                     <div><div className="text-xs uppercase font-bold text-gray-500">XP Synced</div><div className="text-2xl font-black text-green-600">+{report.xpGained}</div></div>
+                     <div><div className="text-xs uppercase font-bold text-gray-500">Coins Mined</div><div className="text-2xl font-black text-yellow-600">+{report.coinsFound}</div></div>
+                     <div><div className="text-xs uppercase font-bold text-gray-500">Energy Drain</div><div className="text-2xl font-black text-red-600">-{report.hungerLost}</div></div>
                  </div>
                  <div className="bg-black text-green-400 p-3 rounded font-mono text-xs text-left h-24 overflow-y-auto mb-4">
                      {report.events.map((e, i) => <div key={i}>> {e}</div>)}
                  </div>
-                 <button onClick={onClose} className="neo-btn bg-yellow-400 w-full py-3 text-lg hover:bg-yellow-300">RESUME</button>
+                 <button onClick={onClose} className="neo-btn bg-yellow-400 w-full py-3 text-lg hover:bg-yellow-300">BOOT SYSTEM</button>
              </div>
          </div>
     </div>
@@ -241,7 +273,7 @@ const EventModal: React.FC<{ event: RandomEvent, onClose: () => void, playerPet:
              <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
              <div className="relative w-full max-w-lg bg-white border-4 border-black shadow-[12px_12px_0px_0px_black] p-1 animate-pop-in rounded-2xl overflow-hidden">
                  <div className={`w-full py-3 text-center border-b-4 border-black font-black text-xl tracking-widest ${event.type === 'WILD_BATTLE' ? 'bg-red-500 text-white' : 'bg-yellow-400 text-black'}`}>
-                     {event.type === 'WILD_BATTLE' ? '⚠️ WILD ENCOUNTER ⚠️' : event.type === 'TREASURE' ? '✨ DISCOVERY ✨' : '📫 EVENT'}
+                     {event.type === 'WILD_BATTLE' ? '⚠️ GLITCH DETECTED ⚠️' : event.type === 'TREASURE' ? '✨ DATA CACHE ✨' : '📫 EVENT'}
                  </div>
 
                  <div className="p-6 flex flex-col gap-4">
@@ -260,21 +292,21 @@ const EventModal: React.FC<{ event: RandomEvent, onClose: () => void, playerPet:
                      {event.type === 'TREASURE' && (
                          <div className="flex flex-col items-center text-center py-8 animate-bounce">
                              <div className="text-6xl mb-4">🎁</div>
-                             <div className="text-2xl font-black">YOU FOUND AN ITEM!</div>
+                             <div className="text-2xl font-black">DECRYPTED ITEM!</div>
                          </div>
                      )}
                      
                      {event.type === 'MERCHANT' && (
                          <div className="flex flex-col items-center text-center py-8">
                              <div className="text-6xl mb-4">🛒</div>
-                             <div className="text-2xl font-black">MYSTERIOUS MERCHANT</div>
+                             <div className="text-2xl font-black">DARK NET MERCHANT</div>
                              <p>He offers you a deal...</p>
                          </div>
                      )}
 
                      <div className="bg-black p-4 rounded-xl border-2 border-gray-700 h-32 overflow-y-auto font-mono text-xs text-green-400 shadow-inner">
                          {event.logs.map((log, i) => <div key={i}>> {log}</div>)}
-                         {event.step === 'ACTION' && <div className="animate-pulse">> PROCESSING...</div>}
+                         {event.step === 'ACTION' && <div className="animate-pulse">> EXECUTING BATTLE PROTOCOL...</div>}
                      </div>
                      
                      {event.step === 'RESULT' && (
@@ -285,7 +317,7 @@ const EventModal: React.FC<{ event: RandomEvent, onClose: () => void, playerPet:
                                  </div>
                              )}
                              <button onClick={onClose} className="w-full neo-btn bg-cyan-300 py-4 text-lg hover:bg-cyan-200">
-                                 {event.winner === 'ENEMY' ? 'RETREAT...' : 'CONTINUE'}
+                                 {event.winner === 'ENEMY' ? 'EMERGENCY EXIT' : 'CONFIRM'}
                              </button>
                          </div>
                      )}
@@ -331,10 +363,12 @@ const App: React.FC = () => {
   useEffect(() => {
       try {
           const currentVersion = localStorage.getItem('pixupet_version');
+          // Soft migration: If version mismatch, we might wipe OR try to adapt. 
+          // For this update, we wipe to ensure Clean Slate for the Evolution Protocol.
           if (currentVersion !== SAVE_VERSION) {
               localStorage.clear();
               localStorage.setItem('pixupet_version', SAVE_VERSION);
-              console.log("Save version mismatch. Data wiped.");
+              console.log("System Update. Data Reset.");
           } else {
               const savedUser = localStorage.getItem('pixupet_user_v1');
               const savedInv = localStorage.getItem('pixupet_inventory_v1');
@@ -539,47 +573,52 @@ const App: React.FC = () => {
   };
   
   const handleEvolve = async (pet: Pixupet) => {
-      if (pet.level < 10) return;
-      const confirmed = window.confirm("Evolution is permanent. Are you ready?");
+      const confirmed = window.confirm(`Initialize Evolution Protocol? This will permanently rewrite ${pet.name}'s code based on your training style!`);
       if (!confirmed) return;
       
       setGameState('SCAN');
-      setScanMessage("EVOLVING MATRIX...");
+      setScanMessage("COMPILING EVOLUTION PROTOCOL...");
       try {
           const result = await evolveVoxelScene(pet);
-          // Generate new art
-          const newArt = await generateCardArt(pet.description + " evolved form, bigger, stronger, mega armor.", pet.name + " Mega", result.visual_design);
+          
+          // Generate new art using the detailed description
+          const newArt = await generateCardArt(result.visual_design, result.nextName, result.visual_design);
           
           const evolvedPet: Pixupet = {
               ...pet,
               visual_design: result.visual_design,
               voxelCode: makeBackgroundTransparent(result.code),
               cardArtUrl: newArt,
-              name: "Mega " + pet.name,
-              stage: 'Mega',
-              atk: pet.atk + 20,
-              def: pet.def + 20,
+              name: result.nextName,
+              stage: result.nextStage,
+              // Stat Boosts
+              atk: pet.atk + 15,
+              def: pet.def + 15,
+              spd: pet.spd + 15,
               maxHp: (pet.maxHp||100) + 50,
               currentHp: (pet.maxHp||100) + 50,
-              level: pet.level // Keep level
           };
           
           const newInv = inventory.map(p => p.id === pet.id ? evolvedPet : p);
           setInventory(newInv);
           saveGame(user!, newInv);
           setGameState('NEXUS');
-          spawnFloatText("EVOLUTION COMPLETE!", "text-purple-400");
+          spawnFloatText("EVOLUTION SUCCESSFUL!", "text-purple-400");
+          
+          // Show what happened
+          alert(`Protocol: ${result.protocolName} Accepted.\nForm upgraded to: ${result.nextStage}`);
+          
       } catch (e) {
           console.error(e);
           setGameState('NEXUS');
-          alert("Evolution failed. Try again.");
+          alert("Evolution Protocol Failed. System unstable.");
       }
   };
 
   const handleTrain = (stat: 'atk'|'def'|'spd') => {
       const pet = inventory[0];
       if (pet.fatigue >= 80) {
-          alert("Too tired to train!");
+          alert("Pet needs a reboot (sleep)!");
           return;
       }
       setGameState('TRAINING');
@@ -784,8 +823,8 @@ const App: React.FC = () => {
           <div className="w-full h-screen bg-yellow-300 flex items-center justify-center p-4">
               <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_black] p-8 text-center animate-pop-in flex flex-col items-center">
                   <BrandLogo scale={1.5} className="mb-8" />
-                  <p className="font-bold mb-8 bg-black text-white inline-block px-2 py-1">VERSION 3.0 - TACTICS UPDATE</p>
-                  <button onClick={handleCreateProfile} className="neo-btn bg-cyan-300 w-full py-4 text-xl hover:bg-cyan-200">START GAME</button>
+                  <p className="font-bold mb-8 bg-black text-white inline-block px-2 py-1">VERSION 4.0 - EVOLUTION PROTOCOLS</p>
+                  <button onClick={handleCreateProfile} className="neo-btn bg-cyan-300 w-full py-4 text-xl hover:bg-cyan-200">START SYSTEM</button>
               </div>
           </div>
       );
@@ -794,7 +833,7 @@ const App: React.FC = () => {
   if (gameState === 'TRAINING') {
       return (
           <div className="w-full h-screen bg-orange-300 flex items-center justify-center flex-col">
-              <h1 className="text-6xl font-black italic mb-8 animate-pulse">TRAINING...</h1>
+              <h1 className="text-6xl font-black italic mb-8 animate-pulse">UPLOADING...</h1>
               <div className="w-64 h-64 bg-white border-4 border-black flex items-center justify-center rounded-full shadow-[8px_8px_0px_0px_black] mb-8 overflow-hidden">
                    {activePet && <img src={activePet.cardArtUrl || activePet.imageSource} className="w-full h-full object-cover animate-bounce" />}
               </div>
@@ -845,7 +884,7 @@ const App: React.FC = () => {
       return (
           <div className="w-full h-screen bg-gray-100 p-4 flex flex-col">
               <div className="flex justify-between mb-4">
-                  <h2 className="text-3xl font-black">INVENTORY</h2>
+                  <h2 className="text-3xl font-black">DATABASE</h2>
                   <button onClick={() => setGameState('NEXUS')} className="neo-btn bg-white px-4">CLOSE</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pb-20">
@@ -959,7 +998,7 @@ const App: React.FC = () => {
              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                  <BrandLogo className="mb-8" />
                  <div className="bg-white p-8 border-4 border-black shadow-[8px_8px_0px_0px_black] max-w-sm">
-                     <p className="mb-8 font-bold text-xl">Scan any real-world object to generate your first partner!</p>
+                     <p className="mb-8 font-bold text-xl">Scan any real-world object to materialize a Spark Form!</p>
                      <button onClick={() => fileInputRef.current?.click()} className="w-32 h-32 bg-black rounded-full flex items-center justify-center text-yellow-400 border-4 border-yellow-400 hover:scale-110 transition-transform mx-auto shadow-[0_0_20px_rgba(250,204,21,0.5)]">
                          <NeonIcon path={ICONS.SCAN} size={48} />
                      </button>
@@ -1004,7 +1043,7 @@ const App: React.FC = () => {
                 <div className="absolute top-0 left-0 right-0 p-4 z-20 pointer-events-none flex justify-between items-start">
                     <div className="bg-white border-2 border-black px-4 py-2 rounded-full shadow-[4px_4px_0px_0px_black] pointer-events-auto flex gap-4 items-center min-w-[200px]">
                         <div className="w-full">
-                            <div className="font-black text-lg flex justify-between"><span>{activePet.name}</span><span className="text-xs text-gray-500">LVL {activePet.level}</span></div>
+                            <div className="font-black text-lg flex justify-between"><span>{activePet.name}</span><span className="text-xs text-gray-500">{activePet.stage} Lv.{activePet.level}</span></div>
                             <div className="flex flex-col gap-1 mt-1">
                                 <StatBar label="HP" value={activePet.currentHp} max={activePet.maxHp} color="bg-green-500" />
                                 <StatBar label="HUN" value={activePet.hunger} max={100} color="bg-orange-400" />

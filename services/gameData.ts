@@ -7,6 +7,14 @@
 export type BodyType = 'BIPED' | 'QUADRUPED' | 'FLOATING' | 'WHEELED' | 'SERPENTINE';
 export type AITactic = 'BALANCED' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SPEEDSTER';
 export type WeatherType = 'CLEAR' | 'RAIN' | 'STORM' | 'NEON_MIST';
+// NEW STAGE NAMES: Cyber-Organic Theme
+export type MonsterStage = 'Spark' | 'Surge' | 'Turbo' | 'Nova';
+
+export const EVO_THRESHOLDS = {
+    SURGE: 10,
+    TURBO: 25,
+    NOVA: 50
+};
 
 export interface GameItem {
     id: string;
@@ -83,17 +91,42 @@ export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineRep
     };
 };
 
+// --- EVOLUTION PATH LOGIC (THE PROTOCOLS) ---
+export const determineEvolutionPath = (stats: {atk: number, def: number, spd: number, happiness: number}) => {
+    const { atk, def, spd, happiness } = stats;
+    
+    // 1. Determine Dominant Protocol based on highest stat
+    let dominant = 'BALANCED';
+    let protocolName = 'Core Protocol';
+    
+    if (atk >= def && atk >= spd) {
+        dominant = 'ATTACK';
+        protocolName = 'Crimson Protocol'; // Striker
+    } else if (def > atk && def > spd) {
+        dominant = 'DEFENSE';
+        protocolName = 'Titanium Protocol'; // Tank
+    } else if (spd > atk && spd > def) {
+        dominant = 'SPEED';
+        protocolName = 'Azure Protocol'; // Speedster
+    }
+    
+    // 2. Determine Alignment (Corruption vs Ascension)
+    let alignment = 'NEUTRAL';
+    if (happiness >= 85) alignment = 'LUMINOUS'; // Holy/Ascended
+    if (happiness <= 25) alignment = 'CORRUPTED'; // Dark/Glitch
+
+    return { dominant, alignment, protocolName };
+};
+
 // --- PROCEDURAL ART GENERATOR ---
-// Creates a data:image/svg+xml string based on name and element
 export const getProceduralMonsterArt = (name: string, element: string): string => {
-    // Simple hash function
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
         hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     
     const colors = ELEMENT_THEMES[element as keyof typeof ELEMENT_THEMES] || { bg: '#888', text: '#fff' };
-    const primaryColor = colors.bg.replace('bg-', '').replace('-400', ''); // Very rough mapping, better to use explicit hex
+    const primaryColor = colors.bg.replace('bg-', '').replace('-400', ''); 
     
     const hexMap: any = {
         Fire: '#F87171', Water: '#60A5FA', Grass: '#4ADE80', Electric: '#FACC15',
@@ -102,7 +135,6 @@ export const getProceduralMonsterArt = (name: string, element: string): string =
     };
     const baseHex = hexMap[element] || '#999';
 
-    // Generate deterministic shapes
     const shapes = [];
     for(let i=0; i<5; i++) {
         const sX = Math.abs((hash * (i+1) * 345) % 100);
@@ -112,7 +144,6 @@ export const getProceduralMonsterArt = (name: string, element: string): string =
         shapes.push(`<rect x="${100-sX}" y="${100-sY}" width="${sR}" height="${sR}" fill="#fff" fill-opacity="0.2" transform="rotate(${sX} ${100-sX} ${100-sY})" />`);
     }
 
-    // SVG String
     const svg = `
     <svg width="200" height="280" viewBox="0 0 100 140" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -210,13 +241,13 @@ export const ITEMS_DB: Record<string, GameItem> = {
         icon: '⚡', rarity: 'Common', price: 100
     },
     'atk_boost': {
-        id: 'atk_boost', name: 'Overclock Module', type: 'Consumable',
+        id: 'atk_boost', name: 'Crimson Drive', type: 'Consumable',
         description: 'Permanently increases ATK by 5.',
         effect: (pet: any) => { pet.atk += 5; return pet; },
         icon: '⚔️', rarity: 'Rare', price: 1000
     },
     'spd_boost': {
-        id: 'spd_boost', name: 'RAM Upgrade', type: 'Consumable',
+        id: 'spd_boost', name: 'Azure Drive', type: 'Consumable',
         description: 'Permanently increases SPD by 5.',
         effect: (pet: any) => { pet.spd += 5; return pet; },
         icon: '⏩', rarity: 'Rare', price: 1000
@@ -268,7 +299,7 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
         name: name,
         element,
         rarity: 'Common',
-        stage: 'Rookie',
+        stage: 'Spark', // Wild ones are mostly Spark/Rookie
         rank: 'E',
         nature: 'Wild',
         personality: 'Aggressive',
