@@ -154,6 +154,13 @@ body {
     100% { transform: scale(1) translateY(-100px); opacity: 0; }
 }
 
+.coin-shine { animation: shine 2s infinite linear; }
+@keyframes shine {
+    0% { opacity: 0.2; transform: translateX(-10px); }
+    50% { opacity: 0.8; transform: translateX(10px); }
+    100% { opacity: 0.2; transform: translateX(30px); }
+}
+
 /* SAFE AREA PADDING */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 20px); }
 .safe-top { padding-top: env(safe-area-inset-top, 20px); }

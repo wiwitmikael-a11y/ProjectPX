@@ -12,7 +12,7 @@ import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, Monste
 // --- TYPES ---
 type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP' | 'ITEMS' | 'EXPLORE';
 
-const SAVE_VERSION = 'v13.5_AAA_POLISH'; 
+const SAVE_VERSION = 'v13.6_VECTOR_POLISH'; 
 
 interface UserProfile {
   name: string;
@@ -41,7 +41,16 @@ interface Pixupet extends MonsterStats {
 
 interface FloatingText { id: number; text: string; x: number; y: number; color: string; }
 
-// --- VOXEL ICONS (SVG) ---
+// --- VECTOR ICONS (NEO-POP STYLE) ---
+
+const IconCoin = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6 inline-block mr-1">
+        <circle cx="12" cy="12" r="10" fill="#FBBF24" stroke="black" strokeWidth="2"/>
+        <circle cx="12" cy="12" r="6" fill="#F59E0B" stroke="black" strokeWidth="1" strokeDasharray="2 2" className="animate-[spin_10s_linear_infinite]"/>
+        <path d="M10 8h4v8h-4z" fill="#FEF3C7" className="coin-shine"/>
+    </svg>
+);
+
 const IconBag = () => (
     <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
         <path d="M5 6h14v16H5zM8 2h8v4H8z" className="text-black stroke-black stroke-2" fill="none"/>
@@ -85,36 +94,117 @@ const IconScan = () => (
     </svg>
 );
 
-// Procedural Item Icon Component
+const IconSkull = () => (
+    <svg viewBox="0 0 24 24" className="w-16 h-16 mx-auto animate-bounce">
+        <path d="M4 8a8 8 0 1 1 16 0c0 4-2 6-4 7v2h-8v-2c-2-1-4-3-4-7z" fill="#EF4444" stroke="black" strokeWidth="2"/>
+        <circle cx="9" cy="9" r="2" fill="black"/>
+        <circle cx="15" cy="9" r="2" fill="black"/>
+        <rect x="11" y="12" width="2" height="3" fill="black"/>
+        <path d="M8 20h2v2H8zM14 20h2v2h-2z" fill="black"/>
+    </svg>
+);
+
+const IconTreasure = () => (
+    <svg viewBox="0 0 24 24" className="w-16 h-16 mx-auto animate-bounce">
+        <path d="M2 8h20l-2 12H4L2 8z" fill="#FBBF24" stroke="black" strokeWidth="2"/>
+        <path d="M2 8l10-6 10 6H2z" fill="#FCD34D" stroke="black" strokeWidth="2"/>
+        <rect x="11" y="10" width="2" height="4" fill="black" opacity="0.3"/>
+        <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="1" fill="none" opacity="0.5"/>
+    </svg>
+);
+
+// COMPREHENSIVE ITEM ICON LIBRARY
 const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
-    // Render different shapes based on item type
-    if (item.type === 'Consumable' || item.type === 'Food') {
+    const id = item.id.toLowerCase();
+    
+    // FOOD - PIZZA
+    if (id.includes('pizza')) {
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <path d="M10 2h4v4h-4z" fill="#555" stroke="black" strokeWidth="1"/>
-                <path d="M7 6h10v4H7z" fill="#ccc" stroke="black" strokeWidth="1"/>
-                <path d="M6 10h12v12H6z" fill={item.type==='Food' ? '#F87171' : '#60A5FA'} stroke="black" strokeWidth="2"/>
-                <rect x="8" y="12" width="4" height="4" fill="white" opacity="0.5"/>
+                <path d="M12 2L2 20h20L12 2z" fill="#FCD34D" stroke="black" strokeWidth="2"/>
+                <circle cx="12" cy="10" r="1.5" fill="#EF4444"/>
+                <circle cx="10" cy="15" r="1.5" fill="#EF4444"/>
+                <circle cx="14" cy="15" r="1.5" fill="#EF4444"/>
+                <path d="M2 20h20v2H2z" fill="#D97706" stroke="black" strokeWidth="1"/>
             </svg>
         );
     }
-    if (item.type === 'Gear') {
+    // FOOD - BURGER
+    if (id.includes('burger') || id.includes('steak')) {
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                <circle cx="12" cy="12" r="10" fill="#FCD34D" stroke="black" strokeWidth="2"/>
-                <path d="M12 4l2 5h5l-4 4 1.5 5-4.5-3-4.5 3 1.5-5-4-4h5z" fill="#F59E0B" stroke="black" strokeWidth="1"/>
+                <path d="M4 10c0-4 4-6 8-6s8 2 8 6H4z" fill="#FBBF24" stroke="black" strokeWidth="2"/>
+                <rect x="4" y="14" width="16" height="4" rx="2" fill="#7F1D1D" stroke="black" strokeWidth="2"/>
+                <rect x="4" y="11" width="16" height="2" fill="#22C55E" stroke="black" strokeWidth="1"/>
+                <path d="M4 19h16v3H4z" fill="#FBBF24" stroke="black" strokeWidth="2"/>
             </svg>
         );
     }
-    if (item.type === 'Material') {
+    // DRINK - SODA/POTION
+    if (id.includes('soda') || id.includes('potion')) {
+        const color = id.includes('soda') ? '#60A5FA' : id.includes('super') ? '#A855F7' : '#EF4444';
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
-                 <path d="M12 2l10 6v8l-10 6-10-6V8z" fill="#A78BFA" stroke="black" strokeWidth="2"/>
-                 <path d="M12 2v10M12 12l10 6M12 12l-10 6" stroke="black" strokeWidth="1"/>
+                <path d="M8 4h8v4H8z" fill="#9CA3AF" stroke="black" strokeWidth="2"/>
+                <path d="M6 8h12l2 12H4L6 8z" fill="#F3F4F6" stroke="black" strokeWidth="2"/>
+                <path d="M7 11h10l1.5 9h-13L7 11z" fill={color}/>
+                <rect x="10" y="12" width="2" height="6" fill="white" opacity="0.5"/>
             </svg>
         );
     }
-    return <div className="text-2xl">📦</div>;
+    // CHIPS / MATERIALS
+    if (id.includes('chip')) {
+        let color = '#A78BFA';
+        if (id.includes('fire')) color = '#EF4444';
+        if (id.includes('water')) color = '#3B82F6';
+        if (id.includes('grass')) color = '#10B981';
+        if (id.includes('metal')) color = '#94A3B8';
+        return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                <rect x="4" y="4" width="16" height="16" rx="2" fill="#1F2937" stroke="black" strokeWidth="2"/>
+                <rect x="6" y="6" width="12" height="12" rx="1" fill={color}/>
+                <path d="M8 8h2v2H8zM14 14h2v2h-2zM14 8h2v2h-2zM8 14h2v2H8z" fill="white" opacity="0.8"/>
+                <path d="M2 12h4M18 12h4M12 2v4M12 18v4" stroke="black" strokeWidth="2"/>
+            </svg>
+        );
+    }
+    // GEAR - HELMET
+    if (id.includes('helm') || id.includes('visor') || id.includes('crown')) {
+        return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                <path d="M4 12c0-5 4-8 8-8s8 3 8 8v6H4v-6z" fill="#9CA3AF" stroke="black" strokeWidth="2"/>
+                <rect x="8" y="10" width="8" height="4" fill="#3B82F6" stroke="black" strokeWidth="2"/>
+                <path d="M12 4v4" stroke="black" strokeWidth="2"/>
+            </svg>
+        );
+    }
+    // GEAR - ARMOR/VEST
+    if (id.includes('armor') || id.includes('vest')) {
+        return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                <path d="M6 4h12v16l-6 2-6-2V4z" fill="#60A5FA" stroke="black" strokeWidth="2"/>
+                <path d="M6 8h12" stroke="black" strokeWidth="2"/>
+                <circle cx="12" cy="12" r="2" fill="#FCD34D" stroke="black" strokeWidth="2"/>
+            </svg>
+        );
+    }
+    // GEAR - ACCESSORY (Boots/Wings/Ring)
+    if (id.includes('boots') || id.includes('wings') || id.includes('ring')) {
+        return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                 <path d="M12 2l8 10-3 8-10 2-3-8z" fill="#F472B6" stroke="black" strokeWidth="2"/>
+                 <circle cx="12" cy="12" r="3" fill="#FDE047" stroke="black" strokeWidth="2"/>
+            </svg>
+        );
+    }
+    
+    // DEFAULT BOX
+    return (
+        <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+            <rect x="4" y="4" width="16" height="16" rx="2" fill="#D1D5DB" stroke="black" strokeWidth="2"/>
+            <text x="12" y="16" textAnchor="middle" fontSize="14">?</text>
+        </svg>
+    );
 };
 
 // --- COMPONENTS ---
@@ -297,7 +387,7 @@ export default function App() {
       } else if (rand > 0.30) {
           const item = getLootDrop(user.currentLocation);
           if(item) {
-            const ev: any = { type: 'TREASURE', title: 'SECRET STASH!', description: 'You found something shiny!', logs: ['Scanning area...', 'Ping detected!', `Uncovered: ${ITEMS_DB[item].name}`], resultText: 'LOOT SECURED!' };
+            const ev: any = { type: 'TREASURE', title: 'SECRET STASH', description: 'You found something shiny!', logs: ['Scanning area...', 'Ping detected!', `Uncovered: ${ITEMS_DB[item].name}`], resultText: 'LOOT SECURED!' };
             startAutoEvent(ev, () => addItem(item));
           }
       } else {
@@ -589,7 +679,7 @@ export default function App() {
           {/* RESOURCE PLATE */}
           <div className="neo-pop-box p-2 flex flex-col items-end bg-white">
               <div className="font-black text-yellow-600 flex items-center gap-1 text-base drop-shadow-sm">
-                  <span className="text-xl">🪙</span> {user.coins}
+                  <IconCoin /> {user.coins}
               </div>
               <div className="text-[9px] font-bold text-white uppercase bg-black px-2 py-0.5 rounded-full mt-1 border border-gray-500">{location.name}</div>
           </div>
@@ -656,7 +746,7 @@ export default function App() {
           <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
               <div className="w-full max-w-lg bg-white border-4 border-black rounded-2xl overflow-hidden shadow-[10px_10px_0_#000] flex flex-col h-[75vh] pop-in">
                   <div className="bg-red-500 text-white p-3 text-center font-black text-2xl tracking-widest border-b-4 border-black flex justify-center items-center gap-2 italic transform skew-x-[-5deg]">
-                      <span>⚠️</span> WILD ENCOUNTER <span>⚠️</span>
+                      <IconSkull /> WILD ENCOUNTER
                   </div>
                   <div className="flex-1 bg-gradient-to-b from-slate-800 to-black relative overflow-hidden flex border-b-4 border-black">
                        {/* Strict 50/50 split */}
@@ -668,10 +758,7 @@ export default function App() {
                            <VoxelViewer code={activeBattle.enemy.voxelCode} mode="BATTLE_ENEMY" />
                            <div className="absolute top-2 right-2 bg-red-600 text-white text-[9px] font-bold px-2 py-1 border-2 border-black rounded transform -skew-x-12 shadow-md">ENEMY</div>
                        </div>
-                       {/* Centered VS Badge */}
-                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-yellow-400 text-black font-black text-4xl w-20 h-20 flex items-center justify-center rounded-full border-4 border-black shadow-[0_0_0_4px_white,0_0_20px_rgba(0,0,0,0.5)] z-10 transform -rotate-12 animate-bounce">
-                           VS
-                       </div>
+                       
                        {activeBattle.finished && (
                            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20 backdrop-blur-sm animate-in fade-in zoom-in">
                                <h1 className={`text-6xl font-black ${activeBattle.win ? 'text-yellow-400 stroke-black' : 'text-red-500 stroke-black'} drop-shadow-[6px_6px_0_#000] -rotate-6 mb-4`} style={{WebkitTextStroke: '2px black'}}>
@@ -701,8 +788,8 @@ export default function App() {
                   <div className="p-8 text-center min-h-[220px] flex flex-col items-center justify-center relative bg-yellow-50">
                       {!activeEvent.finished ? (
                            <div className="flex flex-col gap-4 w-full items-center">
-                               <div className="text-6xl animate-bounce mb-4 drop-shadow-md">
-                                   {activeEvent.type === 'TREASURE' ? '💎' : activeEvent.type === 'HAZARD' ? '⚠️' : '📜'}
+                               <div className="mb-4 drop-shadow-md">
+                                   {activeEvent.type === 'TREASURE' ? <IconTreasure /> : activeEvent.type === 'HAZARD' ? <IconSkull /> : <IconMap />}
                                </div>
                                {activeEvent.logs.slice(0, activeEvent.currentLogIndex + 1).map((l:string, i:number) => (
                                    <p key={i} className="text-lg font-black text-gray-800 fade-in bg-white border-2 border-black px-4 py-2 rounded-lg w-full shadow-[2px_2px_0_#ccc]">{l}</p>
@@ -741,7 +828,7 @@ export default function App() {
                    <div className="bg-purple-400 p-4 border-b-4 border-black flex justify-between items-center">
                        <h2 className="font-black text-2xl text-white flex items-center gap-2 drop-shadow-md"><IconCart /> ITEM SHOP</h2>
                        <div className="flex gap-3 items-center">
-                           <span className="font-black text-black bg-yellow-400 px-3 py-1 rounded-lg border-2 border-black shadow-sm">{user.coins} G</span>
+                           <span className="font-black text-black bg-yellow-400 px-3 py-1 rounded-lg border-2 border-black shadow-sm"><IconCoin /> {user.coins}</span>
                            <button onClick={()=>setShopOpen(false)} className="text-2xl font-black text-white hover:scale-110 drop-shadow-md">✕</button>
                        </div>
                    </div>

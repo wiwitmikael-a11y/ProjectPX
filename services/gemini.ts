@@ -129,8 +129,8 @@ scene.background = new THREE.Color(0xD1FAE5);
 scene.fog = new THREE.FogExp2(0xD1FAE5, 0.02);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
-// Adjusted Camera for more headroom
-camera.position.set(0, 4, -12); 
+// DEFAULT CAMERA ANGLE: Diagonal Right Front
+camera.position.set(5, 4, 12);
 
 const renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -146,7 +146,7 @@ controls.dampingFactor = 0.05;
 controls.minDistance = 5;
 controls.maxDistance = 25;
 controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent looking under ground
-// RAISED TARGET TO 1.5 to frame the pet lower in the screen (giving more headroom)
+// RAISED TARGET TO 1.5
 controls.target.set(0, 1.5, 0);
 controls.enableRotate = true;
 
@@ -260,7 +260,7 @@ charGroup.scale.setScalar(${scale});
 // GROUNDING LOGIC
 const bodyType = '${bodyType}';
 let yOffset = 1.0; 
-if (bodyType === 'BIPED') yOffset = 1.35; // Raised slightly higher so legs don't clip floor
+if (bodyType === 'BIPED') yOffset = 1.35; 
 if (bodyType === 'QUADRUPED') yOffset = 0.8;
 if (bodyType === 'FLOATING') yOffset = 2.0;
 charGroup.position.y = yOffset;
@@ -380,20 +380,13 @@ const limbOffset = bodyType === 'QUADRUPED' ? 0.35 : 0.3;
 if (bodyType === 'QUADRUPED') {
     const pos = [[limbOffset, -0.4, 0.5], [-limbOffset, -0.4, 0.5], [limbOffset, -0.4, -0.5], [-limbOffset, -0.4, -0.5]];
     pos.forEach((p, i) => {
-        // Joint Group (Pivot Point at Top)
         const group = createLimbGroup(torso, p[0], -0.1, p[2]);
         createMesh(jointGeo, darkMat, group, 0, 0, 0);
-        
-        // Leg (Offset Down from Pivot)
         const l = createMesh(limbGeo, secMat, group, 0, -0.3, 0);
-        // Foot
         createMesh(new THREE.BoxGeometry(0.26, 0.1, 0.26), darkMat, l, 0, -0.3, 0);
-        
-        // Animate the GROUP, not the mesh
         animatedParts.legs.push({ mesh: group, baseZ: p[2], phase: i%2===0 ? 0 : Math.PI });
     });
 } else if (bodyType === 'BIPED') {
-    // Legs - Hip Joint Groups
     const lGroup1 = createLimbGroup(torso, 0.2, -0.5, 0);
     createMesh(jointGeo, darkMat, lGroup1, 0, 0, 0);
     const l1 = createMesh(limbGeo, secMat, lGroup1, 0, -0.3, 0);
@@ -406,26 +399,21 @@ if (bodyType === 'QUADRUPED') {
     createMesh(new THREE.BoxGeometry(0.26, 0.15, 0.3), darkMat, l2, 0, -0.3, 0.05);
     animatedParts.legs.push({ mesh: lGroup2, baseZ: 0, phase: Math.PI });
 
-    // Arms - Shoulder Joint Groups
     const aGroup1 = createLimbGroup(torso, 0.6, 0.3, 0);
     createMesh(jointGeo, darkMat, aGroup1, 0, 0, 0);
     const aGroup2 = createLimbGroup(torso, -0.6, 0.3, 0);
     createMesh(jointGeo, darkMat, aGroup2, 0, 0, 0);
     
     const armGeo = new RoundedBoxGeometry(0.15, 0.5, 0.15, 2, 0.05);
-    // Arm Mesh Offset Down
     const a1 = createMesh(armGeo, primMat, aGroup1, 0, -0.25, 0);
     const a2 = createMesh(armGeo, primMat, aGroup2, 0, -0.25, 0);
-    
     createMesh(new THREE.SphereGeometry(0.12), darkMat, a1, 0, -0.3, 0);
     createMesh(new THREE.SphereGeometry(0.12), darkMat, a2, 0, -0.3, 0);
-    
-    // Animate Groups
     animatedParts.arms.push({ mesh: aGroup1, phase: Math.PI });
     animatedParts.arms.push({ mesh: aGroup2, phase: 0 });
 }
 
-// --- TREADMILL SYSTEM ---
+// --- INFINITE GRID SYSTEM ---
 const props = new THREE.Group();
 scene.add(props);
 
@@ -442,9 +430,9 @@ function addMushroom(x, z) {
     createMesh(new THREE.ConeGeometry(0.4, 0.3, 8), secMat, props, x, 0.5, z);
 }
 
-const propTypes = [addTree, addBush, addRock, addCrystal, addMushroom];
 let currentBiomeFuncs = [addTree, addBush]; 
 
+// Initial Prop Spawn
 for(let i=0; i<50; i++) {
     const x = (Math.random()-0.5) * 50;
     const z = -10 - (Math.random() * 70); 
@@ -536,7 +524,7 @@ window.addEventListener('message', (e) => {
             particles.visible = true;
             charGroup.rotation.y = 0;
             // Reset to Standard Walk Cam
-            targetCamPos.set(0, 4, -12);
+            targetCamPos.set(5, 4, 12);
         }
     }
 });
@@ -548,25 +536,51 @@ function animate() {
     const t = clock.getElapsedTime();
     const delta = clock.getDelta();
     
+    // INFINITE MOVEMENT LOGIC (FORWARD)
     if (!isBattle) {
-        const speed = 12.0 * delta; 
+        const speed = 8.0 * delta;
         
-        props.children.forEach(prop => {
-            prop.position.z += speed; 
-            if (prop.position.z > 10) { 
-                prop.position.z = -80 - (Math.random() * 20);
-                prop.position.x = (Math.random()-0.5) * 60;
-                if(Math.abs(prop.position.x) < 2) prop.position.x += 4;
-            }
-        });
+        // Move Character Forward
+        charGroup.position.z += speed;
         
-        groundMat.map.offset.y -= speed * 0.05; 
+        // Move Camera Forward along Z to match
+        if (!userInteracting) {
+            camera.position.z += speed;
+            controls.target.z += speed;
+        }
 
+        // Move Particles with character
+        particles.position.z = charGroup.position.z;
+
+        // Manage Props (Spawn ahead, Remove behind)
+        // We filter existing props to remove ones far behind
+        for (let i = props.children.length - 1; i >= 0; i--) {
+            const prop = props.children[i];
+            if (prop.position.z < charGroup.position.z - 15) {
+                props.remove(prop);
+            }
+        }
+        
+        // Spawn new props ahead
+        if (Math.random() > 0.85) { // Spawn rate
+           const spawnZ = charGroup.position.z + 40 + Math.random() * 10;
+           const spawnX = (Math.random() - 0.5) * 50;
+           if (Math.abs(spawnX) > 2) { // Clear path
+               const fn = currentBiomeFuncs[Math.floor(Math.random()*currentBiomeFuncs.length)];
+               fn(spawnX, spawnZ);
+           }
+        }
+        
+        // Update ground texture offset to match world movement for visual consistency
+        // ground.position.z = charGroup.position.z; 
+        // Actually simpler: Just move the ground plane with the player
+        ground.position.z = charGroup.position.z;
+        groundMat.map.offset.y = -charGroup.position.z * 0.1; // Sync texture
+
+        // Camera Bob
         if (!userInteracting) {
             const bob = Math.sin(t * 10) * 0.05;
-            camera.position.x = lerp(camera.position.x, 0, 0.05);
-            camera.position.y = lerp(camera.position.y, 4 + bob, 0.05); // Higher rest position
-            camera.position.z = lerp(camera.position.z, -12, 0.05);
+            camera.position.y = lerp(camera.position.y, 4 + bob, 0.05);
             controls.target.y = lerp(controls.target.y, 1.5 + bob, 0.1);
         }
 
@@ -595,6 +609,10 @@ function animate() {
             else head.rotation.y = 0;
         }
     } else {
+        // BATTLE MODE - FORCE ROTATION
+        if (targetCamPos.x > 0) charGroup.rotation.y = Math.PI / 3; // Player
+        else charGroup.rotation.y = -Math.PI / 3; // Enemy
+
         camera.position.lerp(targetCamPos, 0.05);
         controls.target.lerp(new THREE.Vector3(0, 1.5, 0), 0.1);
         charGroup.position.y = yOffset + Math.sin(t * 4) * 0.05; 
