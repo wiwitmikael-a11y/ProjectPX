@@ -5,23 +5,23 @@
  */
 
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { generateVoxelScene, analyzeObject, getGenericVoxel, evolveVoxelScene } from './services/gemini';
+import { analyzeObject, getGenericVoxel, evolveVoxelScene } from './services/gemini';
 import { makeBackgroundTransparent } from './utils/html';
-import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, MonsterStats, LOCATIONS_DB, LocationNode, STARTER_PACKS, determineEvolutionPath, EVO_THRESHOLDS, getProceduralMonsterArt, getRandomEventText } from './services/gameData';
+import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, MonsterStats, LOCATIONS_DB, LocationNode, STARTER_PACKS, determineEvolutionPath, EVO_THRESHOLDS, getProceduralMonsterArt, getRandomEventText, getRandomSpecialEvent, getActionFromText, EquipmentSlot } from './services/gameData';
 
 // --- TYPES ---
 type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP' | 'ITEMS' | 'EXPLORE';
 
-const SAVE_VERSION = 'v8.0_MASSIVE_MAP'; 
+const SAVE_VERSION = 'v13.5_AAA_POLISH'; 
 
 interface UserProfile {
   name: string;
   level: number;
   exp: number;
   coins: number; 
-  currentLocation: string; // Location ID
+  currentLocation: string; 
   joinedAt: number;
-  inventory: string[]; // Item IDs
+  inventory: string[]; 
   currentRank: string;
 }
 
@@ -41,567 +41,922 @@ interface Pixupet extends MonsterStats {
 
 interface FloatingText { id: number; text: string; x: number; y: number; color: string; }
 
-// --- ICONS ---
-const ICONS = {
-    CAMERA: "M4,4H7L9,2H15L17,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M12,7A5,5 0 1,0 17,12A5,5 0 0,0 12,7M12,9A3,3 0 1,1 9,12A3,3 0 0,1 12,9Z",
-    CARDS: "M19 3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3M19 19H5V5H19V19M13 13H17V17H13V13M7 7H11V11H7V7M7 13H11V17H7V13M13 7H17V11H13V7Z",
-    SHOP: "M12 18H6V14H12M21 14V12L20 7H4L3 12V14H4V20H14V14H18V20H20V14M20 4H4V6H20V4Z",
-    EXPLORE: "M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2M12 20C7.59 20 4 16.41 4 12S7.59 4 12 4 20 7.59 20 12 16.41 20 12 20M12 6C9.79 6 8 7.79 8 10H10C10 8.9 10.9 8 12 8S14 8.9 14 10C14 12 11 11.75 11 15H13C13 12.75 16 12.5 16 10C16 7.79 14.21 6 12 6Z",
-    ITEMS: "M20,6H16V4A2,2 0 0,0 14,2H10A2,2 0 0,0 8,4V6H4A2,2 0 0,0 2,8V20A2,2 0 0,0 4,22H20A2,2 0 0,0 22,20V8A2,2 0 0,0 20,6M10,4H14V6H10V4M20,20H4V8H8V10H10V8H14V10H16V8H20V20Z"
-};
-
-const NeonIcon: React.FC<{ path: string, size?: number, className?: string }> = ({ path, size = 24, className = "" }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={`${className}`}>
-        <path d={path} />
+// --- VOXEL ICONS (SVG) ---
+const IconBag = () => (
+    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+        <path d="M5 6h14v16H5zM8 2h8v4H8z" className="text-black stroke-black stroke-2" fill="none"/>
+        <path d="M6 7h12v14H6z" fill="#A78BFA"/>
+        <path d="M9 3h6v3H9z" fill="#7C3AED"/>
+        <rect x="11" y="11" width="2" height="6" fill="white"/>
+        <rect x="9" y="13" width="6" height="2" fill="white"/>
     </svg>
 );
 
-const AnimatedLogo = () => {
-    return (
-        <div className="voxel-logo-container mb-4 text-6xl md:text-7xl">
-            {"PIXUPET".split('').map((char, i) => (
-                <span key={i} className="logo-char" style={{ animationDelay: `${i * 0.1}s` }}>{char}</span>
-            ))}
-        </div>
-    );
+const IconCart = () => (
+    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+        <path d="M2 4h4l3 12h12l2-10H6" stroke="black" strokeWidth="2" fill="none"/>
+        <circle cx="9" cy="20" r="2" fill="#FBBF24" stroke="black" strokeWidth="2"/>
+        <circle cx="19" cy="20" r="2" fill="#FBBF24" stroke="black" strokeWidth="2"/>
+        <path d="M7 5h14l-1.5 9H8.5z" fill="#60A5FA"/>
+    </svg>
+);
+
+const IconMap = () => (
+    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+        <path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z" stroke="black" strokeWidth="2" fill="#34D399"/>
+        <path d="M9 3v15M15 6v15" stroke="black" strokeWidth="1" strokeDasharray="2 2"/>
+    </svg>
+);
+
+const IconCards = () => (
+    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+        <rect x="4" y="6" width="12" height="16" rx="1" transform="rotate(-5 10 14)" fill="#F87171" stroke="black" strokeWidth="2"/>
+        <rect x="8" y="4" width="12" height="16" rx="1" transform="rotate(5 14 12)" fill="#60A5FA" stroke="black" strokeWidth="2"/>
+        <rect x="6" y="2" width="12" height="16" rx="1" fill="#FCD34D" stroke="black" strokeWidth="2"/>
+    </svg>
+);
+
+const IconScan = () => (
+    <svg viewBox="0 0 24 24" className="w-12 h-12 fill-current">
+        <path d="M3 7h4l2-3h6l2 3h4v14H3z" fill="#374151" stroke="black" strokeWidth="2"/>
+        <circle cx="12" cy="13" r="4" fill="#60A5FA" stroke="black" strokeWidth="2"/>
+        <circle cx="12" cy="13" r="2" fill="#1D4ED8"/>
+        <rect x="18" y="9" width="2" height="1" fill="white"/>
+    </svg>
+);
+
+// Procedural Item Icon Component
+const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
+    // Render different shapes based on item type
+    if (item.type === 'Consumable' || item.type === 'Food') {
+        return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                <path d="M10 2h4v4h-4z" fill="#555" stroke="black" strokeWidth="1"/>
+                <path d="M7 6h10v4H7z" fill="#ccc" stroke="black" strokeWidth="1"/>
+                <path d="M6 10h12v12H6z" fill={item.type==='Food' ? '#F87171' : '#60A5FA'} stroke="black" strokeWidth="2"/>
+                <rect x="8" y="12" width="4" height="4" fill="white" opacity="0.5"/>
+            </svg>
+        );
+    }
+    if (item.type === 'Gear') {
+        return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                <circle cx="12" cy="12" r="10" fill="#FCD34D" stroke="black" strokeWidth="2"/>
+                <path d="M12 4l2 5h5l-4 4 1.5 5-4.5-3-4.5 3 1.5-5-4-4h5z" fill="#F59E0B" stroke="black" strokeWidth="1"/>
+            </svg>
+        );
+    }
+    if (item.type === 'Material') {
+        return (
+            <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
+                 <path d="M12 2l10 6v8l-10 6-10-6V8z" fill="#A78BFA" stroke="black" strokeWidth="2"/>
+                 <path d="M12 2v10M12 12l10 6M12 12l-10 6" stroke="black" strokeWidth="1"/>
+            </svg>
+        );
+    }
+    return <div className="text-2xl">📦</div>;
 };
 
-const VoxelViewer = memo(({ code, onRef, className, mode = 'HABITAT', paused = false, theme = 'Neutral' }: { code: string, onRef?: any, className?: string, mode?: 'HABITAT'|'BATTLE', paused?: boolean, theme?: string }) => {
-    const localRef = useRef<HTMLIFrameElement>(null);
-    useEffect(() => {
-        if (onRef) {
-             if (typeof onRef === 'function') onRef(localRef.current);
-             else onRef.current = localRef.current;
-        }
-    }, [onRef]);
-    
-    useEffect(() => {
-        const iframe = localRef.current;
-        if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ type: 'SET_MODE', value: mode }, '*');
-            iframe.contentWindow.postMessage({ type: 'PAUSE', value: paused }, '*');
-            // DYNAMIC THEME INJECTION
-            iframe.contentWindow.postMessage({ type: 'SET_THEME', value: theme }, '*');
-        }
-    }, [mode, paused, theme]);
+// --- COMPONENTS ---
 
-    return (
-        <iframe 
-            ref={localRef}
-            srcDoc={code} 
-            className={`border-0 pointer-events-auto ${className || "w-full h-full"}`} 
-            title="Voxel View"
-            style={{ background: 'transparent', width: '100%', height: '100%', border: 'none' }} 
-            scrolling="no" 
-        />
-    );
-}, (prev, next) => prev.code === next.code && prev.mode === next.mode && prev.paused === next.paused && prev.theme === next.theme);
-
-const PopButton: React.FC<{ label?: string, subLabel?: string, icon?: string, onClick: () => void, variant?: 'primary' | 'danger' | 'warning' | 'default' | 'action', disabled?: boolean, className?: string }> = ({ label, subLabel, icon, onClick, variant = 'default', disabled, className = "" }) => {
-    const vClass = variant === 'primary' ? 'btn-primary' : variant === 'danger' ? 'btn-danger' : variant === 'warning' ? 'btn-warning' : variant === 'action' ? 'btn-action' : 'bg-white text-black hover:bg-gray-100';
-    return (
-        <button onClick={onClick} disabled={disabled} className={`pop-btn ${vClass} ${className} flex-col`}>
-            <div className="flex items-center gap-2">
-                {icon && <NeonIcon path={icon} size={20} />}
-                {label}
-            </div>
-            {subLabel && <span className="text-[10px] opacity-80 font-bold normal-case tracking-normal">{subLabel}</span>}
-        </button>
-    );
-}
-
-const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, selected?: boolean }> = ({ pet, onClick, selected }) => {
-    const theme = ELEMENT_THEMES[pet.element];
-    return (
-        <div onClick={onClick} className={`tcg-card h-64 cursor-pointer ${selected ? 'ring-4 ring-blue-500 scale-105' : ''}`}>
-            <div className="noise-overlay"></div>
-            <div className={`h-10 ${theme.bg} flex items-center justify-between px-3 border-b-2 border-black z-20 relative`}>
-                 <span className="text-xs font-black text-white uppercase tracking-wider">{pet.name}</span>
-                 <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center border-2 border-black text-xs">{theme.icon}</div>
-            </div>
-            <div className="h-32 bg-gray-800 relative flex items-center justify-center overflow-hidden">
-                 <img src={pet.cardArtUrl} className="w-full h-full object-cover opacity-90" alt={pet.name} />
-                 <div className="absolute bottom-1 right-2 text-white text-[10px] font-bold bg-black/50 px-2 rounded-full">Lv.{pet.level}</div>
-            </div>
-            <div className="p-3 bg-white h-full relative z-10">
-                 <div className="flex justify-between items-end mb-1">
-                     <span className="text-[10px] font-bold text-gray-500 uppercase">{pet.stage} Class</span>
-                     <span className="text-[10px] font-black text-black">HP {pet.currentHp}/{pet.maxHp}</span>
-                 </div>
-                 <div className="space-y-1">
-                    <div className="flex items-center gap-1 text-[9px] font-bold"><span className="w-4">ATK</span><div className="stat-bar-container"><div className="stat-bar-fill bg-red-500" style={{width: `${Math.min(100, pet.atk)}%`}}></div></div></div>
-                    <div className="flex items-center gap-1 text-[9px] font-bold"><span className="w-4">DEF</span><div className="stat-bar-container"><div className="stat-bar-fill bg-blue-500" style={{width: `${Math.min(100, pet.def)}%`}}></div></div></div>
-                 </div>
-            </div>
-        </div>
-    );
-}
-
-// --- EXPLORATION MAP COMPONENT ---
-const ExploreModal = ({ currentLocation, onTravel, playerLevel, onClose }: { currentLocation: string, onTravel: (id: string) => void, playerLevel: number, onClose: () => void }) => {
-    // Find center to scroll to
-    const scrollRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if(scrollRef.current) {
-            // Center roughly
-            scrollRef.current.scrollTop = 300;
-            scrollRef.current.scrollLeft = 100;
-        }
-    }, []);
-
-    return (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-pop-in">
-            <div className="w-full max-w-4xl h-[90vh] bg-gray-900 border-4 border-black rounded-2xl shadow-[12px_12px_0_#000] flex flex-col overflow-hidden relative">
-                <div className="h-16 bg-indigo-500 border-b-4 border-black flex items-center justify-between px-4 shrink-0 z-20 relative">
-                    <h2 className="text-2xl font-black text-white">THE PIXUVERSE</h2>
-                    <button onClick={onClose} className="w-10 h-10 bg-white border-2 border-black rounded-full font-black hover:bg-red-100">X</button>
-                </div>
-                
-                {/* MAP SCROLL AREA */}
-                <div ref={scrollRef} className="flex-1 relative overflow-auto bg-gray-800 map-grid cursor-move">
-                    <div className="relative w-[200%] h-[200%] min-w-[800px] min-h-[800px]">
-                        
-                        {/* Connection Lines */}
-                        <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-50">
-                            {Object.values(LOCATIONS_DB).map(loc => 
-                                loc.connections.map(targetId => {
-                                    const target = LOCATIONS_DB[targetId];
-                                    if (!target) return null;
-                                    return (
-                                        <line key={`${loc.id}-${targetId}`} x1={`${loc.x}%`} y1={`${loc.y}%`} x2={`${target.x}%`} y2={`${target.y}%`} stroke="white" strokeWidth="4" strokeDasharray="10,10" />
-                                    );
-                                })
-                            )}
-                        </svg>
-
-                        {/* Nodes */}
-                        {Object.values(LOCATIONS_DB).map(loc => {
-                            const isLocked = playerLevel < loc.levelReq;
-                            const isCurrent = currentLocation === loc.id;
-                            
-                            return (
-                                <button 
-                                    key={loc.id}
-                                    onClick={() => !isLocked && onTravel(loc.id)}
-                                    disabled={isLocked || isCurrent}
-                                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 w-24 h-24 flex flex-col items-center justify-center rounded-xl border-4 border-black shadow-[6px_6px_0_#000] transition-all
-                                        ${isCurrent ? 'bg-white scale-125 ring-8 ring-yellow-400 z-20' : isLocked ? 'bg-gray-600 opacity-70 grayscale cursor-not-allowed' : `${loc.color} hover:scale-110 z-10`}
-                                    `}
-                                    style={{ left: `${loc.x}%`, top: `${loc.y}%` }}
-                                >
-                                    <div className="text-2xl mb-1">{isLocked ? '🔒' : isCurrent ? '📍' : '🌎'}</div>
-                                    <div className="text-[10px] font-black uppercase text-center leading-tight bg-black/20 px-1 rounded text-white">{loc.name}</div>
-                                    {isLocked && <div className="text-[8px] font-bold text-red-300 mt-1">Lv.{loc.levelReq}</div>}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* Location Info Panel */}
-                <div className="h-36 bg-white border-t-4 border-black p-4 flex justify-between items-center z-20 relative">
-                     <div>
-                         <h3 className="text-xl font-black">{LOCATIONS_DB[currentLocation]?.name}</h3>
-                         <p className="text-sm text-gray-600 font-bold">{LOCATIONS_DB[currentLocation]?.description}</p>
-                         <div className="flex gap-2 mt-2">
-                             <span className="text-xs bg-red-100 px-2 py-1 rounded border border-black font-bold">Danger: x{LOCATIONS_DB[currentLocation]?.difficultyMod}</span>
-                             <span className="text-xs bg-yellow-100 px-2 py-1 rounded border border-black font-bold">Gold: x{LOCATIONS_DB[currentLocation]?.coinMod}</span>
-                         </div>
-                         <div className="mt-1 text-xs font-bold text-blue-600">Exclusive: {LOCATIONS_DB[currentLocation]?.exclusiveLoot?.join(", ")}</div>
-                     </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- APP COMPONENT ---
-const App: React.FC = () => {
-  const [gameState, setGameState] = useState<GameState>('SPLASH');
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [inventory, setInventory] = useState<Pixupet[]>([]);
-  
-  const [explorationStatus, setExplorationStatus] = useState<string>("EXPLORING...");
-  const [activeBattle, setActiveBattle] = useState<{enemy: Pixupet, logs: string[]} | null>(null);
-  const [selectedCard, setSelectedCard] = useState<Pixupet | null>(null);
-  const [showStats, setShowStats] = useState(false);
-  
-  const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Grass', equipment }: { code: string, mode?: string, action?: string, theme?: string, equipment?: any }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-      const savedUser = localStorage.getItem('pixupet_user');
-      if (savedUser) setUser(JSON.parse(savedUser));
-      const savedInv = localStorage.getItem('pixupet_inventory');
-      if (savedInv) setInventory(JSON.parse(savedInv));
+    if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'SET_MODE', value: mode }, '*');
+    }
+  }, [mode]);
+
+  useEffect(() => {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+          iframeRef.current.contentWindow.postMessage({ type: 'SET_ACTION', value: action }, '*');
+      }
+  }, [action]);
+
+  useEffect(() => {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+          iframeRef.current.contentWindow.postMessage({ type: 'SET_THEME', value: theme }, '*');
+      }
+  }, [theme]);
+
+  useEffect(() => {
+    if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'SET_EQUIPMENT', value: equipment }, '*');
+    }
+  }, [equipment]);
+
+  return (
+    <div className="w-full h-full relative">
+      <iframe 
+        ref={iframeRef}
+        srcDoc={makeBackgroundTransparent(code)}
+        className="w-full h-full border-0 absolute inset-0 pointer-events-auto"
+        title="Voxel Viewer"
+        sandbox="allow-scripts allow-same-origin"
+      />
+    </div>
+  );
+});
+
+const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void }> = ({ pet, onClick }) => {
+    const theme = ELEMENT_THEMES[pet.element] || ELEMENT_THEMES.Metal;
+    
+    return (
+        <div onClick={onClick} className="tcg-card w-full aspect-[3/4.5] flex flex-col cursor-pointer group relative bg-gray-900">
+             {/* HEADER */}
+             <div className={`h-[14%] ${theme.bg} flex items-center justify-between px-2 border-b-4 border-black z-10`}>
+                 <span className="font-black text-[10px] uppercase truncate text-white drop-shadow-[2px_2px_0_#000] w-2/3">{pet.name}</span>
+                 <div className="flex items-center gap-1">
+                    <span className="text-sm drop-shadow-[1px_1px_0_#000]">{theme.icon}</span>
+                    <span className="bg-black text-white text-[8px] px-1.5 py-0.5 rounded font-mono font-bold">Lv.{pet.level}</span>
+                 </div>
+             </div>
+
+             {/* IMAGE AREA */}
+             <div className="flex-1 relative overflow-hidden border-b-4 border-black bg-gradient-to-br from-gray-700 to-black group-hover:bg-gradient-to-br group-hover:from-gray-600 group-hover:to-gray-900 transition-colors">
+                 <div className="absolute inset-0 flex items-center justify-center p-4">
+                    <div className="w-full h-full flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity">
+                        <img src={getProceduralMonsterArt(pet.name, pet.element)} className="w-full h-full object-contain drop-shadow-[0_8px_0_rgba(0,0,0,0.5)]" alt={pet.name} />
+                    </div>
+                 </div>
+                 <div className="absolute bottom-1 right-1 bg-black/80 px-2 py-0.5 rounded text-[9px] text-white backdrop-blur-md border border-white/30 font-bold uppercase tracking-wide">
+                    {pet.stage}
+                 </div>
+             </div>
+
+             {/* STATS STRIP */}
+             <div className="h-[16%] bg-gray-200 p-1 grid grid-cols-3 gap-1 text-[9px] font-mono font-bold">
+                <div className="flex flex-col items-center justify-center bg-white rounded border-2 border-gray-400 shadow-[1px_1px_0_#999]">
+                    <span className="text-red-600">ATK</span>
+                    <span>{pet.atk}</span>
+                </div>
+                <div className="flex flex-col items-center justify-center bg-white rounded border-2 border-gray-400 shadow-[1px_1px_0_#999]">
+                    <span className="text-blue-600">DEF</span>
+                    <span>{pet.def}</span>
+                </div>
+                <div className="flex flex-col items-center justify-center bg-white rounded border-2 border-gray-400 shadow-[1px_1px_0_#999]">
+                    <span className="text-yellow-600">SPD</span>
+                    <span>{pet.spd}</span>
+                </div>
+             </div>
+
+             {/* SKILL AREA */}
+             <div className="h-[22%] bg-white border-t-4 border-black p-2 text-[9px] leading-tight z-10 relative skill-text-area">
+                 <div className="font-black text-black mb-1 uppercase tracking-tighter bg-yellow-300 inline-block px-1 border border-black rounded-sm transform -rotate-1">
+                     {pet.ability || "Basic Glitch"}
+                 </div>
+                 <p className="text-gray-800 line-clamp-2 font-medium mt-1">
+                    {pet.description || "A mysterious digital entity waiting to be unlocked."}
+                 </p>
+             </div>
+        </div>
+    );
+};
+
+// --- MAIN APP ---
+
+export default function App() {
+  const [gameState, setGameState] = useState<GameState>('SPLASH');
+  const [user, setUser] = useState<UserProfile>({ 
+      name: 'Tamer', level: 1, exp: 0, coins: 100, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob' 
+  });
+  const [inventory, setInventory] = useState<Pixupet[]>([]);
+  const [activePetIndex, setActivePetIndex] = useState<number>(0);
+  
+  // Modals & Overlays
+  const [showScan, setShowScan] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeBattle, setActiveBattle] = useState<any>(null);
+  const [showLevelUp, setShowLevelUp] = useState<any>(null);
+  const [notifs, setNotifs] = useState<FloatingText[]>([]);
+  const [scanPreview, setScanPreview] = useState<string | null>(null);
+  const [activeEvent, setActiveEvent] = useState<any>(null);
+  const [statusText, setStatusText] = useState("System Online");
+  const [selectedCard, setSelectedCard] = useState<Pixupet | null>(null);
+  const [showGearSelect, setShowGearSelect] = useState<{slot: EquipmentSlot} | null>(null);
+  
+  // Menus
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [exploreOpen, setExploreOpen] = useState(false);
+
+  // FX
+  const [purchaseAnim, setPurchaseAnim] = useState<string | null>(null);
+
+  const activePet = inventory[activePetIndex];
+  const location = LOCATIONS_DB[user.currentLocation];
+  const logScrollRef = useRef<HTMLDivElement>(null);
+
+  // --- LOAD / SAVE ---
+  useEffect(() => {
+      const saved = localStorage.getItem(`pixupet_save_${SAVE_VERSION}`);
+      if (saved) {
+          const data = JSON.parse(saved);
+          setUser(data.user);
+          setInventory(data.inventory);
+          setGameState('NEXUS');
+      }
   }, []);
 
-  // --- SAFETY PROTOCOL: AUTO RETREAT ---
   useEffect(() => {
-      if (user && inventory[0]) {
-          const currentLoc = LOCATIONS_DB[user.currentLocation];
-          if (currentLoc && inventory[0].level < currentLoc.levelReq) {
-              // EMERGENCY RETREAT
-              spawnFloatText("⚠️ DANGER LEVEL CRITICAL!", "text-red-600");
-              spawnFloatText("EMERGENCY WARP!", "text-blue-500");
-              setUser(u => u ? ({ ...u, currentLocation: 'loc_starter' }) : null);
-          }
+      if (user.level > 0) {
+        localStorage.setItem(`pixupet_save_${SAVE_VERSION}`, JSON.stringify({ user, inventory }));
       }
-  }, [user?.currentLocation, inventory[0]?.id]);
+  }, [user, inventory]);
 
-  // --- GAME LOOP: SCALED BY LOCATION ---
+  // --- GAME LOOP ---
   useEffect(() => {
-      if (gameState !== 'NEXUS' || !inventory[0] || activeBattle) return;
+      if (gameState !== 'NEXUS' || activeBattle || activeEvent || isAnalyzing) return;
       
-      const locId = user?.currentLocation || 'loc_starter';
-      const loc = LOCATIONS_DB[locId];
-
-      const timer = setInterval(() => {
-          if (Math.random() > 0.7) { 
-              const eventRoll = Math.random();
-              
-              if (eventRoll > 0.75) {
-                  const loot = getLootDrop(locId);
-                  if (loot) {
-                      const item = ITEMS_DB[loot];
-                      setUser(u => u ? ({...u, inventory: [...u.inventory, loot], coins: u.coins + Math.floor(10 * loc.coinMod) }) : null);
-                      spawnFloatText(`+ ${item.name}`, "text-green-600");
-                  }
-              } else if (eventRoll > 0.45) {
-                  const enemy = getRandomEnemy(locId, inventory[0].level, getGenericVoxel);
-                  setExplorationStatus("COMBAT!");
-                  startAutoBattle(enemy);
-              } else {
-                  const txt = getRandomEventText(locId);
-                  setExplorationStatus(txt);
-              }
+      const interval = setInterval(() => {
+          if (Math.random() > 0.7) {
+              const txt = getRandomEventText(user.currentLocation);
+              setStatusText(txt);
+          }
+          if (Math.random() > 0.85) { 
+             triggerRandomEvent();
           }
       }, 3000);
+      return () => clearInterval(interval);
+  }, [gameState, activeBattle, activeEvent, user.currentLocation, isAnalyzing]);
 
-      return () => clearInterval(timer);
-  }, [gameState, inventory, activeBattle, user?.currentLocation]);
-
-  const startAutoBattle = (enemy: Pixupet) => {
-      const player = inventory[0];
-      let logs = [`Wild ${enemy.name} appeared!`];
-      setActiveBattle({ enemy, logs });
-      
-      let pHP = player.currentHp || 100;
-      let eHP = enemy.hp;
-      let round = 0;
-      const battleSteps: string[] = [];
-
-      while (pHP > 0 && eHP > 0 && round < 8) {
-          const pDmg = Math.floor(player.atk * (1 + Math.random()));
-          eHP -= pDmg;
-          battleSteps.push(`You hit for ${pDmg}!`);
-          if (eHP <= 0) { battleSteps.push(`WIN: Enemy KO!`); break; }
-
-          const eDmg = Math.floor(enemy.atk * (1 + Math.random() * 0.5));
-          pHP -= eDmg;
-          battleSteps.push(`Enemy hit for ${eDmg}.`);
-          if (pHP <= 0) { battleSteps.push(`LOSE: You fainted.`); break; }
-          round++;
+  useEffect(() => {
+      if (logScrollRef.current) {
+          logScrollRef.current.scrollIntoView({ behavior: 'smooth' });
       }
+  }, [activeBattle?.logs, activeEvent?.logs]);
 
+  // --- LOGIC ---
+
+  const triggerRandomEvent = () => {
+      const rand = Math.random();
+      if (rand > 0.60) {
+          startAutoBattle();
+      } else if (rand > 0.30) {
+          const item = getLootDrop(user.currentLocation);
+          if(item) {
+            const ev: any = { type: 'TREASURE', title: 'SECRET STASH!', description: 'You found something shiny!', logs: ['Scanning area...', 'Ping detected!', `Uncovered: ${ITEMS_DB[item].name}`], resultText: 'LOOT SECURED!' };
+            startAutoEvent(ev, () => addItem(item));
+          }
+      } else {
+          const ev = getRandomSpecialEvent(user.currentLocation);
+          startAutoEvent(ev, () => {
+             if(ev.type === 'DISCOVERY') { addExp(ev.effectValue); addCoins(20); }
+             if(ev.type === 'HAZARD') { damagePet(ev.effectValue); }
+          });
+      }
+  };
+
+  const startAutoEvent = (ev: any, onComplete: () => void) => {
+      setActiveEvent({ ...ev, currentLogIndex: 0, finished: false });
       let i = 0;
       const interval = setInterval(() => {
-          if (i < battleSteps.length) {
-              setActiveBattle(prev => prev ? { ...prev, logs: [...prev.logs, battleSteps[i]] } : null);
-              i++;
-          } else {
+          i++;
+          if (i >= ev.logs.length) {
               clearInterval(interval);
+              setActiveEvent((prev: any) => ({ ...prev, finished: true }));
+              onComplete(); 
+              setTimeout(() => { setActiveEvent(null); }, 2500); 
+          } else {
+              setActiveEvent((prev: any) => ({ ...prev, currentLogIndex: i }));
           }
-      }, 800);
+      }, 1000);
   };
 
-  const resolveBattle = (win: boolean) => {
-      setActiveBattle(null);
-      setExplorationStatus("EXPLORING...");
-      if (win) {
-          const loc = LOCATIONS_DB[user?.currentLocation || 'loc_starter'];
-          const coins = Math.floor(50 * loc.coinMod);
-          const xp = Math.floor(40 * loc.difficultyMod);
-          
-          const pet = inventory[0];
-          let updatedPet = { ...pet, exp: pet.exp + xp };
-          if (updatedPet.exp >= updatedPet.maxExp) {
-              updatedPet.level++; updatedPet.exp=0; updatedPet.maxExp = Math.floor(updatedPet.maxExp * 1.2);
-              updatedPet.atk+=2; updatedPet.maxHp!+=10; updatedPet.currentHp = updatedPet.maxHp;
-              spawnFloatText("LEVEL UP!", "text-yellow-600");
+  const startAutoBattle = () => {
+      const enemy = getRandomEnemy(user.currentLocation, activePet.level, getGenericVoxel);
+      const battleState = { enemy, logs: [`A wild ${enemy.name} appeared!`, "Combat protocols initiated!"], finished: false, win: false };
+      setActiveBattle(battleState);
+      const { win, combatLogs } = runBattleSimulation(activePet, enemy);
+      let i = 0;
+      const interval = setInterval(() => {
+          setActiveBattle((prev: any) => {
+              if (!prev) return null;
+              return { ...prev, logs: [...prev.logs, combatLogs[i]] };
+          });
+          i++;
+          if (i >= combatLogs.length) {
+              clearInterval(interval);
+              setActiveBattle((prev: any) => ({ ...prev, finished: true, win }));
+              if (win) {
+                  const xp = enemy.level * 30;
+                  const coins = enemy.level * 20;
+                  addExp(xp); addCoins(coins);
+                  const loot = getLootDrop(user.currentLocation);
+                  if (loot && Math.random() > 0.5) addItem(loot);
+              } else { damagePet(10); }
+              setTimeout(() => { setActiveBattle(null); }, 2500); 
           }
+      }, 800); 
+  };
 
-          setUser(u => u ? ({...u, coins: u.coins + coins }) : null);
-          setInventory([updatedPet, ...inventory.slice(1)]);
-          spawnFloatText(`+${coins} Gold`, "text-yellow-600");
+  const runBattleSimulation = (pet: Pixupet, enemy: any) => {
+      let pHP = pet.currentHp || 100;
+      let eHP = enemy.hp;
+      const logs = [];
+      let win = false;
+      const pAtk = getStat(pet, 'atk');
+      const pDef = getStat(pet, 'def');
+      
+      for(let r=1; r<=6; r++) {
+          const dmg = Math.max(1, Math.floor(pAtk * (100/(100+enemy.def)) * (Math.random() * 0.5 + 1.0)));
+          eHP -= dmg;
+          logs.push(`> You SMAASHED for ${dmg} DMG!`);
+          if (eHP <= 0) { win = true; logs.push("> Enemy DESTROYED!"); break; }
+
+          const eDmg = Math.max(1, Math.floor(enemy.atk * (100/(100+pDef)) * (Math.random() * 0.5 + 0.8)));
+          pHP -= eDmg;
+          logs.push(`> Enemy hit you for ${eDmg} DMG!`);
+          if (pHP <= 0) { win = false; logs.push("> Critical Failure!"); break; }
+      }
+      if (pHP > 0 && eHP > 0) {
+          const pRatio = pHP / (pet.maxHp || 100);
+          const eRatio = eHP / enemy.maxHp;
+          win = pRatio >= eRatio;
+          logs.push(win ? "> Enemy retreated! YOU WIN." : "> Tactical retreat. DRAW.");
+      }
+      return { win, combatLogs: logs };
+  };
+
+  const damagePet = (amt: number) => {
+      const updated = [...inventory];
+      if (updated[activePetIndex]) {
+        const p = updated[activePetIndex];
+        p.currentHp = Math.max(0, (p.currentHp || 100) - amt);
+        setInventory(updated);
+        showFloatingText(`-${amt} HP`, 'text-red-500');
       }
   };
 
-  const spawnFloatText = (text: string, color: string) => {
-      const id = Date.now();
-      setFloatingTexts(prev => [...prev, { id, text, x: 50, y: 40, color }]);
-      setTimeout(() => setFloatingTexts(prev => prev.filter(t => t.id !== id)), 1000);
+  const addExp = (amount: number) => {
+      const updated = [...inventory];
+      const pet = updated[activePetIndex];
+      pet.exp += amount;
+      showFloatingText(`+${amount} XP`, 'text-yellow-400');
+      if (pet.exp >= pet.maxExp) {
+          pet.level++; pet.exp = 0; pet.maxExp = Math.floor(pet.maxExp * 1.4);
+          pet.maxHp = (pet.maxHp || 100) + 20; pet.currentHp = pet.maxHp;
+          pet.atk += 5; pet.def += 5; pet.spd += 5;
+          setShowLevelUp(pet);
+      }
+      setInventory(updated);
+      const newExp = user.exp + amount;
+      if (newExp >= user.level * 150) {
+          setUser({ ...user, exp: 0, level: user.level + 1 });
+          showFloatingText("TAMER LEVEL UP!", "text-white");
+      } else { setUser({ ...user, exp: newExp }); }
   };
 
-  const handleScan = async (img: string) => {
-      setGameState('SCAN');
+  const addCoins = (amt: number) => {
+      setUser(u => ({ ...u, coins: u.coins + amt }));
+      showFloatingText(`+${amt} G`, 'text-yellow-300');
+  };
+
+  const addItem = (itemId: string) => {
+      setUser(u => ({ ...u, inventory: [...u.inventory, itemId] }));
+      showFloatingText(`+ ${ITEMS_DB[itemId].name}!`, 'text-green-400');
+  };
+
+  const showFloatingText = (text: string, color: string) => {
+      const id = Date.now() + Math.random();
+      setNotifs(prev => [...prev, { id, text, x: 50, y: 40, color }]);
+      setTimeout(() => setNotifs(prev => prev.filter(n => n.id !== id)), 2000);
+  };
+
+  const handleScan = async () => {
+      if (!scanPreview) return;
+      setIsAnalyzing(true);
       try {
-          const stats = await analyzeObject(img);
-          const code = await generateVoxelScene("", stats.visual_design, stats.bodyType);
-          const art = getProceduralMonsterArt(stats.name, stats.element); 
-          const newPet: Pixupet = { ...stats, voxelCode: code, imageSource: art, cardArtUrl: art, currentHp: stats.hp, maxHp: stats.hp, level: 1, exp: 0, maxExp: 100, hunger: 100, fatigue: 0, tactic: 'BALANCED', happiness: 50 };
+          const traits = await analyzeObject(scanPreview);
+          if(!traits.hp) traits.hp = 100;
+          if(!traits.atk) traits.atk = 15;
+          if(!traits.def) traits.def = 10;
+          if(!traits.spd) traits.spd = 10;
           
-          // Safe Spawn Logic: Move to starter zone if level is 1
-          setUser(u => u ? ({ ...u, currentLocation: 'loc_starter' }) : null);
-          
-          setInventory([newPet, ...inventory]);
-          setTimeout(() => setGameState('NEXUS'), 2000);
-      } catch (e) { setGameState('NEXUS'); }
+          const voxelCode = getGenericVoxel(traits.element, traits.bodyType, 'Noob', traits.visualTraits);
+          const newPet: Pixupet = {
+              id: `pet_${Date.now()}`, dateCreated: Date.now(), ...traits,
+              voxelCode, level: 1, exp: 0, maxExp: 100, hunger: 80, fatigue: 0, happiness: 80,
+              stage: 'Noob', rank: 'Common', potential: 50, currentHp: traits.hp, maxHp: traits.hp,
+              ability: "Glitch Soul", moves: [], imageSource: scanPreview
+          };
+          setInventory([...inventory, newPet]);
+          setActivePetIndex(inventory.length); 
+          setGameState('NEXUS');
+          setShowScan(false);
+          setScanPreview(null);
+          showFloatingText("CREATION SUCCESS!", "text-green-400");
+      } catch (e) { alert("Scan failed."); } finally { setIsAnalyzing(false); }
   };
 
-  const handleSelectStarter = (starterId: string) => {
-      const pack = STARTER_PACKS.find(s => s.id === starterId);
-      if (!pack) return;
-      const art = getProceduralMonsterArt(pack.name, pack.element);
-      const voxel = getGenericVoxel(pack.element, pack.bodyType, 'Noob'); 
-      const starter: Pixupet = { ...pack, id: `starter_${Date.now()}`, dateCreated: Date.now(), rarity: 'Common', stage: 'Noob', rank: 'E', nature: 'Loyal', potential: 3, int: 10, level: 1, exp: 0, maxExp: 100, hunger: 100, fatigue: 0, tactic: 'BALANCED', happiness: 60, ability: 'Overgrow', moves: [], voxelCode: voxel, cardArtUrl: art, imageSource: art } as any;
-      
-      // Safe Spawn
-      setUser(u => u ? ({ ...u, currentLocation: 'loc_starter' }) : null);
-      
-      setInventory([starter]);
-      setGameState('NEXUS');
-  };
-
-  const handleTravel = (locId: string) => {
-      setUser(u => u ? ({ ...u, currentLocation: locId }) : null);
-      spawnFloatText("Traveled!", "text-white");
-      setGameState('NEXUS');
-  };
-  
-  const handleEvolve = async () => {
-      const pet = inventory[0];
-      if (!pet) return;
-      const evo = await evolveVoxelScene(pet);
-      const updatedPet = {
-          ...pet,
-          voxelCode: evo.code,
-          stage: evo.nextStage,
-          name: evo.nextName,
-          visual_design: evo.visual_design,
-          atk: pet.atk + 10,
-          def: pet.def + 10,
-          maxHp: (pet.maxHp || 100) + 50,
-          currentHp: (pet.maxHp || 100) + 50
+  const handleStarterSelect = (starter: any) => {
+      const voxelCode = getGenericVoxel(starter.element, starter.bodyType, 'Noob', starter.visualTraits);
+      const newPet: Pixupet = {
+          id: `starter_${Date.now()}`, dateCreated: Date.now(), name: starter.name, element: starter.element,
+          description: starter.description, visual_design: starter.visual_design, bodyType: starter.bodyType,
+          visualTraits: starter.visualTraits, rarity: 'Common', nature: 'Brave',
+          hp: starter.stats.hp, maxHp: starter.stats.hp, currentHp: starter.stats.hp,
+          atk: starter.stats.atk, def: starter.stats.def, spd: starter.stats.spd, int: 10,
+          voxelCode, level: 1, exp: 0, maxExp: 100, hunger: 100, fatigue: 0, happiness: 100,
+          stage: 'Noob', rank: 'Starter', potential: 80, ability: 'Starter Will', moves: []
       };
-      setInventory([updatedPet, ...inventory.slice(1)]);
-      spawnFloatText("EVOLUTION!", "text-purple-500");
-      setShowStats(false);
+      setInventory([newPet]);
+      setActivePetIndex(0);
+      setGameState('NEXUS');
   };
 
-  // --- RENDERING ---
+  const getStat = (pet: Pixupet, stat: 'atk'|'def'|'spd'|'hp') => {
+      let base = pet[stat] || 0;
+      if (stat === 'hp' && pet.maxHp) base = pet.maxHp;
+      if (pet.equipment) {
+          Object.entries(pet.equipment).forEach(([slot, itemId]) => {
+              if(itemId) {
+                  const item = ITEMS_DB[itemId as string];
+                  if (item && item.statBonus && item.statBonus[stat]) base += item.statBonus[stat]!;
+              }
+          });
+      }
+      return base;
+  };
+
+  const handleEquip = (slot: EquipmentSlot, itemId: string) => {
+      const updated = [...inventory];
+      const pet = updated[activePetIndex];
+      if (!pet.equipment) pet.equipment = {};
+      pet.equipment[slot === 'HEAD' ? 'head' : slot === 'BODY' ? 'body' : 'accessory'] = itemId;
+      setInventory(updated);
+      setShowGearSelect(null);
+  };
+
+  const handlePurchase = (item: GameItem) => {
+      if (user.coins >= item.price) {
+          addCoins(-item.price);
+          addItem(item.id);
+          // Trigger purchase animation
+          setPurchaseAnim(item.id); // Use ID to check if animation should show, but render ItemIcon
+          setTimeout(() => setPurchaseAnim(null), 1000);
+      } else {
+          alert("Not enough coins!");
+      }
+  };
+
+  // --- RENDER ---
+
   if (gameState === 'SPLASH') return (
-      <div className="w-full h-screen flex flex-col items-center justify-center bg-yellow-300 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,white_0%,transparent_20%)] bg-[length:40px_40px] opacity-50"></div>
-          <div className="z-10 text-center flex flex-col items-center">
-              <AnimatedLogo />
-              <div className="text-xl font-black text-black mb-8 bg-white px-6 py-2 border-4 border-black rounded-full inline-block shadow-[4px_4px_0_#000] rotate-1">TURN ANYTHING INTO A PET</div>
-              <PopButton label={user ? "RESUME" : "NEW GAME"} onClick={() => user ? setGameState('NEXUS') : setGameState('ONBOARDING')} variant="primary" className="w-64 py-4 text-xl wiggle" />
+      <div className="w-full h-screen flex flex-col items-center justify-center relative overflow-hidden bg-yellow-300 p-4">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dot-grid.png')] opacity-20"></div>
+          <div className="voxel-logo-container text-4xl sm:text-6xl mb-8 z-10 tracking-widest flex flex-wrap justify-center gap-2">
+              {['P','I','X','U','P','E','T'].map((char,i) => (
+                  <span key={i} className="logo-char" style={{animationDelay: `${i*0.1}s`}}>{char}</span>
+              ))}
           </div>
+          <div className="neo-pop-box px-6 py-3 mb-8 rotate-2 bg-white max-w-xs sm:max-w-md text-center">
+               <h2 className="font-['Bangers'] text-2xl sm:text-3xl text-black tracking-wide">Turn Anything into a Pet!</h2>
+          </div>
+          <button onClick={() => setGameState(inventory.length > 0 ? 'NEXUS' : 'ONBOARDING')} 
+              className="pop-btn btn-primary text-xl sm:text-2xl px-12 sm:px-16 py-4 sm:py-6 pop-in hover:scale-105 active:scale-95 transition-all">
+              PRESS START
+          </button>
       </div>
   );
 
   if (gameState === 'ONBOARDING') return (
-        <div className="w-full h-screen bg-indigo-200 flex flex-col items-center justify-center p-4 relative">
-             <div className="z-10 flex flex-col items-center max-w-md w-full">
-                <h1 className="text-3xl font-black mb-8 bg-white px-6 py-3 border-4 border-black shadow-[6px_6px_0_#000] rotate-1 text-center">HOW TO START?</h1>
-                <div className="grid grid-cols-1 gap-6 w-full">
-                    <PopButton label="CAMERA" subLabel="Scan any object." icon={ICONS.CAMERA} variant="action" onClick={() => { setUser({ name: 'Gamer', level: 1, exp: 0, coins: 100, joinedAt: Date.now(), inventory: ['pixel_pizza'], currentLocation: 'loc_starter', currentRank: 'E' }); fileInputRef.current?.click(); }} className="w-full py-6 text-xl shadow-[6px_6px_0_#000]" />
-                    <PopButton label="PICK STARTER" subLabel="Choose a buddy." icon={ICONS.CARDS} variant="primary" onClick={() => { setUser({ name: 'Gamer', level: 1, exp: 0, coins: 100, joinedAt: Date.now(), inventory: ['pixel_pizza'], currentLocation: 'loc_starter', currentRank: 'E' }); setGameState('STARTER_SELECT'); }} className="w-full py-6 text-xl shadow-[6px_6px_0_#000]" />
-                </div>
-             </div>
-             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => { if(e.target.files?.[0]) { const r = new FileReader(); r.onload = (ev) => handleScan(ev.target?.result as string); r.readAsDataURL(e.target.files[0]); } }} />
-        </div>
+      <div className="w-full h-screen bg-yellow-100 text-black flex flex-col items-center justify-center p-6">
+           <h1 className="text-4xl font-black mb-10 font-['Bangers'] tracking-wider drop-shadow-sm">SYSTEM INITIALIZED</h1>
+           <div className="grid grid-cols-1 gap-8 w-full max-w-md">
+               <button onClick={() => setGameState('SCAN')} className="bg-blue-500 p-6 rounded-xl border-4 border-black shadow-[8px_8px_0px_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-[4px_4px_0px_#000] flex flex-col items-center transition-all">
+                   <IconScan />
+                   <span className="text-2xl font-black text-white stroke-black mt-2">REALITY HACK</span>
+               </button>
+               <button onClick={() => setGameState('STARTER_SELECT')} className="bg-purple-500 p-6 rounded-xl border-4 border-black shadow-[8px_8px_0px_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-[4px_4px_0px_#000] flex flex-col items-center transition-all">
+                   <div className="text-5xl mb-2">🥚</div>
+                   <span className="text-2xl font-black text-white">LOAD PRESET</span>
+               </button>
+           </div>
+      </div>
   );
 
   if (gameState === 'STARTER_SELECT') return (
-      <div className="w-full h-screen bg-blue-200 flex flex-col items-center p-4 overflow-y-auto">
-          <h1 className="text-3xl font-black mb-6 bg-white px-4 py-2 border-4 border-black shadow-[4px_4px_0_#000] rotate-1 sticky top-4 z-10">PICK YOUR BUDDY</h1>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full pb-8 mt-4">
+      <div className="w-full h-screen bg-green-100 flex flex-col items-center pt-16 pb-6 px-4 overflow-y-auto">
+          <div className="neo-pop-box px-8 py-4 mb-8 bg-white -rotate-2">
+              <h2 className="text-3xl font-black font-['Bangers'] tracking-wide">CHOOSE YOUR MAIN</h2>
+          </div>
+          <div className="flex flex-col gap-6 w-full max-w-md">
               {STARTER_PACKS.map(starter => (
-                  <div key={starter.id} className="pop-card p-4 flex flex-col items-center bg-white cursor-pointer hover:scale-105 transition-transform" onClick={() => handleSelectStarter(starter.id)}>
-                      <div className={`w-24 h-24 rounded-full border-4 border-black mb-4 flex items-center justify-center text-4xl ${ELEMENT_THEMES[starter.element].bg}`}>{ELEMENT_THEMES[starter.element].icon}</div>
-                      <h2 className="text-xl font-black uppercase mb-2">{starter.name}</h2>
-                      <p className="text-sm text-center text-gray-600 font-bold mb-4">{starter.description}</p>
-                      <PopButton label="CHOOSE" onClick={() => handleSelectStarter(starter.id)} className="mt-4 w-full" />
+                  <div key={starter.id} onClick={() => handleStarterSelect(starter)}
+                       className="bg-white p-5 rounded-2xl border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-[2px_2px_0_#000] transition-all cursor-pointer relative group">
+                      <div className="flex justify-between items-center mb-3 border-b-2 border-gray-200 pb-2">
+                          <span className={`font-black text-xl ${ELEMENT_THEMES[starter.element].text} px-3 py-1 rounded-lg bg-black border-2 border-white shadow-sm`}>{starter.name}</span>
+                          <span className="text-3xl bg-gray-100 rounded-full p-1 border-2 border-black">{ELEMENT_THEMES[starter.element].icon}</span>
+                      </div>
+                      <p className="text-gray-800 font-bold text-sm mb-3 bg-gray-100 p-2 rounded border border-gray-300">"{starter.description}"</p>
+                      <div className="flex gap-2 text-xs font-black font-mono">
+                          <span className="bg-red-200 text-red-900 px-2 py-1 rounded border border-black">ATK: {starter.stats.atk}</span>
+                          <span className="bg-blue-200 text-blue-900 px-2 py-1 rounded border border-black">DEF: {starter.stats.def}</span>
+                          <span className="bg-yellow-200 text-yellow-900 px-2 py-1 rounded border border-black">SPD: {starter.stats.spd}</span>
+                      </div>
                   </div>
               ))}
           </div>
       </div>
   );
 
-  if (gameState === 'SCAN') return (
-      <div className="w-full h-screen bg-yellow-200 flex flex-col items-center justify-center text-black">
-          <div className="w-32 h-32 border-8 border-black rounded-full border-t-transparent animate-spin mb-8"></div>
-          <div className="text-2xl font-black bg-white px-6 py-3 border-4 border-black shadow-[6px_6px_0_#000] rotate-2">SCANNING OBJECT...</div>
-      </div>
-  );
-
-  // --- MAIN GAME ---
+  // --- NEXUS (MAIN GAME) ---
   return (
-      <div className="w-full h-screen flex flex-col bg-gray-100 overflow-hidden font-sans text-black">
-          {/* TOP BAR */}
-          <div className="h-16 bg-white border-b-4 border-black flex items-center justify-between px-4 shrink-0 z-30 relative shadow-md">
-              <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 bg-yellow-300 border-2 border-black rounded-full flex items-center justify-center text-xl font-black">{user?.name.charAt(0)}</div>
-                  <div className="flex flex-col leading-none">
-                      <span className="font-black text-sm">{user?.name}</span>
-                      <span className="text-xs font-bold text-gray-500">{LOCATIONS_DB[user?.currentLocation || 'loc_starter']?.name}</span>
-                  </div>
-              </div>
-              <div className="bg-yellow-100 border-2 border-black px-3 py-1 rounded-full font-black text-sm">💰 {user?.coins}</div>
-          </div>
-
-          {/* 3D VIEW */}
-          <div className="flex-1 relative bg-gradient-to-b from-blue-200 to-white overflow-hidden">
-              {inventory[0] ? (
-                  <>
-                      <VoxelViewer 
-                        code={inventory[0].voxelCode} 
-                        mode="HABITAT" 
-                        paused={gameState !== 'NEXUS'} 
-                        theme={LOCATIONS_DB[user?.currentLocation || 'loc_starter']?.enemyTheme?.[0] || 'Neutral'}
-                        className="w-full h-full absolute inset-0" 
-                      />
-                      <div className="absolute inset-0 pointer-events-none z-20">
-                          {floatingTexts.map(ft => <div key={ft.id} className={`absolute font-black text-3xl ${ft.color} float-up drop-shadow-[2px_2px_0_#000]`} style={{ left: `${ft.x}%`, top: `${ft.y}%` }}>{ft.text}</div>)}
-                      </div>
-                      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 pointer-events-auto z-10 cursor-pointer hover:scale-105 transition-transform" onClick={() => setShowStats(true)}>
-                          <div className="pop-card px-8 py-2 bg-white shadow-xl text-center relative">
-                              <div className="absolute -top-3 -right-3 bg-blue-500 text-white w-6 h-6 rounded-full border-2 border-black flex items-center justify-center font-serif italic font-black">i</div>
-                              <h2 className="text-2xl font-black uppercase">{inventory[0].name}</h2>
-                              <div className="text-xs font-bold text-gray-500">{inventory[0].element} • {inventory[0].stage}</div>
-                          </div>
-                      </div>
-                      <div className="absolute top-4 left-4 pointer-events-none">
-                          <div className="bg-white/80 backdrop-blur border-2 border-black px-3 py-1 rounded-lg text-xs font-black animate-pulse uppercase">{explorationStatus}</div>
-                      </div>
-                      
-                      {/* ACTIVE BATTLE POPUP (3D) */}
-                      {activeBattle && (
-                          <div className="absolute inset-0 z-40 bg-black/50 flex items-center justify-center backdrop-blur-sm animate-pop-in">
-                              <div className="w-11/12 h-4/5 bg-gray-900 border-4 border-black rounded-2xl shadow-[10px_10px_0_#000] flex flex-col overflow-hidden relative">
-                                   <div className="h-1/2 relative bg-gradient-to-b from-red-900 to-black">
-                                       <VoxelViewer code={activeBattle.enemy.voxelCode} mode="BATTLE" className="w-full h-full" />
-                                       <div className="absolute top-4 right-4 text-white text-right">
-                                           <div className="text-xl font-black">{activeBattle.enemy.name}</div>
-                                           <div className="text-sm text-red-400">Lv.{activeBattle.enemy.level} {activeBattle.enemy.stage}</div>
-                                       </div>
-                                   </div>
-                                   <div className="flex-1 bg-white p-4 font-mono text-xs overflow-y-auto flex flex-col-reverse border-t-4 border-black">
-                                        {activeBattle.logs.map((l, i) => (
-                                            <div key={i} className={`mb-1 font-bold ${l.includes('WIN') ? 'text-green-600 text-lg' : l.includes('LOSE') ? 'text-red-600 text-lg' : 'text-gray-800'} animate-fade-in`}>{l}</div>
-                                        ))}
-                                   </div>
-                                   <div className="p-4 bg-gray-100 border-t-2 border-black flex justify-center">
-                                       {activeBattle.logs[activeBattle.logs.length-1]?.includes('WIN') || activeBattle.logs[activeBattle.logs.length-1]?.includes('LOSE') ? 
-                                          <PopButton label="CONTINUE" onClick={() => resolveBattle(activeBattle.logs[activeBattle.logs.length-1].includes('WIN'))} variant="primary" /> :
-                                          <div className="text-gray-400 font-black animate-pulse">FIGHTING...</div>
-                                       }
-                                   </div>
-                              </div>
-                          </div>
-                      )}
-
-                      {/* PET STATS DETAIL OVERLAY */}
-                      {showStats && (
-                          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur flex items-end md:items-center justify-center p-4 animate-fade-in" onClick={() => setShowStats(false)}>
-                              <div className="bg-white w-full max-w-md rounded-2xl border-4 border-black p-4 shadow-[8px_8px_0_white] relative" onClick={e => e.stopPropagation()}>
-                                   <div className="absolute -top-6 -left-4 -rotate-6 bg-yellow-300 px-4 py-1 border-4 border-black font-black text-xl shadow-md">STATS</div>
-                                   <div className="flex justify-between items-start mb-4 mt-2">
-                                       <div>
-                                           <h2 className="text-3xl font-black uppercase">{inventory[0].name}</h2>
-                                           <div className="font-bold text-gray-500">Level {inventory[0].level} • {inventory[0].nature} Nature</div>
-                                       </div>
-                                       <div className={`text-4xl ${ELEMENT_THEMES[inventory[0].element].text} drop-shadow-md`}>{ELEMENT_THEMES[inventory[0].element].icon}</div>
-                                   </div>
-                                   <div className="grid grid-cols-2 gap-4 mb-4">
-                                       <div className="bg-gray-100 p-2 rounded border-2 border-black">
-                                           <div className="text-xs font-bold text-gray-400">ATTACK</div>
-                                           <div className="text-xl font-black">{inventory[0].atk}</div>
-                                       </div>
-                                       <div className="bg-gray-100 p-2 rounded border-2 border-black">
-                                           <div className="text-xs font-bold text-gray-400">DEFENSE</div>
-                                           <div className="text-xl font-black">{inventory[0].def}</div>
-                                       </div>
-                                       <div className="bg-gray-100 p-2 rounded border-2 border-black">
-                                           <div className="text-xs font-bold text-gray-400">SPEED</div>
-                                           <div className="text-xl font-black">{inventory[0].spd}</div>
-                                       </div>
-                                       <div className="bg-gray-100 p-2 rounded border-2 border-black">
-                                           <div className="text-xs font-bold text-gray-400">HAPPINESS</div>
-                                           <div className="text-xl font-black">{inventory[0].happiness}%</div>
-                                       </div>
-                                   </div>
-                                   
-                                   {/* EVOLUTION SECTION */}
-                                   {(inventory[0].level >= EVO_THRESHOLDS.PRO && inventory[0].stage === 'Noob') || 
-                                    (inventory[0].level >= EVO_THRESHOLDS.ELITE && inventory[0].stage === 'Pro') || 
-                                    (inventory[0].level >= EVO_THRESHOLDS.LEGEND && inventory[0].stage === 'Elite') ? (
-                                        <div className="mt-4 border-t-2 border-dashed border-gray-300 pt-4">
-                                            <div className="text-center font-black text-purple-600 mb-2 animate-pulse">EVOLUTION AVAILABLE!</div>
-                                            <PopButton label="EVOLVE NOW" variant="action" onClick={handleEvolve} className="w-full" />
-                                        </div>
-                                    ) : (
-                                        <div className="text-center text-xs text-gray-400 font-bold mt-4">Next Evolution at Lv.{inventory[0].stage === 'Noob' ? 10 : inventory[0].stage === 'Pro' ? 25 : 50}</div>
-                                    )}
-                              </div>
-                          </div>
-                      )}
-
-                  </>
-              ) : <div className="flex items-center justify-center h-full text-gray-400 font-bold">No Pet Selected</div>}
-          </div>
-
-          {/* BOTTOM NAV */}
-          <div className="h-20 bg-white border-t-4 border-black flex items-center justify-around px-2 shrink-0 z-30 relative shadow-[0_-4px_10px_rgba(0,0,0,0.1)]">
-              <button onClick={() => setGameState('COLLECTION')} className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-xl w-16"><NeonIcon path={ICONS.CARDS} size={24} /><span className="text-[10px] font-black">CARDS</span></button>
-              <button onClick={() => setGameState('ITEMS')} className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-xl w-16"><NeonIcon path={ICONS.ITEMS} size={24} /><span className="text-[10px] font-black">ITEMS</span></button>
-              <div className="-mt-12 relative"><button onClick={() => fileInputRef.current?.click()} className="w-20 h-20 bg-blue-400 border-4 border-black rounded-full flex items-center justify-center shadow-[4px_4px_0_#000] hover:translate-y-1 hover:shadow-none transition-all"><NeonIcon path={ICONS.CAMERA} size={36} className="text-white" /></button></div>
-              <button onClick={() => setGameState('SHOP')} className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-xl w-16"><NeonIcon path={ICONS.SHOP} size={24} /><span className="text-[10px] font-black">SHOP</span></button>
-              {/* REPLACED GUIDE WITH EXPLORE */}
-              <button onClick={() => setGameState('EXPLORE')} className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-xl w-16"><NeonIcon path={ICONS.EXPLORE} size={24} /><span className="text-[10px] font-black">EXPLORE</span></button>
-          </div>
-
-          {/* MODALS */}
-          {gameState === 'EXPLORE' && user && <ExploreModal currentLocation={user.currentLocation} playerLevel={inventory[0]?.level || 1} onTravel={handleTravel} onClose={() => setGameState('NEXUS')} />}
-          
-          {gameState === 'COLLECTION' && (
-              <div className="absolute inset-0 z-40 bg-white flex flex-col animate-pop-in">
-                  <div className="h-16 bg-blue-500 border-b-4 border-black flex items-center justify-between px-4 shrink-0"><h2 className="text-2xl font-black text-white drop-shadow-md">MY PETS</h2><button onClick={() => setGameState('NEXUS')} className="w-10 h-10 bg-white border-2 border-black rounded-full font-black hover:bg-red-100">X</button></div>
-                  <div className="flex-1 overflow-y-auto p-4 bg-gray-900"><div className="grid grid-cols-2 md:grid-cols-3 gap-4 pb-20">{inventory.map(p => <PixuCard key={p.id} pet={p} onClick={() => setSelectedCard(p)} selected={p.id === inventory[0]?.id} />)}</div></div>
-              </div>
-          )}
-
-          {gameState === 'ITEMS' && (
-              <div className="absolute inset-0 z-40 bg-white flex flex-col animate-pop-in">
-                  <div className="h-16 bg-purple-500 border-b-4 border-black flex items-center justify-between px-4 shrink-0"><h2 className="text-2xl font-black text-white drop-shadow-md">INVENTORY</h2><button onClick={() => setGameState('NEXUS')} className="w-10 h-10 bg-white border-2 border-black rounded-full font-black hover:bg-red-100">X</button></div>
-                  <div className="flex-1 overflow-y-auto p-4 bg-purple-50 pb-20 space-y-3">
-                      {user?.inventory.length ? Array.from(new Set(user.inventory)).map((id: string) => { const item = ITEMS_DB[id]; const count = user!.inventory.filter(i => i === id).length; if(!item) return null; return (
-                          <div key={item.id} className="flex items-center justify-between bg-white border-2 border-black p-4 rounded-xl shadow-[4px_4px_0_#000]">
-                              <div className="flex items-center gap-4"><div className="text-4xl bg-gray-100 p-3 rounded-xl border-2 border-black">{item.icon}</div><div><div className="font-black text-lg">{item.name} <span className="text-sm text-gray-500">x{count}</span></div><div className="text-xs text-gray-600 font-bold">{item.description}</div></div></div>
-                              {item.type === 'Food' || item.type === 'Consumable' ? <PopButton label="USE" className="!py-2 !px-4 h-10" onClick={() => { if (inventory[0] && item.effect) { const up = item.effect({...inventory[0]}); setInventory(inv => inv.map(p => p.id === inventory[0].id ? up : p)); spawnFloatText("Used!", "text-green-500"); } const ni = [...user.inventory]; ni.splice(ni.indexOf(id), 1); setUser({...user, inventory: ni}); }} /> : null}
-                          </div>
-                      )}) : <div className="text-center font-bold text-gray-400 mt-10">Empty.</div>}
-                  </div>
-              </div>
-          )}
-
-          {/* HIDDEN INPUT */}
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => { if(e.target.files?.[0]) { const r = new FileReader(); r.onload = (ev) => handleScan(ev.target?.result as string); r.readAsDataURL(e.target.files[0]); e.target.value = ''; } }} />
+    <div className="w-full h-screen relative bg-black overflow-hidden font-sans select-none">
+      {/* VOXEL LAYER */}
+      <div className="absolute inset-0 z-0">
+        {activePet && <VoxelViewer code={activePet.voxelCode} action={getActionFromText(statusText)} theme={location.environmentType} equipment={activePet.equipment} />}
       </div>
-  );
-};
 
-export default App;
+      {/* HUD TOP (NEO-POP STYLE) */}
+      <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-10 pointer-events-none safe-top">
+          {/* NAME PLATE */}
+          <div className="neo-pop-box p-2 pointer-events-auto cursor-pointer flex items-center gap-3 hover:scale-105 active:scale-95 transition-transform bg-white" onClick={()=>setStatsOpen(true)}>
+              <div className="flex flex-col">
+                  <div className="text-[10px] font-black text-black uppercase tracking-wider flex items-center gap-1">
+                      <span className="bg-black text-white px-1 rounded">LV.{activePet?.level}</span> {activePet?.name}
+                  </div>
+                  <div className="w-32 h-3 bg-gray-300 rounded-full mt-1 overflow-hidden border-2 border-black relative">
+                      <div className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 border-r-2 border-black" style={{width: `${(activePet?.exp / activePet?.maxExp)*100}%`}}></div>
+                  </div>
+              </div>
+              <div className="bg-blue-500 text-white border-2 border-black rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-[2px_2px_0_#000]">i</div>
+          </div>
+
+          {/* RESOURCE PLATE */}
+          <div className="neo-pop-box p-2 flex flex-col items-end bg-white">
+              <div className="font-black text-yellow-600 flex items-center gap-1 text-base drop-shadow-sm">
+                  <span className="text-xl">🪙</span> {user.coins}
+              </div>
+              <div className="text-[9px] font-bold text-white uppercase bg-black px-2 py-0.5 rounded-full mt-1 border border-gray-500">{location.name}</div>
+          </div>
+      </div>
+
+      {/* FLOATING NOTIFICATIONS - STACKED */}
+      {notifs.map((n, idx) => (
+          <div key={n.id} className={`absolute z-[60] text-3xl font-black ${n.color} float-up pointer-events-none w-full text-center drop-shadow-[3px_3px_0_#000] stroke-black text-stroke`} 
+               style={{top: `${20 + idx * 8}%`, WebkitTextStroke: '1.5px black'}}>
+              {n.text}
+          </div>
+      ))}
+
+      {/* SHOP PURCHASE ANIMATION */}
+      {purchaseAnim && (
+          <div className="absolute inset-0 z-[70] flex items-center justify-center pointer-events-none">
+              <div className="shop-pop w-32 h-32">
+                  <ItemIcon item={ITEMS_DB[purchaseAnim]} />
+              </div>
+          </div>
+      )}
+
+      {/* EXPLORE STATUS */}
+      <div className="absolute bottom-32 left-0 right-0 flex justify-center z-10 pointer-events-none">
+          <div className="bg-black/90 text-white px-6 py-2 rounded-full border-2 border-white/50 backdrop-blur text-xs font-black tracking-widest uppercase shadow-lg">
+              {statusText} <span className="animate-pulse">...</span>
+          </div>
+      </div>
+
+      {/* BOTTOM NAVIGATION (FLOATING NEO-POP) */}
+      <div className="absolute bottom-4 left-4 right-4 bg-white border-4 border-black rounded-2xl p-2 flex justify-between items-end z-20 shadow-[0_10px_20px_rgba(0,0,0,0.4)] h-20 safe-bottom">
+          
+          <button onClick={()=>{ setGameState('COLLECTION') }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
+              <IconCards />
+              <span className="text-[9px] font-black uppercase mt-1">Cards</span>
+          </button>
+
+          <button onClick={()=>{ setItemsOpen(true) }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
+              <IconBag />
+              <span className="text-[9px] font-black uppercase mt-1">Items</span>
+          </button>
+
+          {/* CENTER SCAN BUTTON */}
+          <div className="relative w-1/5 flex justify-center">
+              <button onClick={()=>setShowScan(true)} className="absolute -top-12 bg-yellow-400 w-24 h-24 rounded-full border-4 border-black flex items-center justify-center shadow-[0px_8px_0px_0px_#000] hover:-translate-y-2 hover:shadow-[0px_10px_0px_0px_#000] active:translate-y-1 active:shadow-[0px_2px_0px_0px_#000] transition-all z-30">
+                  <div className="text-white drop-shadow-md"><IconScan /></div>
+              </button>
+          </div>
+
+          <button onClick={()=>{ setShopOpen(true) }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
+              <IconCart />
+              <span className="text-[9px] font-black uppercase mt-1">Shop</span>
+          </button>
+
+          <button onClick={()=>{ setExploreOpen(true) }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
+              <IconMap />
+              <span className="text-[9px] font-black uppercase mt-1">Map</span>
+          </button>
+      </div>
+
+      {/* --- MODALS --- */}
+      
+      {activeBattle && (
+          <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
+              <div className="w-full max-w-lg bg-white border-4 border-black rounded-2xl overflow-hidden shadow-[10px_10px_0_#000] flex flex-col h-[75vh] pop-in">
+                  <div className="bg-red-500 text-white p-3 text-center font-black text-2xl tracking-widest border-b-4 border-black flex justify-center items-center gap-2 italic transform skew-x-[-5deg]">
+                      <span>⚠️</span> WILD ENCOUNTER <span>⚠️</span>
+                  </div>
+                  <div className="flex-1 bg-gradient-to-b from-slate-800 to-black relative overflow-hidden flex border-b-4 border-black">
+                       {/* Strict 50/50 split */}
+                       <div className="w-1/2 h-full relative border-r-4 border-black">
+                           <VoxelViewer code={activePet.voxelCode} mode="BATTLE_PLAYER" equipment={activePet.equipment} />
+                           <div className="absolute bottom-2 left-2 bg-blue-600 text-white text-[9px] font-bold px-2 py-1 border-2 border-black rounded transform -skew-x-12 shadow-md">YOU</div>
+                       </div>
+                       <div className="w-1/2 h-full relative">
+                           <VoxelViewer code={activeBattle.enemy.voxelCode} mode="BATTLE_ENEMY" />
+                           <div className="absolute top-2 right-2 bg-red-600 text-white text-[9px] font-bold px-2 py-1 border-2 border-black rounded transform -skew-x-12 shadow-md">ENEMY</div>
+                       </div>
+                       {/* Centered VS Badge */}
+                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-yellow-400 text-black font-black text-4xl w-20 h-20 flex items-center justify-center rounded-full border-4 border-black shadow-[0_0_0_4px_white,0_0_20px_rgba(0,0,0,0.5)] z-10 transform -rotate-12 animate-bounce">
+                           VS
+                       </div>
+                       {activeBattle.finished && (
+                           <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20 backdrop-blur-sm animate-in fade-in zoom-in">
+                               <h1 className={`text-6xl font-black ${activeBattle.win ? 'text-yellow-400 stroke-black' : 'text-red-500 stroke-black'} drop-shadow-[6px_6px_0_#000] -rotate-6 mb-4`} style={{WebkitTextStroke: '2px black'}}>
+                                   {activeBattle.win ? 'VICTORY!' : 'DEFEATED'}
+                               </h1>
+                           </div>
+                       )}
+                  </div>
+                  <div className="h-[30%] bg-gray-100 p-4 font-mono text-xs overflow-y-auto flex flex-col gap-2">
+                      {activeBattle.logs.map((log:string, i:number) => (
+                          <div key={i} className="text-black font-bold border-l-4 border-black pl-2 bg-white p-1 shadow-sm">
+                              {log}
+                          </div>
+                      ))}
+                      <div ref={logScrollRef} />
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {activeEvent && (
+          <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-6">
+              <div className="w-full max-w-md bg-white border-4 border-black rounded-2xl overflow-hidden shadow-[12px_12px_0_#000] pop-in">
+                  <div className={`p-4 text-center font-black text-2xl border-b-4 border-black tracking-wider ${activeEvent.type === 'HAZARD' ? 'bg-red-500 text-white' : 'bg-blue-400 text-black'}`}>
+                      {activeEvent.title}
+                  </div>
+                  <div className="p-8 text-center min-h-[220px] flex flex-col items-center justify-center relative bg-yellow-50">
+                      {!activeEvent.finished ? (
+                           <div className="flex flex-col gap-4 w-full items-center">
+                               <div className="text-6xl animate-bounce mb-4 drop-shadow-md">
+                                   {activeEvent.type === 'TREASURE' ? '💎' : activeEvent.type === 'HAZARD' ? '⚠️' : '📜'}
+                               </div>
+                               {activeEvent.logs.slice(0, activeEvent.currentLogIndex + 1).map((l:string, i:number) => (
+                                   <p key={i} className="text-lg font-black text-gray-800 fade-in bg-white border-2 border-black px-4 py-2 rounded-lg w-full shadow-[2px_2px_0_#ccc]">{l}</p>
+                               ))}
+                           </div>
+                      ) : (
+                           <h2 className="text-5xl font-black text-green-500 pop-in drop-shadow-[3px_3px_0_black] -rotate-3">{activeEvent.resultText}</h2>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {gameState === 'COLLECTION' && (
+          <div className="absolute inset-0 bg-yellow-100 z-40 overflow-y-auto pt-24 pb-24 px-4 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+               <div className="fixed top-0 left-0 right-0 bg-white/95 p-4 border-b-4 border-black z-50 flex justify-between items-center shadow-lg safe-top">
+                   <h2 className="text-black font-black text-2xl tracking-wide flex items-center gap-2">
+                       <IconCards /> MY BINDER 
+                       <span className="bg-black text-white text-sm px-3 py-1 rounded-full">{inventory.length}</span>
+                   </h2>
+                   <button onClick={() => setGameState('NEXUS')} className="bg-red-500 text-white w-10 h-10 rounded-lg flex items-center justify-center font-black border-3 border-black hover:bg-red-400 shadow-[4px_4px_0_#000]">✕</button>
+               </div>
+               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                   {inventory.map(pet => (
+                       <div key={pet.id} className="transform transition-transform hover:scale-105 active:scale-95">
+                           <PixuCard pet={pet} onClick={() => setSelectedCard(pet)} />
+                       </div>
+                   ))}
+               </div>
+          </div>
+      )}
+
+      {shopOpen && (
+          <div className="absolute inset-0 z-40 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+               <div className="w-full max-w-md bg-white rounded-2xl overflow-hidden border-4 border-black shadow-[12px_12px_0_#000] flex flex-col h-[85vh] pop-in">
+                   <div className="bg-purple-400 p-4 border-b-4 border-black flex justify-between items-center">
+                       <h2 className="font-black text-2xl text-white flex items-center gap-2 drop-shadow-md"><IconCart /> ITEM SHOP</h2>
+                       <div className="flex gap-3 items-center">
+                           <span className="font-black text-black bg-yellow-400 px-3 py-1 rounded-lg border-2 border-black shadow-sm">{user.coins} G</span>
+                           <button onClick={()=>setShopOpen(false)} className="text-2xl font-black text-white hover:scale-110 drop-shadow-md">✕</button>
+                       </div>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-4 bg-gray-50">
+                       {['potion_small', 'pixel_pizza', 'helm_iron', 'armor_vest', 'driver_crimson', 'acc_boots', 'helm_visor', 'acc_ring', 'mystery_box'].map(id => {
+                           const item = ITEMS_DB[id];
+                           return (
+                               <div key={id} className="flex items-center bg-white p-3 rounded-xl border-3 border-black shadow-[4px_4px_0_#ccc] hover:translate-y-[-2px] hover:shadow-[6px_6px_0_#999] transition-all">
+                                   <div className="mr-4 bg-gray-100 w-14 h-14 flex items-center justify-center rounded-full border-2 border-black">
+                                        <div className="w-8 h-8"><ItemIcon item={item} /></div>
+                                   </div>
+                                   <div className="flex-1">
+                                       <div className="font-black text-base">{item.name}</div>
+                                       <div className="text-xs text-gray-600 font-bold">{item.description}</div>
+                                   </div>
+                                   <button onClick={() => handlePurchase(item)} className="pop-btn btn-success text-xs py-2 px-3 border-2 shadow-[2px_2px_0_#000]">
+                                       {item.price} G
+                                   </button>
+                               </div>
+                           );
+                       })}
+                   </div>
+               </div>
+          </div>
+      )}
+
+      {exploreOpen && (
+          <div className="absolute inset-0 z-40 bg-slate-800 overflow-auto">
+               <div className="fixed top-0 left-0 right-0 bg-slate-900/95 p-4 border-b-4 border-white z-50 flex justify-between items-center shadow-lg safe-top">
+                   <h2 className="text-white font-black text-2xl flex items-center gap-2 italic"><IconMap /> WORLD MAP</h2>
+                   <button onClick={() => setExploreOpen(false)} className="bg-red-500 w-10 h-10 rounded-lg border-3 border-white text-white font-black shadow-md">✕</button>
+               </div>
+               <div className="w-[200%] h-[200%] relative map-grid p-20 pt-32 origin-top-left">
+                   {Object.values(LOCATIONS_DB).map(loc => {
+                       const isCurrent = user.currentLocation === loc.id;
+                       const isLocked = user.level < loc.levelReq;
+                       return (
+                           <div key={loc.id} id={loc.id}
+                                className={`absolute w-32 h-32 flex flex-col items-center justify-center text-center rounded-full border-4 transition-all duration-300 cursor-pointer
+                                    ${isCurrent ? 'scale-125 border-yellow-400 shadow-[0_0_0_6px_rgba(250,204,21,0.5)] z-20' : 'border-white z-10 hover:scale-110'}
+                                    ${isLocked ? 'bg-gray-600 grayscale opacity-60' : loc.color}`}
+                                style={{left: `${loc.x}%`, top: `${loc.y}%`}}
+                                onClick={() => {
+                                    if(!isLocked) {
+                                        setUser(u => ({ ...u, currentLocation: loc.id }));
+                                        setExploreOpen(false);
+                                        setStatusText(`Traveling to ${loc.name}...`);
+                                    } else { alert(`Zone Locked! Requires Lv.${loc.levelReq}`); }
+                                }}>
+                                <div className="text-3xl mb-1 drop-shadow-md">{isLocked ? '🔒' : '📍'}</div>
+                                <div className="font-black text-xs leading-tight px-2 bg-black/60 text-white rounded backdrop-blur-sm border border-white/20">{loc.name}</div>
+                                {isLocked && <div className="text-[9px] mt-1 font-black bg-red-600 text-white px-1.5 py-0.5 rounded border border-white">Lv.{loc.levelReq}</div>}
+                           </div>
+                       );
+                   })}
+                   <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 opacity-50">
+                       {Object.values(LOCATIONS_DB).map(loc => 
+                           loc.connections.map(targetId => {
+                               const target = LOCATIONS_DB[targetId];
+                               return (
+                                   <line key={`${loc.id}-${targetId}`} x1={`${loc.x + 4}%`} y1={`${loc.y + 4}%`} x2={`${target.x + 4}%`} y2={`${target.y + 4}%`} stroke="white" strokeWidth="4" strokeDasharray="10,10" strokeLinecap="round" />
+                               );
+                           })
+                       )}
+                   </svg>
+               </div>
+          </div>
+      )}
+
+      {selectedCard && (
+          <div className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
+               <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden border-4 border-black shadow-[0_0_50px_rgba(255,255,255,0.3)] flex flex-col max-h-[90vh] pop-in">
+                   <div className="bg-gray-100 p-4 flex justify-between items-center border-b-4 border-black">
+                       <h3 className="font-black text-xl uppercase tracking-wider">Data Sheet</h3>
+                       <button onClick={()=>setSelectedCard(null)} className="text-3xl hover:text-red-500 font-black leading-none">×</button>
+                   </div>
+                   <div className="p-6 overflow-y-auto flex-1 bg-blue-50">
+                       <div className="w-3/4 mx-auto mb-6 transform hover:rotate-1 transition-transform">
+                           <PixuCard pet={selectedCard} />
+                       </div>
+                       <div className="mb-6 neo-pop-box p-3 bg-white">
+                           <h4 className="font-black text-xs text-gray-500 mb-2 uppercase text-center">Current Loadout</h4>
+                           <div className="grid grid-cols-3 gap-3">
+                               {['HEAD', 'BODY', 'ACCESSORY'].map(slot => {
+                                   const equippedId = selectedCard.equipment?.[slot.toLowerCase() as keyof typeof selectedCard.equipment];
+                                   const item = equippedId ? ITEMS_DB[equippedId] : null;
+                                   return (
+                                       <div key={slot} onClick={() => setShowGearSelect({slot: slot as EquipmentSlot})}
+                                            className="aspect-square bg-gray-100 rounded-xl border-2 border-black flex items-center justify-center cursor-pointer hover:bg-blue-100 shadow-[2px_2px_0_#ccc] relative group">
+                                           {item ? <div className="w-8 h-8"><ItemIcon item={item} /></div> : <span className="text-[9px] font-black text-gray-400">{slot}</span>}
+                                           <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-[10px] w-6 h-6 rounded-full border-2 border-black flex items-center justify-center group-hover:scale-110 transition-transform font-black">+</div>
+                                       </div>
+                                   );
+                               })}
+                           </div>
+                       </div>
+                       <div className="flex flex-col gap-3 mt-auto">
+                           <button onClick={()=>{ 
+                               const idx = inventory.findIndex(p => p.id === selectedCard.id);
+                               setActivePetIndex(idx);
+                               setSelectedCard(null);
+                               setGameState('NEXUS');
+                               showFloatingText("COMPANION SET!", "text-blue-400");
+                           }} className="pop-btn btn-primary w-full">SET ACTIVE</button>
+                           {(selectedCard.level >= EVO_THRESHOLDS.PRO && selectedCard.stage === 'Noob') || 
+                            (selectedCard.level >= EVO_THRESHOLDS.ELITE && selectedCard.stage === 'Pro') ||
+                            (selectedCard.level >= EVO_THRESHOLDS.LEGEND && selectedCard.stage === 'Elite') ? (
+                                <button onClick={async () => {
+                                    const evo = await evolveVoxelScene(selectedCard);
+                                    const updated = [...inventory];
+                                    const idx = inventory.findIndex(p => p.id === selectedCard.id);
+                                    updated[idx] = { 
+                                        ...updated[idx], 
+                                        stage: evo.nextStage, 
+                                        voxelCode: evo.code, 
+                                        name: evo.nextName,
+                                        atk: Math.floor(updated[idx].atk * 1.5),
+                                        def: Math.floor(updated[idx].def * 1.5),
+                                        hp: Math.floor(updated[idx].hp * 1.5),
+                                        maxHp: Math.floor(updated[idx].maxHp! * 1.5)
+                                    };
+                                    setInventory(updated);
+                                    setSelectedCard(updated[idx]);
+                                    alert(`${selectedCard.name} GLOW UP SUCCESSFUL!`);
+                                }} className="pop-btn btn-warning w-full animate-pulse shadow-[0_0_15px_gold] border-yellow-600">🧬 EVOLVE!</button>
+                            ) : null}
+                       </div>
+                   </div>
+               </div>
+          </div>
+      )}
+
+      {showGearSelect && selectedCard && (
+          <div className="absolute inset-0 z-[60] bg-black/90 flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-sm rounded-2xl p-5 border-4 border-black shadow-2xl pop-in">
+                  <h3 className="font-black mb-4 text-lg uppercase border-b-4 border-black pb-2">Equip {showGearSelect.slot}</h3>
+                  <div className="grid grid-cols-4 gap-3 max-h-[50vh] overflow-y-auto p-2">
+                      {user.inventory.filter(id => ITEMS_DB[id].type === 'Gear' && ITEMS_DB[id].slot === showGearSelect.slot).map((id, i) => {
+                          const item = ITEMS_DB[id];
+                          return (
+                            <div key={i} onClick={() => { handleEquip(showGearSelect.slot, id); }} 
+                               className="aspect-square border-2 border-black hover:bg-blue-100 cursor-pointer rounded-xl flex flex-col items-center justify-center shadow-[3px_3px_0_#999] active:translate-y-1 active:shadow-none transition-all">
+                              <div className="w-8 h-8"><ItemIcon item={item} /></div>
+                            </div>
+                          );
+                      })}
+                  </div>
+                  <button onClick={()=>setShowGearSelect(null)} className="mt-4 w-full py-3 bg-gray-200 rounded-xl border-3 border-black font-black hover:bg-gray-300 transition-colors">CANCEL</button>
+              </div>
+          </div>
+      )}
+
+      {itemsOpen && (
+          <div className="absolute inset-0 z-40 bg-black/90 flex items-center justify-center p-4 backdrop-blur">
+               <div className="w-full max-w-md bg-white rounded-2xl overflow-hidden border-4 border-black shadow-2xl flex flex-col h-[70vh] pop-in">
+                   <div className="bg-green-400 p-4 border-b-4 border-black flex justify-between items-center">
+                       <h2 className="font-black text-xl text-white drop-shadow-md flex items-center gap-2"><IconBag /> BACKPACK</h2>
+                       <button onClick={()=>setItemsOpen(false)} className="font-black text-xl w-8 h-8 hover:bg-green-500 rounded text-white">✕</button>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-3 content-start bg-green-50">
+                       {user.inventory.map((id, i) => {
+                           const item = ITEMS_DB[id];
+                           return (
+                             <div key={i} className="aspect-square bg-white rounded-xl border-2 border-black flex flex-col items-center justify-center p-1 text-center relative group shadow-[3px_3px_0_#ccc] hover:-translate-y-1 hover:shadow-[4px_4px_0_#999] transition-all">
+                                 <div className="w-8 h-8"><ItemIcon item={item} /></div>
+                                 <div className="text-[8px] font-bold mt-1 truncate w-full px-1">{item.name}</div>
+                             </div>
+                           );
+                       })}
+                   </div>
+               </div>
+          </div>
+      )}
+
+      {showScan && (
+          <div className="absolute inset-0 z-50 bg-black flex flex-col">
+              <div className="flex-1 relative bg-gray-900 flex items-center justify-center overflow-hidden">
+                  {!scanPreview ? (
+                    <>
+                      <video id="cam-feed" autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover opacity-50" />
+                      <div className="relative z-10 text-white text-center p-6">
+                          <label className="bg-white text-black px-8 py-5 rounded-full font-black text-xl cursor-pointer border-4 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.6)] hover:scale-105 transition-transform active:scale-95">
+                              ACTIVATE LENS
+                              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                      const reader = new FileReader();
+                                      reader.onloadend = () => setScanPreview(reader.result as string);
+                                      reader.readAsDataURL(file);
+                                  }
+                              }} />
+                          </label>
+                      </div>
+                    </>
+                  ) : (
+                      <img src={scanPreview} className="w-full h-full object-contain" alt="Preview" />
+                  )}
+                  {isAnalyzing && (
+                      <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
+                          <div className="text-green-400 font-black text-3xl animate-pulse mb-6 tracking-widest drop-shadow-[0_0_10px_green]">DECODING...</div>
+                          <div className="w-64 h-6 bg-gray-800 rounded-full overflow-hidden border-2 border-green-500 shadow-[0_0_15px_green]">
+                              <div className="h-full bg-green-500 animate-[width_1.5s_ease-in-out_infinite]" style={{width: '100%'}}></div>
+                          </div>
+                      </div>
+                  )}
+              </div>
+              {scanPreview && !isAnalyzing && (
+                  <div className="p-6 bg-black flex gap-4 safe-bottom">
+                      <button onClick={() => setScanPreview(null)} className="flex-1 bg-gray-800 text-white py-4 rounded-xl font-black border-2 border-gray-500 hover:bg-gray-700">RETRY</button>
+                      <button onClick={handleScan} className="flex-1 bg-green-500 text-black py-4 rounded-xl font-black border-2 border-white shadow-[0_0_20px_green] hover:scale-105 transition-transform">MATERIALIZE</button>
+                  </div>
+              )}
+              {!scanPreview && <button onClick={() => setShowScan(false)} className="absolute top-6 right-6 text-white text-2xl bg-black/50 w-12 h-12 rounded-full flex items-center justify-center font-black border-2 border-white hover:bg-red-500 transition-colors">✕</button>}
+          </div>
+      )}
+    </div>
+  );
+}
