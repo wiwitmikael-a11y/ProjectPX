@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { getGenericVoxel } from './gemini'; // Circular dependency handled by App logic usually, but here we need basic voxel gen for enemies
+
 export type BodyType = 'BIPED' | 'QUADRUPED' | 'FLOATING' | 'WHEELED' | 'SERPENTINE';
 export type AITactic = 'BALANCED' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SPEEDSTER';
 
@@ -16,10 +18,44 @@ export const EVO_THRESHOLDS = {
     LEGEND: 50
 };
 
+export interface Move {
+    name: string;
+    type: string;
+    power: number;
+    accuracy: number;
+    description: string;
+}
+
+export interface MonsterStats {
+    id: string;
+    dateCreated: number;
+    name: string;
+    element: string;
+    rarity: string;
+    stage: MonsterStage;
+    rank: string;
+    nature: string;
+    personality?: string;
+    visual_design: string;
+    bodyType: BodyType;
+    potential: number;
+    hp: number;
+    maxHp?: number;
+    atk: number;
+    def: number;
+    spd: number;
+    int: number;
+    description: string;
+    ability: string;
+    moves: Move[];
+    tactic?: AITactic;
+    happiness?: number;
+}
+
 export interface GameItem {
     id: string;
     name: string;
-    type: 'Consumable' | 'Material' | 'Key' | 'Food' | 'Mod';
+    type: 'Consumable' | 'Material' | 'Key' | 'Food' | 'Gear';
     description: string;
     effect?: (pet: any) => any;
     icon: string;
@@ -41,29 +77,29 @@ export interface OfflineReport {
 export const STARTER_PACKS = [
     {
         id: 'starter_fire',
-        name: 'Pyro Bit',
+        name: 'Ember Bot',
         element: 'Fire',
-        description: 'A fiery glitch in the system. Loves to burn CPU cycles.',
+        description: 'A feisty little robot powered by a coal furnace.',
         stats: { hp: 80, atk: 15, def: 8, spd: 12 },
-        visual_design: 'Small flame spirit, voxel ember particles, glowing red core.',
+        visual_design: 'A small bipedal robot with a glowing red furnace chest and flame vents on shoulders. Cute but hot.',
         bodyType: 'BIPED'
     },
     {
         id: 'starter_water',
-        name: 'Aqua Byte',
+        name: 'Bubble Drone',
         element: 'Water',
-        description: 'Fluid data stream. Cool under pressure.',
+        description: 'An aquatic surveillance unit that loves to splash.',
         stats: { hp: 100, atk: 10, def: 10, spd: 10 },
-        visual_design: 'Blue droplet shape, floating bubbles, liquid texture.',
+        visual_design: 'A round floating spherical drone with blue glass dome, small propeller on bottom, and bubble particles.',
         bodyType: 'FLOATING'
     },
     {
         id: 'starter_grass',
-        name: 'Terra Pixel',
+        name: 'Leaf Pup',
         element: 'Grass',
-        description: 'Rooted in the mainframe. High defense capabilities.',
+        description: 'Half dog, half plant. 100% good boy.',
         stats: { hp: 120, atk: 8, def: 15, spd: 6 },
-        visual_design: 'Blocky moss creature, flower on head, sturdy legs.',
+        visual_design: 'A quadruped cyber-dog with mossy green armor plates and a flower blooming on its back.',
         bodyType: 'QUADRUPED'
     }
 ];
@@ -87,7 +123,7 @@ export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineRep
         xpGained = Math.floor(diffSeconds * xpRate);
         coinsFound = Math.floor(diffSeconds * (10/3600)); 
         pet.hunger = Math.max(0, remainingHunger);
-        events.push(`AFK Farming: ${(diffSeconds/60).toFixed(0)} mins.`);
+        events.push(`Auto-Exploring: ${(diffSeconds/60).toFixed(0)} mins.`);
     } else {
         const safeTime = pet.hunger / hungerDropRate;
         const starvingTime = diffSeconds - safeTime;
@@ -98,8 +134,8 @@ export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineRep
         hpLost = Math.floor(starvingTime * (5/3600));
         pet.currentHp = Math.max(0, pet.currentHp - hpLost);
         
-        events.push("AFK failed. Ran out of snacks.");
-        if (pet.currentHp === 0) events.push("Passed out. GG.");
+        events.push("Stopped exploring. Out of energy.");
+        if (pet.currentHp === 0) events.push("Fainted while wandering.");
     }
 
     return {
@@ -112,45 +148,43 @@ export const calculateOfflineProgress = (pet: any, lastSeen: number): OfflineRep
     };
 };
 
-// --- EVOLUTION PATH LOGIC (THE BUILD CHECK) ---
+// --- EVOLUTION PATH LOGIC ---
 export const determineEvolutionPath = (stats: {atk: number, def: number, spd: number, happiness: number}) => {
     const { atk, def, spd, happiness } = stats;
     
-    // 1. Determine Dominant Build
     let dominant = 'BALANCED';
-    let protocolName = 'Basic Build';
+    let protocolName = 'Balanced';
     let color = 'text-gray-500';
     let borderColor = 'border-gray-500';
     let icon = '😐';
-    let desc = "Noob stats. Grind more.";
+    let desc = "Keep grinding to specialize.";
     
     if (atk >= def && atk >= spd) {
         dominant = 'ATTACK';
-        protocolName = 'DPS Build'; // High Damage
+        protocolName = 'Striker'; 
         color = 'text-red-500';
         borderColor = 'border-red-500';
         icon = '⚔️';
-        desc = "Next Rank: GLASS CANNON (Full Damage)";
+        desc = "Path: Glass Cannon";
     } else if (def > atk && def > spd) {
         dominant = 'DEFENSE';
-        protocolName = 'Tank Build'; // High Def
+        protocolName = 'Guardian';
         color = 'text-blue-500';
         borderColor = 'border-blue-500';
         icon = '🛡️';
-        desc = "Next Rank: THE WALL (Unkillable)";
+        desc = "Path: Unbreakable";
     } else if (spd > atk && spd > def) {
         dominant = 'SPEED';
-        protocolName = 'Speedrun Build'; // High Speed
+        protocolName = 'Speedster';
         color = 'text-yellow-500';
         borderColor = 'border-yellow-500';
         icon = '👟';
-        desc = "Next Rank: SPEEDSTER (Dodge Everything)";
+        desc = "Path: Mach 10";
     }
     
-    // 2. Determine Alignment
     let alignment = 'NEUTRAL';
-    if (happiness >= 85) alignment = 'LUMINOUS'; // Good Vibes
-    if (happiness <= 25) alignment = 'CORRUPTED'; // Toxic Vibes
+    if (happiness >= 85) alignment = 'LUMINOUS'; 
+    if (happiness <= 25) alignment = 'CORRUPTED';
 
     return { dominant, alignment, protocolName, color, borderColor, icon, desc };
 };
@@ -167,169 +201,178 @@ export const getProceduralMonsterArt = (name: string, element: string): string =
         Psychic: '#D8B4FE', Metal: '#D1D5DB', Dark: '#4B5563', Light: '#FEF9C3',
         Spirit: '#A5B4FC', Toxic: '#BEF264'
     };
-    const baseHex = hexMap[element] || '#CBD5E1';
+    const accentMap: any = {
+        Fire: '#EF4444', Water: '#3B82F6', Grass: '#22C55E', Electric: '#EAB308',
+        Psychic: '#A855F7', Metal: '#6B7280', Dark: '#1F2937', Light: '#CA8A04',
+        Spirit: '#6366F1', Toxic: '#84CC16'
+    };
 
-    // Generate a pattern of pixel blocks
-    const blocks = [];
-    for(let i=0; i<8; i++) {
-         for(let j=0; j<8; j++) {
-             if (Math.abs(Math.sin(hash * i * j)) > 0.5) {
-                 blocks.push(`<rect x="${20 + i*8}" y="${40 + j*8}" width="8" height="8" fill="rgba(0,0,0,0.2)" />`);
-             }
-         }
+    const baseHex = hexMap[element] || '#CBD5E1';
+    const accentHex = accentMap[element] || '#000000';
+
+    let shapes = '';
+    const shapeCount = 5 + (Math.abs(hash) % 5);
+    for(let k=0; k<shapeCount; k++) {
+        const cx = 20 + (Math.abs(hash * (k+1)) % 60);
+        const cy = 20 + (Math.abs(hash * (k+2)) % 60);
+        const r = 10 + (Math.abs(hash * (k+3)) % 20);
+        if (k % 2 === 0) {
+            shapes += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${accentHex}" fill-opacity="0.5" stroke="black" stroke-width="2" />`;
+        } else {
+             shapes += `<rect x="${cx}" y="${cy}" width="${r*2}" height="${r*2}" fill="white" fill-opacity="0.8" stroke="black" stroke-width="2" />`;
+        }
     }
 
     const svg = `
-    <svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <svg width="300" height="300" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <pattern id="dots" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+                <circle cx="2" cy="2" r="1" fill="#000" fill-opacity="0.1"/>
+            </pattern>
+        </defs>
         <rect width="100" height="100" fill="${baseHex}" />
-        <rect x="5" y="5" width="90" height="90" fill="none" stroke="white" stroke-width="2" stroke-dasharray="5,5" />
-        ${blocks.join('')}
-        <text x="50" y="85" font-family="monospace" font-weight="bold" font-size="10" text-anchor="middle" fill="black">${element.toUpperCase()} TYPE</text>
-        <text x="50" y="30" font-family="monospace" font-weight="bold" font-size="12" text-anchor="middle" fill="black">${name.substring(0,8)}</text>
+        <rect width="100" height="100" fill="url(#dots)" />
+        <g transform="translate(5,5)">${shapes}</g>
+        <circle cx="50" cy="50" r="25" fill="white" stroke="black" stroke-width="3" />
+        <circle cx="40" cy="45" r="5" fill="black" />
+        <circle cx="60" cy="45" r="5" fill="black" />
+        <path d="M 45 60 Q 50 65 55 60" stroke="black" stroke-width="3" fill="none" />
+        <text x="50" y="92" font-family="sans-serif" font-weight="900" font-size="12" text-anchor="middle" fill="black" stroke="white" stroke-width="0.5">${element.toUpperCase()}</text>
     </svg>
     `;
     
     return `data:image/svg+xml;base64,${btoa(svg)}`;
 };
 
-
 export const ELEMENT_THEMES: any = {
-  Fire: { bg: 'bg-red-400', text: 'text-white', icon: '🔥' },
-  Water: { bg: 'bg-blue-400', text: 'text-white', icon: '💧' },
-  Grass: { bg: 'bg-green-400', text: 'text-black', icon: '🌿' },
-  Electric: { bg: 'bg-yellow-300', text: 'text-black', icon: '⚡' },
-  Psychic: { bg: 'bg-purple-400', text: 'text-white', icon: '🔮' },
-  Metal: { bg: 'bg-gray-300', text: 'text-black', icon: '⚙️' },
-  Dark: { bg: 'bg-gray-800', text: 'text-white', icon: '🌑' },
-  Light: { bg: 'bg-yellow-100', text: 'text-black', icon: '✨' },
-  Spirit: { bg: 'bg-indigo-400', text: 'text-white', icon: '👻' },
-  Toxic: { bg: 'bg-lime-400', text: 'text-black', icon: '☣️' },
+  Fire: { bg: 'bg-red-400', text: 'text-white', icon: '🔥', hex: 0xff4400 },
+  Water: { bg: 'bg-blue-400', text: 'text-white', icon: '💧', hex: 0x0088ff },
+  Grass: { bg: 'bg-green-400', text: 'text-black', icon: '🌿', hex: 0x00cc44 },
+  Electric: { bg: 'bg-yellow-300', text: 'text-black', icon: '⚡', hex: 0xffcc00 },
+  Psychic: { bg: 'bg-purple-400', text: 'text-white', icon: '🔮', hex: 0xaa00ff },
+  Metal: { bg: 'bg-gray-300', text: 'text-black', icon: '⚙️', hex: 0x888888 },
+  Dark: { bg: 'bg-gray-800', text: 'text-white', icon: '🌑', hex: 0x220044 },
+  Light: { bg: 'bg-yellow-100', text: 'text-black', icon: '✨', hex: 0xffffee },
+  Spirit: { bg: 'bg-indigo-400', text: 'text-white', icon: '👻', hex: 0x6600cc },
+  Toxic: { bg: 'bg-lime-400', text: 'text-black', icon: '☣️', hex: 0x88cc00 },
 };
 
 export const ITEMS_DB: Record<string, GameItem> = {
     'pixel_pizza': {
-        id: 'pixel_pizza', name: 'Cheat Code Pizza', type: 'Food',
-        description: 'Restaores hunger instantly. Devs favorite.',
+        id: 'pixel_pizza', name: 'Pizza Slice', type: 'Food',
+        description: 'Tasty snack. +40 Energy, +5 Happy.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 40); pet.happiness = Math.min(100, (pet.happiness || 50) + 5); return pet; },
         icon: '🍕', rarity: 'Common', price: 30
     },
     'data_burger': {
-        id: 'data_burger', name: 'RAM Burger', type: 'Food',
-        description: 'Greasy memory optimization. +60 Energy.',
+        id: 'data_burger', name: 'Mega Burger', type: 'Food',
+        description: 'Big meal. +60 Energy, +10 Happy.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 60); pet.happiness = Math.min(100, (pet.happiness || 50) + 10); return pet; },
         icon: '🍔', rarity: 'Common', price: 60
     },
     'glitch_candy': {
-        id: 'glitch_candy', name: 'Rare Candy (Legal)', type: 'Food',
-        description: 'Tastes like static. Boosts mood significantly.',
+        id: 'glitch_candy', name: 'Rainbow Candy', type: 'Food',
+        description: 'Super sweet! +20 Happy.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 10); pet.happiness = Math.min(100, (pet.happiness || 50) + 20); return pet; },
         icon: '🍬', rarity: 'Rare', price: 80
     },
     'neon_soda': {
-        id: 'neon_soda', name: 'Overclock Soda', type: 'Food',
-        description: 'Warning: May cause jittery pixels. +Energy.',
+        id: 'neon_soda', name: 'Zap Soda', type: 'Food',
+        description: 'Fizzy drink. +20 Energy.',
         effect: (pet: any) => { pet.hunger = Math.min(100, pet.hunger + 20); pet.happiness += 5; return pet; },
         icon: '🥤', rarity: 'Common', price: 40
     },
-    
-    // CONSUMABLES
     'potion_small': {
-        id: 'potion_small', name: 'Debug Patch v1', type: 'Consumable',
-        description: 'Fixes minor health bugs. +20 HP.',
+        id: 'potion_small', name: 'Mini Potion', type: 'Consumable',
+        description: 'Heals 20 HP.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 20); return pet; },
         icon: '🧪', rarity: 'Common', price: 50
     },
     'potion_super': {
-        id: 'potion_super', name: 'System Restore', type: 'Consumable',
-        description: 'Rolls back health to safe state. +60 HP.',
+        id: 'potion_super', name: 'Max Potion', type: 'Consumable',
+        description: 'Heals 60 HP.',
         effect: (pet: any) => { pet.currentHp = Math.min(pet.maxHp, pet.currentHp + 60); return pet; },
         icon: '💉', rarity: 'Rare', price: 150
     },
     'revive_chip': {
-        id: 'revive_chip', name: '1-UP Chip', type: 'Consumable',
-        description: 'Continue? (Y/N). Revives pet.',
+        id: 'revive_chip', name: 'Revive Kit', type: 'Consumable',
+        description: 'Wakes up fainted pet.',
         effect: (pet: any) => { if(pet.currentHp <= 0) pet.currentHp = Math.floor(pet.maxHp * 0.5); return pet; },
-        icon: '🕹️', rarity: 'Epic', price: 500
+        icon: '❤️', rarity: 'Epic', price: 500
     },
     'energy_drink': {
-        id: 'energy_drink', name: 'AFK Potion', type: 'Consumable',
-        description: 'Reduces system fatigue. -50 Fatigue.',
+        id: 'energy_drink', name: 'Coffee', type: 'Consumable',
+        description: 'Wake up! -50 Fatigue.',
         effect: (pet: any) => { pet.fatigue = Math.max(0, pet.fatigue - 50); return pet; },
-        icon: '⚡', rarity: 'Common', price: 100
+        icon: '☕', rarity: 'Common', price: 100
     },
     'mystery_box': {
-        id: 'mystery_box', name: 'Lootbox [RNG]', type: 'Consumable',
-        description: 'Gambling is fun! (Contains random items).',
-        effect: (pet: any) => { return pet; }, // Logic handled in app
-        icon: '📦', rarity: 'Epic', price: 500
+        id: 'mystery_box', name: 'Mystery Box', type: 'Consumable',
+        description: 'What\'s inside??',
+        effect: (pet: any) => { return pet; }, 
+        icon: '🎁', rarity: 'Epic', price: 500
     },
-
-    // MODS (Formerly Drivers)
     'driver_crimson': {
-        id: 'driver_crimson', name: 'Mod: VIOLENCE', type: 'Mod',
-        description: 'Install Aggressive Drivers. +5 ATK.',
+        id: 'driver_crimson', name: 'Power Chip', type: 'Gear',
+        description: 'Permanently adds +5 ATK.',
         effect: (pet: any) => { pet.atk += 5; return pet; },
         icon: '⚔️', rarity: 'Rare', price: 1200
     },
     'driver_titanium': {
-        id: 'driver_titanium', name: 'Mod: FIREWALL', type: 'Mod',
-        description: 'Install Security Patch. +5 DEF.',
+        id: 'driver_titanium', name: 'Armor Chip', type: 'Gear',
+        description: 'Permanently adds +5 DEF.',
         effect: (pet: any) => { pet.def += 5; return pet; },
         icon: '🛡️', rarity: 'Rare', price: 1200
     },
     'driver_azure': {
-        id: 'driver_azure', name: 'Mod: TURBO', type: 'Mod',
-        description: 'Install Overclock. +5 SPD.',
+        id: 'driver_azure', name: 'Speed Chip', type: 'Gear',
+        description: 'Permanently adds +5 SPD.',
         effect: (pet: any) => { pet.spd += 5; return pet; },
         icon: '👟', rarity: 'Rare', price: 1200
     }
 };
 
 const ENEMY_PREFIXES: Record<string, string[]> = {
-    Fire: ["Overheated", "Flaming", "Thermal", "Blazing", "Spicy"],
-    Water: ["Liquid", "Damp", "Hydrated", "Fluid", "Deep"],
-    Grass: ["Rooted", "Wild", "Overgrown", "Mossy", "Eco"],
-    Electric: ["High-Voltage", "Glitchy", "Static", "Wired", "Shocking"],
-    Metal: ["Hardened", "Heavy", "Metallic", "Shiny", "Solid"],
-    Psychic: ["Wireless", "BigBrain", "Telepathic", "Zen", "Cosmic"],
-    Dark: ["Corrupted", "Shadow", "Dark", "Void", "Null"],
-    Light: ["Bright", "Luminous", "Flashy", "Holy", "Neon"],
-    Toxic: ["Infected", "Radioactive", "Hazardous", "Gross", "Slimy"],
-    Spirit: ["Ethereal", "Ghostly", "Phased", "Spectral", "Hollow"]
+    Fire: ["Hot", "Flaming", "Spicy", "Burnt", "Inferno"],
+    Water: ["Wet", "Soggy", "Splashy", "Deep", "Tidal"],
+    Grass: ["Leafy", "Wild", "Mossy", "Green", "Jungle"],
+    Electric: ["Zappy", "Static", "Wired", "Buzzing", "Volt"],
+    Metal: ["Heavy", "Rusty", "Shiny", "Hard", "Alloy"],
+    Psychic: ["Floaty", "Brainy", "Zen", "Magic", "Cosmic"],
+    Dark: ["Gloomy", "Shadow", "Edgy", "Void", "Abyss"],
+    Light: ["Shiny", "Bright", "Flashy", "Holy", "Solar"],
+    Toxic: ["Yucky", "Slimy", "Gross", "Stinky", "Acid"],
+    Spirit: ["Ghostly", "Spooky", "Faded", "Hollow", "Phantom"]
 };
 
-const ENEMY_SUFFIXES = ["Unit", "Bot", "Droid", "Glitch", "Main", "V1", "Daemon", "Sprite", "Pixel", "Mesh"];
+const ENEMY_SUFFIXES = ["Bot", "Blob", "Critter", "Bug", "Walker", "Drone", "Beast", "Glitch"];
 
-const getEnemyName = (element: string) => {
-    const prefixes = ENEMY_PREFIXES[element] || ["Random"];
-    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-    const suffix = ENEMY_SUFFIXES[Math.floor(Math.random() * ENEMY_SUFFIXES.length)];
-    return `${prefix} ${suffix}`;
-}
-
-export const getRandomEnemy = (rank: string, playerLevel: number): any => {
+export const getRandomEnemy = (rank: string, playerLevel: number, genVoxelFunc: any): any => {
     const elements = Object.keys(ELEMENT_THEMES);
     const element = elements[Math.floor(Math.random() * elements.length)];
     const types: BodyType[] = ['BIPED', 'QUADRUPED', 'FLOATING', 'WHEELED'];
     const bodyType = types[Math.floor(Math.random() * types.length)];
-    const name = getEnemyName(element);
     
-    // Scaling difficulty slightly
-    const levelVariance = Math.floor(Math.random() * 3) - 1; // -1, 0, +1
+    const prefixes = ENEMY_PREFIXES[element] || ["Random"];
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const suffix = ENEMY_SUFFIXES[Math.floor(Math.random() * ENEMY_SUFFIXES.length)];
+    const name = `${prefix} ${suffix}`;
+    
+    const levelVariance = Math.floor(Math.random() * 3) - 1; 
     const level = Math.max(1, playerLevel + levelVariance); 
 
-    // Generate procedural art immediately
     const art = getProceduralMonsterArt(name, element);
+    const voxelCode = genVoxelFunc(element, bodyType); // Now generates 3D body
 
     return {
         id: `wild_${Date.now()}`,
         name: name,
         element,
         rarity: 'Common',
-        stage: 'Noob', // Wild ones are mostly Noob/Rookie
+        stage: 'Noob', 
         rank: 'E',
         nature: 'Wild',
-        personality: 'Aggressive',
+        personality: 'Angry',
         visual_design: `A wild ${name}.`,
         potential: 1,
         hp: 60 + level * 10,
@@ -340,35 +383,23 @@ export const getRandomEnemy = (rank: string, playerLevel: number): any => {
         int: 10,
         level: level,
         exp: 20 * level,
-        description: `A wild ${name} looking for a fight.`,
-        ability: "Lag Switch",
+        description: `A wild ${name}.`,
+        ability: "None",
         moves: [],
         bodyType,
         tactic: 'AGGRESSIVE',
-        cardArtUrl: art 
+        cardArtUrl: art,
+        voxelCode: voxelCode
     };
 };
 
 export const getLootDrop = (rank: string): string | null => {
     const rand = Math.random();
-    
-    // Mods (10% chance - The core grinding goal)
-    if (rand > 0.90) return 'driver_crimson';
-    if (rand > 0.85) return 'driver_titanium';
-    if (rand > 0.80) return 'driver_azure';
-
-    // High Value (5%)
-    if (rand > 0.78) return 'revive_chip';
-    if (rand > 0.75) return 'mystery_box';
-
-    // Mid Tier (25%)
-    if (rand > 0.50) return 'potion_super';
-    if (rand > 0.40) return 'energy_drink';
-    
-    // Common (40%)
-    if (rand > 0.20) return 'data_burger';
-    if (rand > 0.05) return 'pixel_pizza';
-    
-    // 5% chance of nothing
-    return null;
+    if (rand > 0.95) return 'revive_chip';
+    if (rand > 0.90) return 'mystery_box';
+    if (rand > 0.80) return 'driver_crimson'; // Added gear to drop pool
+    if (rand > 0.70) return 'potion_super';
+    if (rand > 0.50) return 'neon_soda';
+    if (rand > 0.30) return 'data_burger';
+    return 'pixel_pizza';
 };

@@ -52,13 +52,14 @@ body {
 
 /* NEO-POP UTILS */
 
-/* The "Thick Stroke" Card */
 .pop-card {
     background: #FFFFFF;
     border: 3px solid #000000;
     border-radius: 16px;
     box-shadow: 6px 6px 0px 0px #000000;
     transition: all 0.1s ease-in-out;
+    position: relative;
+    overflow: hidden;
 }
 
 .pop-card:hover {
@@ -71,7 +72,6 @@ body {
     box-shadow: 2px 2px 0px 0px #000000;
 }
 
-/* Buttons */
 .pop-btn {
     position: relative;
     border: 3px solid #000000;
@@ -104,55 +104,37 @@ body {
     transform: translate(2px, 2px);
 }
 
-/* Button Variants */
 .btn-primary {
-    background-color: #60A5FA; /* Blue */
+    background-color: #60A5FA; 
     color: #FFF;
 }
 .btn-primary:hover:not(:disabled) { background-color: #3B82F6; }
 
 .btn-danger {
-    background-color: #F87171; /* Red */
+    background-color: #F87171; 
     color: #FFF;
 }
 .btn-danger:hover:not(:disabled) { background-color: #EF4444; }
 
 .btn-warning {
-    background-color: #FACC15; /* Yellow */
+    background-color: #FACC15; 
     color: #000;
 }
 .btn-warning:hover:not(:disabled) { background-color: #EAB308; }
 
 .btn-action {
-    background-color: #A78BFA; /* Purple */
+    background-color: #A78BFA;
     color: #FFF;
 }
 .btn-action:hover:not(:disabled) { background-color: #8B5CF6; }
 
-/* Bars */
-.pop-bar-container {
-    border: 2px solid #000;
-    border-radius: 999px;
-    background: #E5E7EB;
-    overflow: hidden;
-    height: 12px;
-    position: relative;
-}
-
-.pop-bar-fill {
-    height: 100%;
-    border-right: 2px solid #000;
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Animations */
 .float-up {
-    animation: floatUp 1s ease-out forwards;
+    animation: floatUp 1.5s ease-out forwards;
 }
 
 @keyframes floatUp {
     0% { opacity: 1; transform: translateY(0) scale(1); }
-    100% { opacity: 0; transform: translateY(-50px) scale(1.5); }
+    100% { opacity: 0; transform: translateY(-80px) scale(1.2); }
 }
 
 .wiggle:hover {
@@ -173,18 +155,15 @@ body {
     to { transform: scale(1); opacity: 1; }
 }
 
-.shake {
-    animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+.fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
 }
 
-@keyframes shake {
-  10%, 90% { transform: translate3d(-2px, 0, 0); }
-  20%, 80% { transform: translate3d(4px, 0, 0); }
-  30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
-  40%, 60% { transform: translate3d(6px, 0, 0); }
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-/* Custom Scrollbar */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #F3F4F6; border-left: 2px solid #000; }
 ::-webkit-scrollbar-thumb { background: #FCA5A5; border: 2px solid #000; border-radius: 4px; }
