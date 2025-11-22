@@ -429,7 +429,7 @@ if (dna.build === 'Round') {
 const limbGeo = new RoundedBoxGeometry(0.25, 0.6, 0.25, 2, 0.05);
 const jointGeo = new THREE.SphereGeometry(0.18, 16, 16);
 
-const animatedParts = { legs: [], arms: [], body: null, special: [] };
+const animatedParts = { legs: [], arms: [], body: null, special: [], tail: [] };
 let headGroup, torso, headSlot, backSlot, accSlot;
 
 // --- BESPOKE V2 SCULPTOR BUILDERS (COMPOSITE MODELING) ---
@@ -450,12 +450,12 @@ function buildPyro() {
         const ribGeo = new THREE.TorusGeometry(0.38, 0.02, 6, 16); // High-res thin ribs
         const rib = createMesh(ribGeo, magmaMat, torso, 0, 0, -0.5 + i*0.2);
         rib.rotation.y = Math.PI / 2;
+        animatedParts.special.push({ mesh: rib, type: 'pulse' });
     }
 
     // 3. HEAD (Layered Console)
     headGroup = new THREE.Group(); headGroup.position.set(0, 0.6, 0.9); torso.add(headGroup);
-    // Joint
-    createMesh(new THREE.SphereGeometry(0.4), darkMat, torso, 0, 0.5, 0.8);
+    createMesh(new THREE.SphereGeometry(0.4), darkMat, torso, 0, 0.5, 0.8); // Joint
 
     // Main Head Block
     const headBox = createMesh(new RoundedBoxGeometry(0.9, 0.75, 0.6, 4, 0.1), jellyMat, headGroup, 0, 0, 0);
@@ -473,24 +473,35 @@ function buildPyro() {
     createMesh(new RoundedBoxGeometry(0.3, 0.2, 0.2, 2, 0.05), createStandardMat(0xFFFFFF), headGroup, 0, -0.2, 0.35);
     createMesh(new THREE.SphereGeometry(0.08), darkMat, headGroup, 0, -0.15, 0.45);
 
-    // Ears
+    // Ears (Twitching)
     const earShape = new THREE.ConeGeometry(0.3, 0.8, 4);
-    const e1 = createMesh(earShape, jellyMat, headGroup, 0.45, 0.6, -0.1); 
+    const e1Group = new THREE.Group(); e1Group.position.set(0.45, 0.6, -0.1); headGroup.add(e1Group);
+    const e1 = createMesh(earShape, jellyMat, e1Group, 0, 0, 0); 
     e1.rotation.z = -0.4; e1.rotation.y = 0.2; e1.rotation.x = -0.2;
-    const e2 = createMesh(earShape, jellyMat, headGroup, -0.45, 0.6, -0.1); 
-    e2.rotation.z = 0.4; e2.rotation.y = -0.2; e2.rotation.x = -0.2;
+    animatedParts.special.push({ mesh: e1Group, type: 'twitch' });
 
-    // 4. TAIL (High-Fidelity Braided Cord)
+    const e2Group = new THREE.Group(); e2Group.position.set(-0.45, 0.6, -0.1); headGroup.add(e2Group);
+    const e2 = createMesh(earShape, jellyMat, e2Group, 0, 0, 0); 
+    e2.rotation.z = 0.4; e2.rotation.y = -0.2; e2.rotation.x = -0.2;
+    animatedParts.special.push({ mesh: e2Group, type: 'twitch' });
+
+    // 4. TAIL (Flexible Braided Cord)
     const tailRoot = createLimbGroup(torso, 0, 0.2, -0.8);
     const braidCount = 22;
     let lastSeg = tailRoot;
+    
     for(let i=0; i<braidCount; i++) {
-        // Interlocking Torus rings for braid effect
+        const segGroup = new THREE.Group();
+        segGroup.position.set(0, 0.07, 0); // Stack upwards initially
+        lastSeg.add(segGroup);
+        
         const segGeo = new THREE.TorusGeometry(0.07, 0.035, 8, 12);
-        const seg = createMesh(segGeo, darkMat, lastSeg, 0, 0.07, 0);
-        seg.rotation.x = 0.15; 
-        seg.rotation.y = i % 2 === 0 ? 0.9 : -0.9; // Twist
-        lastSeg = seg;
+        const seg = createMesh(segGeo, darkMat, segGroup, 0, 0, 0);
+        seg.rotation.x = Math.PI/2; 
+        seg.rotation.z = i % 2 === 0 ? 0.9 : -0.9; // Twist
+        
+        animatedParts.tail.push(segGroup); // Store segments for wave animation
+        lastSeg = segGroup;
     }
     
     // Spark Plug Tip
@@ -499,7 +510,7 @@ function buildPyro() {
     createMesh(new THREE.CylinderGeometry(0.03, 0.03, 0.15), darkMat, plugBase, 0, 0.4, 0); 
     // Fire Particle Emitter
     const fireEmitter = createMesh(new THREE.IcosahedronGeometry(0.15, 0), magmaMat, plugBase, 0, 0.5, 0);
-    animatedParts.special.push({ mesh: fireEmitter, type: 'pulse' });
+    animatedParts.special.push({ mesh: fireEmitter, type: 'pulse_fire' }); // Emit particles
 
     // 5. LEGS
     const legPositions = [[0.35, -0.4, 0.5], [-0.35, -0.4, 0.5], [0.35, -0.4, -0.5], [-0.35, -0.4, -0.5]];
@@ -523,32 +534,34 @@ function buildFizz() {
     torso = createMesh(cupGeo, glassMat, charGroup, 0, 1.2, 0);
     animatedParts.body = torso;
     
-    // Lid Rim
+    // Lid
     createMesh(new THREE.TorusGeometry(0.78, 0.06, 12, 32), createStandardMat(0xEC4899), torso, 0, 0.7, 0).rotation.x = Math.PI/2;
-    // Lid Surface
     createMesh(new THREE.CylinderGeometry(0.75, 0.75, 0.05, 32), createStandardMat(0xEC4899), torso, 0, 0.7, 0);
 
     // Liquid
     createMesh(new THREE.CylinderGeometry(0.7, 0.6, 1.1, 24), blueJellyMat, torso, 0, -0.1, 0);
 
-    // 2. PILOT (Axolotl)
-    const axoBody = createMesh(new THREE.IcosahedronGeometry(0.35, 2), createStandardMat(0xF472B6), torso, 0, 0, 0);
-    // Gills (Detailed Fins)
+    // 2. PILOT (Axolotl) - Floating
+    const axoGroup = new THREE.Group(); 
+    torso.add(axoGroup);
+    const axoBody = createMesh(new THREE.IcosahedronGeometry(0.35, 2), createStandardMat(0xF472B6), axoGroup, 0, 0, 0);
+    animatedParts.special.push({ mesh: axoGroup, type: 'bob' }); // Pilot bobs inside
+
+    // Gills
     const gillMat = createStandardMat(0xEC4899);
     for(let i=-1; i<=1; i++) {
         createMesh(new THREE.BoxGeometry(0.18, 0.04, 0.04), gillMat, axoBody, 0.35, i*0.1, 0).rotation.z = -0.2;
         createMesh(new THREE.BoxGeometry(0.18, 0.04, 0.04), gillMat, axoBody, -0.35, i*0.1, 0).rotation.z = 0.2;
     }
-    // Tail Fin
-    createMesh(new THREE.BoxGeometry(0.05, 0.35, 0.4), gillMat, axoBody, 0, 0, -0.35);
-    // Face
+    createMesh(new THREE.BoxGeometry(0.05, 0.35, 0.4), gillMat, axoBody, 0, 0, -0.35); // Fin
     createMesh(new THREE.PlaneGeometry(0.06, 0.06), darkMat, axoBody, 0.12, 0, 0.32);
     createMesh(new THREE.PlaneGeometry(0.06, 0.06), darkMat, axoBody, -0.12, 0, 0.32);
-    createMesh(new THREE.PlaneGeometry(0.1, 0.02), darkMat, axoBody, 0, -0.1, 0.32); // Smile
+    createMesh(new THREE.PlaneGeometry(0.1, 0.02), darkMat, axoBody, 0, -0.1, 0.32);
 
-    // Bubbles (Torus/Sphere mix)
+    // Bubbles (Floating Up)
     for(let i=0; i<15; i++) {
-        createMesh(new THREE.SphereGeometry(0.07, 8, 8), darkMat, torso, (Math.random()-0.5)*0.9, -0.5 + Math.random()*0.3, (Math.random()-0.5)*0.9);
+        const bub = createMesh(new THREE.SphereGeometry(0.07, 8, 8), darkMat, torso, (Math.random()-0.5)*0.9, -0.5 + Math.random()*0.3, (Math.random()-0.5)*0.9);
+        animatedParts.special.push({ mesh: bub, type: 'bubble', startY: bub.position.y, speed: 0.05 + Math.random()*0.1 });
     }
 
     // 3. COMPLEX LEGS (Piston + Tank + Nozzle)
@@ -560,37 +573,26 @@ function buildFizz() {
         const z = Math.sin(angle) * 0.75;
         const g = createLimbGroup(torso, x, -0.6, z);
         
-        // Piston Arm
-        const piston = createMesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8), accMat, g, 0, 0, 0);
-        piston.lookAt(new THREE.Vector3(0,-1,0));
-
-        // Fuel Tank
         const tank = createMesh(new THREE.CylinderGeometry(0.15, 0.15, 0.5, 16), createStandardMat(0x06B6D4), g, 0, -0.4, 0);
-        // Tank Rings
         createMesh(new THREE.TorusGeometry(0.15, 0.02, 8, 16), createStandardMat(0xFFFFFF), tank, 0, 0.15, 0).rotation.x = Math.PI/2;
         createMesh(new THREE.TorusGeometry(0.15, 0.02, 8, 16), createStandardMat(0xFFFFFF), tank, 0, -0.15, 0).rotation.x = Math.PI/2;
         
-        // Nozzle
         const nozzle = createMesh(new THREE.ConeGeometry(0.12, 0.2, 16), darkMat, tank, 0, -0.35, 0);
-        // Flame Emitter
         const flame = createMesh(new THREE.ConeGeometry(0.08, 0.35, 8), magmaMat, nozzle, 0, -0.25, 0);
         flame.rotation.x = Math.PI;
-        animatedParts.special.push({ mesh: flame, type: 'pulse' });
         
-        animatedParts.legs.push({ mesh: g, phase: i }); 
+        animatedParts.special.push({ mesh: g, type: 'bob_limb', offset: i }); // Independent bobbing
+        animatedParts.special.push({ mesh: flame, type: 'thruster_flame' }); // Flame particles
     }
 
-    // Straw Cannon (Detailed Bending Tube)
+    // Straw
     const strawPath = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0, -0.5, 0),
-        new THREE.Vector3(0, 0.5, 0),
-        new THREE.Vector3(0.2, 0.8, 0)
+        new THREE.Vector3(0, -0.5, 0), new THREE.Vector3(0, 0.5, 0), new THREE.Vector3(0.2, 0.8, 0)
     ]);
     const strawTube = new THREE.TubeGeometry(strawPath, 10, 0.12, 16, false);
     const strawMesh = createMesh(strawTube, createStandardMat(0xFFFFFF), torso, 0.5, 0.8, -0.2);
     strawMesh.rotation.z = -0.3;
-    // Straw Rim
-    createMesh(new THREE.TorusGeometry(0.12, 0.02, 8, 16), createStandardMat(0xCCCCCC), strawMesh, 0.2, 0.8, 0).rotation.x = Math.PI/2;
+    animatedParts.special.push({ mesh: strawMesh, type: 'bob_straw' });
 
     headSlot = new THREE.Group(); torso.add(headSlot); headSlot.position.y = 0.8;
     backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.z = -0.6;
@@ -599,14 +601,10 @@ function buildFizz() {
 
 function buildMoss() {
     // MOSS-AMP V2: High Fidelity Boombox Frog
-    
-    // 1. BODY (Sculpted)
     torso = createMesh(new RoundedBoxGeometry(1.6, 1.2, 1.8, 4, 0.3), createStandardMat(0x4ADE80), charGroup, 0, 0.6, 0);
     animatedParts.body = torso;
     
-    // 2. HEAD
     headGroup = new THREE.Group(); headGroup.position.set(0, 0.6, 0.9); torso.add(headGroup);
-    // Joint
     createMesh(new THREE.SphereGeometry(0.5), darkMat, torso, 0, 0.5, 0.8);
 
     // Eyes
@@ -615,62 +613,39 @@ function buildMoss() {
     const e2 = createMesh(eyeBump, createStandardMat(0x4ADE80), headGroup, -0.45, 0.1, -0.1);
     createMesh(new THREE.SphereGeometry(0.12), darkMat, e1, 0, 0.25, 0.15);
     createMesh(new THREE.SphereGeometry(0.12), darkMat, e2, 0, 0.25, 0.15);
-    // Mouth Lip (Thick)
-    createMesh(new THREE.TorusGeometry(0.7, 0.08, 12, 24, Math.PI), createStandardMat(0x3F6212), headGroup, 0, -0.3, 0.1).rotation.x = Math.PI/2;
-
-    // 3. SPEAKER SYSTEM (Detailed Concave Woofers)
+    
+    // Speaker Box
     const boombox = createMesh(new THREE.BoxGeometry(1.8, 1.4, 0.8), createStandardMat(0x57534E), torso, 0, 0.5, -0.5);
     
     function buildWoofer(parent, x, y, size) {
         const rim = createMesh(new THREE.TorusGeometry(size, size*0.2, 12, 24), darkMat, parent, x, y, 0.4);
-        // Concave Cone
         const cone = createMesh(new THREE.ConeGeometry(size, size*0.6, 32, 1, true), darkMat, rim, 0, 0, -0.1);
         cone.rotation.x = Math.PI/2;
-        const pulseCap = createMesh(new THREE.SphereGeometry(size*0.4), leafMat, cone, 0, -size*0.3, 0); // Pulse cap
-        animatedParts.special.push({ mesh: pulseCap, type: 'pulse_green' });
+        // Pulse Cap (Beat)
+        const pulseCap = createMesh(new THREE.SphereGeometry(size*0.4), leafMat, cone, 0, -size*0.3, 0); 
+        animatedParts.special.push({ mesh: pulseCap, type: 'pulse_beat' });
     }
     
     buildWoofer(boombox, 0.45, 0, 0.35);
     buildWoofer(boombox, -0.45, 0, 0.35);
-    // Tweeters
     buildWoofer(boombox, 0.65, 0.45, 0.15);
     buildWoofer(boombox, -0.65, 0.45, 0.15);
     
-    // Control Panel
-    const panel = createMesh(new THREE.BoxGeometry(0.6, 0.2, 0.15), darkMat, boombox, 0, 0.3, 0.35);
-    createMesh(new THREE.BoxGeometry(0.5, 0.05, 0.05), leafMat, panel, 0, 0, 0.06); // Display
-
-    // Handle
-    const handleGeo = new THREE.TorusGeometry(0.7, 0.08, 12, 24, Math.PI);
-    const handle = createMesh(handleGeo, darkMat, boombox, 0, 0.7, 0);
-
-    // 4. ORGANIC VINES (Wrapping Tube Curves)
-    const vinePath1 = new THREE.CatmullRomCurve3([ 
-        new THREE.Vector3(-0.9, 0.6, 0), 
-        new THREE.Vector3(-1.0, 0, 0.4), 
-        new THREE.Vector3(-0.8, -0.6, 0.4),
-        new THREE.Vector3(-0.4, -0.5, 0.8) 
+    // Vines (Waving)
+    const vinePath = new THREE.CatmullRomCurve3([ 
+        new THREE.Vector3(-0.9, 0.6, 0), new THREE.Vector3(-1.0, 0, 0.4), 
+        new THREE.Vector3(-0.8, -0.6, 0.4), new THREE.Vector3(-0.4, -0.5, 0.8) 
     ]);
-    createMesh(new THREE.TubeGeometry(vinePath1, 24, 0.06, 8, false), mossMat, boombox, 0, 0, 0);
-    
-    const vinePath2 = new THREE.CatmullRomCurve3([ 
-        new THREE.Vector3(0.9, 0.6, 0), 
-        new THREE.Vector3(0.8, 0.2, -0.4), 
-        new THREE.Vector3(0.4, -0.2, -0.5)
-    ]);
-    createMesh(new THREE.TubeGeometry(vinePath2, 24, 0.05, 8, false), mossMat, boombox, 0, 0, 0);
+    const vine = createMesh(new THREE.TubeGeometry(vinePath, 24, 0.06, 8, false), mossMat, boombox, 0, 0, 0);
+    animatedParts.special.push({ mesh: vine, type: 'wave_vine' });
 
-    // 5. LEGS (Wood Grain Stacks)
     const legPos = [[0.75, -0.3, 0.75], [-0.75, -0.3, 0.75], [0.75, -0.3, -0.75], [-0.75, -0.3, -0.75]];
     legPos.forEach((p, i) => {
         const group = createLimbGroup(torso, p[0], -0.2, p[2]);
-        // Stack cylinders to look like wood segments
         createMesh(new THREE.CylinderGeometry(0.35, 0.38, 0.4, 16), woodMat, group, 0, -0.2, 0);
         createMesh(new THREE.CylinderGeometry(0.38, 0.42, 0.4, 16), woodMat, group, 0, -0.5, 0);
-        // Toes
         createMesh(new THREE.BoxGeometry(0.18, 0.1, 0.25), woodMat, group, 0.12, -0.7, 0.2);
         createMesh(new THREE.BoxGeometry(0.18, 0.1, 0.25), woodMat, group, -0.12, -0.7, 0.2);
-        
         animatedParts.legs.push({ mesh: group, baseZ: p[2], phase: i%2===0 ? 0 : Math.PI });
     });
 
@@ -730,6 +705,8 @@ function buildGeneric() {
         const earL = createMesh(earGeo, primMat, head, 0.3, 0.5, 0);
         const earR = createMesh(earGeo, primMat, head, -0.3, 0.5, 0);
         earL.rotation.z = -0.3; earR.rotation.z = 0.3;
+        animatedParts.special.push({ mesh: earL, type: 'twitch' });
+        animatedParts.special.push({ mesh: earR, type: 'twitch' });
     }
 
     if (dna.hasHorns) {
@@ -747,13 +724,24 @@ function buildGeneric() {
         const w1 = createMesh(wingGeo, accMat, torso, 0.6, wY, -0.2);
         const w2 = createMesh(wingGeo, accMat, torso, -0.6, wY, -0.2);
         w1.rotation.z = -0.3; w2.rotation.z = 0.3;
+        animatedParts.special.push({ mesh: w1, type: 'flap' });
+        animatedParts.special.push({ mesh: w2, type: 'flap' });
+    }
+    
+    // Tail Logic
+    if (bodyType !== 'FLOATING' && dna.tailStyle !== 'None') {
+        const tailRoot = createLimbGroup(torso, 0, 0, -0.6);
+        const tGeo = dna.tailStyle === 'Segmented' ? new THREE.ConeGeometry(0.1, 0.6, 8) : new THREE.CylinderGeometry(0.05, 0.1, 0.8);
+        const tail = createMesh(tGeo, primMat, tailRoot, 0, 0.3, -0.2);
+        tail.rotation.x = 1.2;
+        animatedParts.tail.push(tailRoot);
     }
     
     // Dynamic Thrusters for Floating types with Flame feature
     if (bodyType === 'FLOATING' && dna.specialFeature === 'ThrusterFlames') {
         const flame = createMesh(new THREE.ConeGeometry(0.1, 0.3, 8), magmaMat, torso, 0, -0.6, 0);
         flame.rotation.x = Math.PI;
-        animatedParts.special.push({ mesh: flame, type: 'pulse' });
+        animatedParts.special.push({ mesh: flame, type: 'thruster_flame' });
     }
 
     headSlot = new THREE.Group(); headSlot.position.set(0, 0.6, 0); head.add(headSlot);
@@ -810,9 +798,6 @@ if (charName === 'PYRO-BIT') {
 } else {
     buildGeneric();
 }
-
-// ... Rest of the scene setup (Props, Particles, Animation Loop) ...
-// Keeping previous logic for props and animation loop intact to maintain uniformity.
 
 // --- PROPS ---
 const props = new THREE.Group();
@@ -1072,17 +1057,54 @@ function animate() {
         if(p.type === 'pulse' || p.type === 'pulse_green') {
             const scale = 1.0 + Math.sin(t * 8.0) * 0.2;
             p.mesh.scale.setScalar(scale);
+        } else if (p.type === 'pulse_fire') {
+            const scale = 1.0 + Math.sin(t * 15.0) * 0.3; // Faster flicker for fire
+            p.mesh.scale.setScalar(scale);
+            p.mesh.rotation.y += delta * 2;
+        } else if (p.type === 'twitch') {
+            if (Math.random() > 0.98) p.mesh.rotation.z += (Math.random()-0.5)*0.2;
+            p.mesh.rotation.z = lerp(p.mesh.rotation.z, 0, 0.1);
+        } else if (p.type === 'bob') {
+            p.mesh.position.y = Math.sin(t * 2) * 0.05;
+        } else if (p.type === 'bubble') {
+            p.mesh.position.y += p.speed * delta;
+            if (p.mesh.position.y > 0.6) p.mesh.position.y = p.startY;
+        } else if (p.type === 'bob_limb') {
+            p.mesh.position.y += Math.sin(t * 4 + p.offset) * 0.002; 
+        } else if (p.type === 'thruster_flame') {
+            p.mesh.scale.y = 1.0 + Math.random() * 0.5;
+        } else if (p.type === 'bob_straw') {
+            p.mesh.rotation.z = -0.3 + Math.sin(t * 3) * 0.05;
+        } else if (p.type === 'pulse_beat') {
+            p.mesh.scale.setScalar(1.0 + Math.max(0, Math.sin(t * 8)) * 0.2); // Beat sync
+        } else if (p.type === 'wave_vine') {
+            // No easy way to wave a static TubeGeometry without shader or vertex manipulation here
+        } else if (p.type === 'flap') {
+            const speed = currentAction === 'RUN' ? 15 : 5;
+            p.mesh.rotation.z = Math.sin(t * speed) * 0.4;
         }
+    });
+    
+    // Animate Tail Waves (Snake motion)
+    animatedParts.tail.forEach((seg, i) => {
+        const speed = currentAction === 'RUN' ? 12 : 6;
+        const amp = currentAction === 'RUN' ? 0.4 : 0.2;
+        seg.rotation.y = Math.sin(t * speed + i * 0.5) * amp;
     });
 
     if (!isBattle) {
+        let moveSpeed = 0;
         if (!isPaused || currentAction === 'RUN') {
-             const moveSpeed = currentAction === 'RUN' ? 10.0 : 5.0;
+             moveSpeed = currentAction === 'RUN' ? 10.0 : 5.0;
              const speed = moveSpeed * delta;
              
              charGroup.position.z += speed;
+             // Lerp camera target to head height for perfect framing
+             const headWorld = new THREE.Vector3();
+             headGroup.getWorldPosition(headWorld);
+             controls.target.lerp(headWorld, 0.1);
+             
              camera.position.z += speed;
-             controls.target.z += speed;
              
              updateChunks(charGroup.position.z);
              
@@ -1094,6 +1116,10 @@ function animate() {
              torso.position.y = Math.abs(Math.sin(t * bounceFreq)) * 0.1; 
         } else {
              torso.position.y = lerp(torso.position.y, 0, 0.1);
+             // Still track head in Idle
+             const headWorld = new THREE.Vector3();
+             headGroup.getWorldPosition(headWorld);
+             controls.target.lerp(headWorld, 0.05);
         }
 
         updateGrounding();
@@ -1103,7 +1129,10 @@ function animate() {
                 torso.position.y = Math.abs(Math.sin(t * 10)) * 0.8;
                 if (currentAction === 'HAPPY') charGroup.rotation.y += 0.2;
             } 
-            else if (currentAction === 'SCAN') headGroup.rotation.y = Math.sin(t * 4) * 0.8;
+            else if (currentAction === 'SCAN') {
+                headGroup.rotation.y = Math.sin(t * 4) * 0.8;
+                isLookingAtCamera = false;
+            }
             else if (currentAction === 'SLEEP') { 
                 charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI / 2, 0.1); 
                 charGroup.position.y = lerp(charGroup.position.y, charGroup.position.y - 0.5, 0.1);
@@ -1139,6 +1168,10 @@ function animate() {
                         a.mesh.rotation.z = 0.1 * side + Math.sin(t * 1.5) * 0.05; 
                     });
                  }
+                 // Whip tail gently in idle
+                 animatedParts.tail.forEach((seg, i) => {
+                    seg.rotation.y = Math.sin(t * 2 + i * 0.3) * 0.1;
+                 });
             }
         }
 
@@ -1180,6 +1213,7 @@ function animate() {
             charGroup.rotation.y = Math.PI / 3;
             const zBase = charGroup.position.z;
             camera.position.lerp(new THREE.Vector3(targetCamPos.x, targetCamPos.y, zBase + targetCamPos.z), 0.05);
+            // In battle, target the midpoint between fighters roughly, or just above ground
             controls.target.lerp(new THREE.Vector3(0, 1.5, zBase), 0.1);
         } else {
             charGroup.rotation.y = -Math.PI / 3; 
