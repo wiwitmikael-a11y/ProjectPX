@@ -132,7 +132,7 @@ export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent !important; }
-    canvas { display: block; width: 100% !important; height: 100% !important; outline: none; }
+    canvas { display: block; width: 100% !important; height: 100% !important; outline: none; touch-action: none; }
 </style>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
 </head>
@@ -148,16 +148,15 @@ scene.background = new THREE.Color(0xD1FAE5);
 scene.fog = new THREE.FogExp2(0xD1FAE5, 0.02);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
-// Default Angle: Diagonal Right Front
-camera.position.set(5, 4, 12);
+camera.position.set(5, 4, 12); // Default Angle
 
 const renderer = new THREE.WebGLRenderer({alpha: true, antialias: true, powerPreference: "high-performance"});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadows
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; // AAA Tone Mapping
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 document.body.appendChild(renderer.domElement);
 
@@ -169,7 +168,7 @@ controls.minDistance = 4;
 controls.maxDistance = 20;
 controls.maxPolarAngle = Math.PI / 2 - 0.1; // Prevent going under ground
 controls.target.set(0, 1.5, 0);
-controls.enableRotate = true; // User control enabled
+controls.enableRotate = true;
 
 // --- LIGHTING ---
 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6); 
@@ -181,15 +180,8 @@ dirLight.castShadow = true;
 dirLight.shadow.mapSize.width = 2048;
 dirLight.shadow.mapSize.height = 2048;
 dirLight.shadow.bias = -0.0005;
-dirLight.shadow.camera.near = 0.5;
-dirLight.shadow.camera.far = 50;
-dirLight.shadow.camera.left = -20;
-dirLight.shadow.camera.right = 20;
-dirLight.shadow.camera.top = 20;
-dirLight.shadow.camera.bottom = -20;
 scene.add(dirLight);
 
-// Rim Light for cinematic look
 const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
 rimLight.position.set(-5, 5, -10); 
 scene.add(rimLight);
@@ -206,7 +198,7 @@ function createMat(col) {
     } else if (matType === 'Standard') {
         return new THREE.MeshStandardMaterial({ color: col, roughness, metalness });
     } else {
-        return new THREE.MeshToonMaterial({ color: col, shininess: 10 }); // Neo-Pop Fallback
+        return new THREE.MeshToonMaterial({ color: col, shininess: 10 });
     }
 }
 
@@ -262,10 +254,8 @@ function addGreebles(parent) {
     }
 }
 
-// --- TERRAIN LOGIC (MATH GROUNDING) ---
+// --- TERRAIN LOGIC ---
 function getTerrainHeight(x, z) {
-    // Simple, deterministic math heightmap. 
-    // Peaks around +0.4, Valleys around -4.4.
     return Math.sin(x * 0.08) * 1.2 + Math.cos(z * 0.08) * 1.2 - 2.0;
 }
 
@@ -306,9 +296,9 @@ class TerrainChunk {
         
         for (let i = 0; i < pos.count; i++) {
             const x = pos.getX(i);
-            const y = pos.getY(i); // World Z offset relative to plane center
+            const y = pos.getY(i); 
             const worldX = x;
-            const worldZ = zStart - y; // Approx mapping due to rotation
+            const worldZ = zStart - y; 
             
             const h = getTerrainHeight(worldX, worldZ);
             pos.setZ(i, h); 
@@ -332,14 +322,10 @@ class TerrainChunk {
             const x = (Math.random() - 0.5) * (CHUNK_SIZE - 4);
             const zRel = (Math.random() - 0.5) * (CHUNK_SIZE - 4);
             const z = this.zStart - zRel;
-            
-            if (Math.abs(x) < 4) continue; // CLEAR PATH in center
-            
+            if (Math.abs(x) < 4) continue; 
             const fn = currentBiomeFuncs[Math.floor(Math.random()*currentBiomeFuncs.length)];
             const propList = fn(x, z);
-            propList.forEach(p => {
-                this.props.push(p);
-            });
+            propList.forEach(p => this.props.push(p));
         }
     }
     
@@ -446,25 +432,25 @@ if (bodyType === 'QUADRUPED') {
     createMesh(new THREE.BoxGeometry(0.26, 0.15, 0.3), darkMat, l2, 0, -0.3, 0.05);
     animatedParts.legs.push({ mesh: lGroup2, baseZ: 0, phase: Math.PI });
 
-    // ARMS (UPDATED: Longer & Better Pivot)
-    // Move pivot to shoulder height (approx 0.3 Y)
+    // ARMS - FIXED ROTATION OFFSET
     const aGroup1 = createLimbGroup(torso, 0.6, 0.3, 0);
     createMesh(jointGeo, darkMat, aGroup1, 0, 0, 0);
     const aGroup2 = createLimbGroup(torso, -0.6, 0.3, 0);
     createMesh(jointGeo, darkMat, aGroup2, 0, 0, 0);
     
-    // Increase Arm Length
     const armGeo = new RoundedBoxGeometry(0.15, 0.9, 0.15, 4, 0.05);
-    // Mesh offset is half of length (-0.45) so it hangs from the pivot
     const a1 = createMesh(armGeo, primMat, aGroup1, 0, -0.45, 0);
     const a2 = createMesh(armGeo, primMat, aGroup2, 0, -0.45, 0);
-    
-    // Add hand "glob"
     createMesh(new THREE.SphereGeometry(0.12), secMat, a1, 0, -0.45, 0);
     createMesh(new THREE.SphereGeometry(0.12), secMat, a2, 0, -0.45, 0);
 
-    animatedParts.arms.push({ mesh: aGroup1, phase: Math.PI });
-    animatedParts.arms.push({ mesh: aGroup2, phase: 0 });
+    // Side 1 = Left (Positive X), Side -1 = Right (Negative X)
+    // Initialize arm rotations correctly for resting state
+    aGroup1.rotation.z = 0.2; 
+    aGroup2.rotation.z = -0.2;
+
+    animatedParts.arms.push({ mesh: aGroup1, phase: Math.PI, side: 1 });
+    animatedParts.arms.push({ mesh: aGroup2, phase: 0, side: -1 });
 }
 
 // --- PROPS ---
@@ -488,7 +474,6 @@ activeChunks.push(new TerrainChunk(0));
 activeChunks.push(new TerrainChunk(CHUNK_SIZE));
 activeChunks.push(new TerrainChunk(CHUNK_SIZE*2));
 
-// Particles & Emotes
 const particlesGeo = new THREE.BufferGeometry();
 const particleCount = 200;
 const pPos = new Float32Array(particleCount * 3);
@@ -500,7 +485,6 @@ const particlesMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.1, tran
 const particles = new THREE.Points(particlesGeo, particlesMat);
 scene.add(particles);
 
-// Heart Particles for Poke interaction
 const hearts = [];
 const heartShape = new THREE.Shape();
 const x = 0, y = 0;
@@ -515,10 +499,14 @@ const heartGeo = new THREE.ShapeGeometry(heartShape);
 const heartMat = new THREE.MeshBasicMaterial({ color: 0xff69b4, side: THREE.DoubleSide });
 
 function spawnHearts() {
+    // Clean up existing hearts to prevent spam
+    for(let i=hearts.length-1; i>=0; i--) scene.remove(hearts[i].mesh);
+    hearts.length = 0;
+
     for(let i=0; i<5; i++) {
         const h = new THREE.Mesh(heartGeo, heartMat);
         h.scale.setScalar(0.3);
-        h.rotation.z = Math.PI; // Hearts are upside down by default shape
+        h.rotation.z = Math.PI;
         h.position.set(
             charGroup.position.x + (Math.random()-0.5)*1,
             charGroup.position.y + 2 + Math.random(),
@@ -549,12 +537,57 @@ function showEmote(emoji) {
     emoteSprite.visible = true;
 }
 
+// --- INTERACTION ---
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+window.addEventListener('message', (e) => {
+    if (e.data.type === 'PET_CLICKED') {
+        // This message now comes from iframe click handler directly, 
+        // but we can also listen for external triggers
+        triggerPoke();
+    }
+    // ... other handlers
+});
+
+function triggerPoke() {
+    if (isBattle) return;
+    nextAction = 'HAPPY'; 
+    overrideTimer = 1.5;
+    spawnHearts(); 
+    isLookingAtCamera = true; 
+    lookAtTimer = 0; 
+    lookAtDuration = 3.0;
+    // Force transition logic to handle this gracefully
+    currentAction = 'IDLE'; 
+    transitionTimer = 0.2;
+    
+    // Notify parent to show speech bubble
+    window.parent.postMessage({ type: 'PET_CLICKED_CONFIRM' }, '*');
+}
+
+// Handle click inside canvas
+window.addEventListener('pointerdown', (event) => {
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(charGroup.children, true);
+    
+    if (intersects.length > 0) {
+        triggerPoke();
+    }
+});
+
+
 // --- MAIN LOOP ---
 renderer.render(scene, camera);
 
 const clock = new THREE.Clock();
 let isBattle = false;
 let currentAction = 'WALK';
+let nextAction = null;
+let transitionTimer = 0;
 let isPaused = false; 
 let overrideTimer = 0;
 const targetCamPos = new THREE.Vector3();
@@ -582,24 +615,28 @@ window.addEventListener('message', (e) => {
         activeChunks.forEach(c => c.mesh.material.map = newTex);
     }
     if (type === 'RESUME') { 
-        isPaused = false; currentAction = 'WALK'; isBattle = false; overrideTimer = 0; emoteSprite.visible = false;
+        isPaused = false; nextAction = 'WALK'; isBattle = false; overrideTimer = 0; emoteSprite.visible = false;
+        transitionTimer = 0.5; // Seamless transition
+        currentAction = 'IDLE';
     }
     if (type === 'INTERACT_POKE') {
-        currentAction = 'HAPPY'; overrideTimer = 1.5; // New HAPPY reaction
-        spawnHearts(); 
-        isLookingAtCamera = true; 
-        lookAtTimer = 0; 
-        lookAtDuration = 3.0;
+        triggerPoke();
     }
     if (type === 'SET_ACTION') { 
-        currentAction = value; 
-        if (currentAction === 'SLEEP' || currentAction === 'SCAN') { overrideTimer = 8.0; isPaused = true; } 
-        if (currentAction === 'JUMP') { overrideTimer = 0.5; }
-        // RUN doesn't pause movement
+        // Only change if different AND not already queued AND not currently interacting
+        if (currentAction !== value && nextAction !== value && overrideTimer <= 0) {
+            nextAction = value;
+            // Don't force IDLE immediately, let transition happen
+            // currentAction = 'IDLE'; 
+            transitionTimer = 0.5; // Start blending/waiting
+        }
+        if (value === 'SLEEP' || value === 'SCAN') { overrideTimer = 8.0; isPaused = true; } 
+        if (value === 'JUMP') { overrideTimer = 0.5; }
     }
     if (type === 'SET_EQUIPMENT') { const equip = value || {}; if (equip.head) { clearSlot(headSlot); if(equip.head.includes('crown')) buildCrown(headSlot); if(equip.head.includes('visor')) buildVisor(headSlot); if(equip.head.includes('iron')) buildHelmetIron(headSlot); } if (equip.accessory) { clearSlot(backSlot); if(equip.accessory.includes('wings')) buildWingsAngel(backSlot); if(equip.accessory.includes('pack')) buildJetpack(backSlot); } }
     if (type === 'PRE_EVENT') { 
-        isPaused = true; currentAction = 'SCAN'; overrideTimer = 3.0; showEmote(value || '!'); 
+        isPaused = true; nextAction = 'SCAN'; overrideTimer = 3.0; showEmote(value || '!'); 
+        currentAction = 'IDLE'; transitionTimer = 0.5;
     }
     if (type === 'SET_MODE') {
         if (value.startsWith('BATTLE')) {
@@ -614,7 +651,6 @@ window.addEventListener('message', (e) => {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
-// --- MATH GROUNDING (No Raycast) ---
 function snapToFloor() {
     if (bodyType === 'FLOATING') {
         charGroup.position.y = getTerrainHeight(charGroup.position.x, charGroup.position.z) + 2.0 + Math.sin(clock.elapsedTime)*0.2;
@@ -625,9 +661,8 @@ function snapToFloor() {
     
     let legOffset = 0;
     if (bodyType === 'QUADRUPED') legOffset = 0.7 * ${scale}; 
-    else if (bodyType === 'BIPED') legOffset = 1.3 * ${scale}; // Adjusted for new leg length
+    else if (bodyType === 'BIPED') legOffset = 1.3 * ${scale};
     
-    // Lerp for smooth grounding over hills
     const targetY = terrainY + legOffset;
     charGroup.position.y = lerp(charGroup.position.y, targetY, 0.2);
 }
@@ -649,19 +684,39 @@ function animate() {
     const t = clock.getElapsedTime();
     const delta = clock.getDelta();
     
+    // Transition Logic
+    if (transitionTimer > 0) {
+        transitionTimer -= delta;
+        // Blend phase
+        if (transitionTimer <= 0 && nextAction) {
+            currentAction = nextAction;
+            nextAction = null;
+        } else if (transitionTimer > 0) {
+            // During transition, lerp to IDLE stance
+             charGroup.rotation.x = lerp(charGroup.rotation.x, 0, 0.1);
+             if (bodyType !== 'FLOATING') {
+                animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
+                animatedParts.arms.forEach(a => { 
+                    const side = a.side || 1;
+                    a.mesh.rotation.x = lerp(a.mesh.rotation.x, 0, 0.1); 
+                    a.mesh.rotation.z = lerp(a.mesh.rotation.z, 0.1 * side, 0.1); 
+                });
+             }
+        }
+    }
+
     if (overrideTimer > 0) {
         overrideTimer -= delta;
         if (overrideTimer <= 0 && !isBattle) { 
-            currentAction = 'WALK'; isPaused = false; emoteSprite.visible = false; 
-            // Reset torso from jumps
+            nextAction = 'WALK'; isPaused = false; emoteSprite.visible = false; 
+            transitionTimer = 0.5;
             torso.position.y = 0;
         }
     }
 
     if (!isBattle) {
-        // Movement Loop
         if (!isPaused || currentAction === 'RUN') {
-             const moveSpeed = currentAction === 'RUN' ? 10.0 : 5.0; // FAST if Running
+             const moveSpeed = currentAction === 'RUN' ? 10.0 : 5.0;
              const speed = moveSpeed * delta;
              
              charGroup.position.z += speed;
@@ -674,78 +729,73 @@ function animate() {
              rimLight.position.z = charGroup.position.z - 10;
              particles.position.z = charGroup.position.z;
              
-             // Bounce torso slightly when walking/running
              const bounceFreq = currentAction === 'RUN' ? 15 : 8;
              torso.position.y = Math.abs(Math.sin(t * bounceFreq)) * 0.1; 
         } else {
-             // Lerp torso back to 0 if stopped
              torso.position.y = lerp(torso.position.y, 0, 0.1);
         }
 
-        // GROUNDING (Enforced every frame)
         snapToFloor();
 
-        // Animations
-        if (currentAction === 'JUMP') {
-            // High bounce for jump
-            torso.position.y = Math.abs(Math.sin(t * 10)) * 0.8;
-        }
-        else if (currentAction === 'HAPPY') {
-            // Spin and hop
-            charGroup.rotation.y += 0.2;
-            torso.position.y = Math.abs(Math.sin(t * 15)) * 0.5;
-        } 
-        else if (currentAction === 'SCAN') headGroup.rotation.y = Math.sin(t * 4) * 0.8;
-        else if (currentAction === 'SLEEP') { 
-            charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI / 2, 0.1); 
-            charGroup.position.y = lerp(charGroup.position.y, charGroup.position.y - 0.5, 0.1);
-        }
-        else if (!isPaused || currentAction === 'RUN') {
-             charGroup.rotation.x = 0;
-             const limbSpeed = currentAction === 'RUN' ? 18 : 12;
-             const swingAmp = currentAction === 'RUN' ? 1.2 : 0.8;
-             
-             if (bodyType !== 'FLOATING') {
-                animatedParts.legs.forEach(l => { l.mesh.rotation.x = Math.sin(t * limbSpeed + l.phase) * swingAmp; });
-                animatedParts.arms.forEach(a => { 
-                    // More complex arm movement: Swing X + Twist Y + Flare Z
-                    a.mesh.rotation.x = Math.sin(t * limbSpeed + a.phase) * swingAmp; 
-                    a.mesh.rotation.z = Math.abs(Math.sin(t * limbSpeed)) * 0.2 + 0.1; // Flap out slightly
-                    a.mesh.rotation.y = Math.sin(t * limbSpeed) * 0.2; // Twist
-                });
-            } else charGroup.position.y += Math.sin(t * 5) * 0.05; 
-        } else {
-             // IDLE Stance
-             charGroup.rotation.x = 0;
-             if (bodyType !== 'FLOATING') {
-                animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
-                animatedParts.arms.forEach(a => { 
-                    a.mesh.rotation.x = lerp(a.mesh.rotation.x, 0, 0.1); 
-                    a.mesh.rotation.z = lerp(a.mesh.rotation.z, 0.1, 0.1); // Resting slightly out
-                });
-             }
+        // ONLY APPLY ANIMATIONS IF NOT TRANSITIONING
+        if (transitionTimer <= 0) {
+            if (currentAction === 'JUMP' || currentAction === 'HAPPY') {
+                torso.position.y = Math.abs(Math.sin(t * 10)) * 0.8;
+                if (currentAction === 'HAPPY') charGroup.rotation.y += 0.2;
+            } 
+            else if (currentAction === 'SCAN') headGroup.rotation.y = Math.sin(t * 4) * 0.8;
+            else if (currentAction === 'SLEEP') { 
+                charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI / 2, 0.1); 
+                charGroup.position.y = lerp(charGroup.position.y, charGroup.position.y - 0.5, 0.1);
+            }
+            else if ((!isPaused || currentAction === 'RUN')) {
+                 charGroup.rotation.x = 0;
+                 const limbSpeed = currentAction === 'RUN' ? 18 : 12;
+                 const swingAmp = currentAction === 'RUN' ? 1.2 : 0.8;
+                 
+                 if (bodyType !== 'FLOATING') {
+                    animatedParts.legs.forEach(l => { l.mesh.rotation.x = Math.sin(t * limbSpeed + l.phase) * swingAmp; });
+                    animatedParts.arms.forEach(a => { 
+                        a.mesh.rotation.x = Math.sin(t * limbSpeed + a.phase) * swingAmp; 
+                        // CORRECT ARM ROTATION using side property
+                        const side = a.side || 1; 
+                        a.mesh.rotation.z = (Math.abs(Math.sin(t * limbSpeed)) * 0.2 + 0.1) * side; // Swing OUT relative to body
+                        a.mesh.rotation.y = Math.sin(t * limbSpeed) * 0.2 * side; // Twist properly
+                    });
+                } else charGroup.position.y += Math.sin(t * 5) * 0.05; 
+            } else {
+                 // IDLE Stance
+                 charGroup.rotation.x = 0;
+                 if (bodyType !== 'FLOATING') {
+                    animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
+                    animatedParts.arms.forEach(a => { 
+                        const side = a.side || 1;
+                        a.mesh.rotation.x = lerp(a.mesh.rotation.x, 0, 0.1); 
+                        a.mesh.rotation.z = lerp(a.mesh.rotation.z, 0.1 * side, 0.1); 
+                    });
+                 }
+            }
         }
 
-        // --- SMOOTH HEAD TRACKING ---
         const cameraDir = camera.position.clone().sub(charGroup.position).normalize();
-        const forward = new THREE.Vector3(0, 0, 1); // Character moves +Z
+        const forward = new THREE.Vector3(0, 0, 1); 
         const dot = cameraDir.dot(forward);
 
-        // Randomly decide to look at camera or look forward if boring
         lookAtTimer += delta;
         if (lookAtTimer > lookAtDuration) {
             lookAtTimer = 0;
-            if (Math.random() > 0.7 && dot > 0) {
+            // Chance to look at camera only if moving or idle, not doing specific action like sleep
+            if (Math.random() > 0.7 && dot > 0 && currentAction !== 'SLEEP' && currentAction !== 'SCAN') {
                 isLookingAtCamera = true;
-                lookAtDuration = 1.5 + Math.random() * 2.0;
+                lookAtDuration = 2.0 + Math.random() * 1.0; // Brief look (2-3s)
             } else {
                 isLookingAtCamera = false;
-                lookAtDuration = 2.0 + Math.random() * 4.0;
+                lookAtDuration = 5.0 + Math.random() * 5.0; // Long break (5-10s)
             }
         }
 
         if (currentAction === 'SCAN') isLookingAtCamera = false; 
-        if (currentAction === 'HAPPY') isLookingAtCamera = true; // Always look at camera when happy/poked
+        if (currentAction === 'HAPPY') isLookingAtCamera = true;
 
         if (isLookingAtCamera && dot > 0) {
             const target = camera.position.clone();
@@ -754,14 +804,15 @@ function animate() {
             dummyObj.lookAt(target);
             headTargetRot.copy(dummyObj.quaternion);
         } else {
-            // Look forward
-            headTargetRot.setFromEuler(new THREE.Euler(Math.sin(t*0.5)*0.1, 0, 0));
+            // Look around (celingak celinguk)
+            // Slow sine wave for Y rotation
+            const lookAround = Math.sin(t * 0.5) * 0.3; 
+            headTargetRot.setFromEuler(new THREE.Euler(Math.sin(t*0.5)*0.05, lookAround, 0));
         }
         
         headGroup.quaternion.slerp(headTargetRot, 0.1);
 
     } else {
-        // Battle Mode
         snapToFloor(); 
         if (targetCamPos.x > 0) { 
             charGroup.rotation.y = Math.PI / 3;
@@ -781,13 +832,12 @@ function animate() {
         emoteSprite.lookAt(camera.position);
     }
 
-    // Update Hearts
     for (let i = hearts.length - 1; i >= 0; i--) {
         const h = hearts[i];
-        h.life -= delta;
+        h.life -= delta * 2.0; // Faster fade (0.5s)
         h.mesh.position.y += h.velY * delta;
         h.mesh.material.opacity = h.life;
-        h.mesh.rotation.z = Math.PI + Math.sin(t * 10 + i)*0.5; // Wiggle
+        h.mesh.rotation.z = Math.PI + Math.sin(t * 10 + i)*0.5; 
         if (h.life <= 0) {
             scene.remove(h.mesh);
             hearts.splice(i, 1);

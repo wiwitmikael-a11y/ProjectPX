@@ -245,7 +245,7 @@ const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Gr
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-        if (e.data.type === 'PET_CLICKED' && onInteract) onInteract();
+        if (e.data.type === 'PET_CLICKED_CONFIRM' && onInteract) onInteract(); // Listen for confirmed clicks
         if ((e.data.type === 'ENTER_IDLE' || e.data.type === 'ENTER_WALK') && onStateChange) onStateChange(e.data.type);
     };
     window.addEventListener('message', handler);
@@ -291,12 +291,6 @@ const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Gr
           }, 100);
       }
   }, [eventActive]);
-
-  useEffect(() => {
-      // Send INTERACT_POKE if onInteract is called from parent, but we handle it inside VoxelViewer via postMessage usually.
-      // Actually the logic is reversed: Iframe sends PET_CLICKED -> App handles it -> App might want to send signal back.
-      // We will expose a way to send messages or just rely on props.
-  }, []);
 
   return (
     <div className="w-full h-full relative">
@@ -402,7 +396,7 @@ export default function App() {
   const [speechBubble, setSpeechBubble] = useState<string | null>(null);
   const [canInteract, setCanInteract] = useState(true);
   const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const iframeRef = useRef<any>(null); // To send messages manually
+  const iframeRef = useRef<any>(null); 
 
   // FX
   const [purchaseAnim, setPurchaseAnim] = useState<string | null>(null);
@@ -494,13 +488,24 @@ export default function App() {
       } else if (type === 'TREASURE') {
           const item = getLootDrop(user.currentLocation);
           if(item) {
-            const ev: any = { type: 'TREASURE', title: 'SECRET STASH', description: 'You found something shiny!', logs: ['Scanning area...', 'Ping detected!', `Uncovered: ${ITEMS_DB[item].name}`], resultText: 'LOOT SECURED!' };
+            const ev: any = { 
+                type: 'TREASURE', 
+                title: 'SECRET STASH', 
+                description: 'You found something shiny!', 
+                logs: ['Scanning area...', 'Ping detected!', `Uncovered: ${ITEMS_DB[item].name}`], 
+                resultText: 'LOOT SECURED!',
+                rewards: { items: [item] }
+            };
             startAutoEvent(ev, () => addItem(item));
           }
       } else {
-          const ev = getRandomSpecialEvent(user.currentLocation);
+          const ev: any = getRandomSpecialEvent(user.currentLocation);
+          const rewards: any = {};
+          if(ev.type === 'DISCOVERY') { rewards.exp = 20; rewards.coins = 20; }
+          ev.rewards = rewards;
+          
           startAutoEvent(ev, () => {
-             if(ev.type === 'DISCOVERY') { addExp(ev.effectValue); addCoins(20); }
+             if(ev.type === 'DISCOVERY') { addExp(20); addCoins(20); }
              if(ev.type === 'HAZARD') { damagePet(ev.effectValue); }
           });
       }
@@ -515,7 +520,7 @@ export default function App() {
               clearInterval(interval);
               setActiveEvent((prev: any) => ({ ...prev, finished: true }));
               onComplete(); 
-              setTimeout(() => { setActiveEvent(null); }, 2500); 
+              setTimeout(() => { setActiveEvent(null); }, 3000); 
           } else {
               setActiveEvent((prev: any) => ({ ...prev, currentLogIndex: i }));
           }
@@ -524,7 +529,7 @@ export default function App() {
 
   const startAutoBattle = () => {
       const enemy = getRandomEnemy(user.currentLocation, activePet.level, getGenericVoxel);
-      const battleState = { enemy, logs: [`A wild ${enemy.name} appeared!`, "Combat protocols initiated!"], finished: false, win: false };
+      const battleState = { enemy, logs: [`A wild ${enemy.name} appeared!`, "Combat protocols initiated!"], finished: false, win: false, rewards: {} };
       setActiveBattle(battleState);
       const { win, combatLogs } = runBattleSimulation(activePet, enemy);
       let i = 0;
@@ -536,15 +541,22 @@ export default function App() {
           i++;
           if (i >= combatLogs.length) {
               clearInterval(interval);
-              setActiveBattle((prev: any) => ({ ...prev, finished: true, win }));
+              const rewards: any = {};
               if (win) {
-                  const xp = enemy.level * 30;
-                  const coins = enemy.level * 20;
-                  addExp(xp); addCoins(coins);
+                  rewards.exp = enemy.level * 30;
+                  rewards.coins = enemy.level * 20;
                   const loot = getLootDrop(user.currentLocation);
-                  if (loot && Math.random() > 0.5) addItem(loot);
+                  if (loot && Math.random() > 0.5) rewards.items = [loot];
+              }
+              
+              setActiveBattle((prev: any) => ({ ...prev, finished: true, win, rewards }));
+              
+              if (win) {
+                  addExp(rewards.exp); addCoins(rewards.coins);
+                  if (rewards.items) rewards.items.forEach((id: string) => addItem(id));
               } else { damagePet(10); }
-              setTimeout(() => { setActiveBattle(null); }, 2500); 
+              
+              setTimeout(() => { setActiveBattle(null); }, 3000); 
           }
       }, 800); 
   };
@@ -725,11 +737,8 @@ export default function App() {
   const handlePetInteraction = () => {
       if (!canInteract) return; 
       setCanInteract(false);
-      setTimeout(() => setCanInteract(true), 2000); 
+      setTimeout(() => setCanInteract(true), 1500); // Debounce poke
 
-      // Trigger visual reaction via message is handled by VoxelViewer receiving 'preEvent' or just internal logic, 
-      // but we want to force a specific POKE reaction now.
-      // We send a message to the iframe to trigger the visual 'JUMP' and hearts.
       const iframe = document.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
           iframe.contentWindow.postMessage({ type: 'INTERACT_POKE' }, '*');
@@ -740,9 +749,7 @@ export default function App() {
       
       setSpeechBubble(msg);
       if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
-      speechTimeoutRef.current = setTimeout(() => setSpeechBubble(null), 3000); 
-      
-      showFloatingText("♥", "text-pink-500");
+      speechTimeoutRef.current = setTimeout(() => setSpeechBubble(null), 2000); 
   };
 
   // --- RENDER ---
@@ -931,7 +938,18 @@ export default function App() {
                        
                        {activeBattle.finished && (
                            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20 backdrop-blur-sm animate-in fade-in zoom-in">
-                               <h1 className={`text-6xl font-black ${activeBattle.win ? 'text-yellow-400 stroke-black' : 'text-red-500 stroke-black'} drop-shadow-[6px_6px_0_#000] -rotate-6 mb-4`} style={{WebkitTextStroke: '2px black'}}>
+                               {activeBattle.rewards && activeBattle.win && (
+                                   <div className="flex gap-4 mb-6">
+                                       {activeBattle.rewards.exp && <div className="bg-yellow-400 text-black font-black p-3 rounded-lg border-2 border-black shadow-[4px_4px_0_black] pop-in" style={{animationDelay: '0.1s'}}>+{activeBattle.rewards.exp} XP</div>}
+                                       {activeBattle.rewards.coins && <div className="bg-yellow-200 text-black font-black p-3 rounded-lg border-2 border-black shadow-[4px_4px_0_black] pop-in" style={{animationDelay: '0.2s'}}>+{activeBattle.rewards.coins} G</div>}
+                                       {activeBattle.rewards.items && activeBattle.rewards.items.map((item: string, idx: number) => (
+                                           <div key={idx} className="bg-green-400 text-black font-black p-3 rounded-lg border-2 border-black shadow-[4px_4px_0_black] pop-in" style={{animationDelay: '0.3s'}}>
+                                               ITEM!
+                                           </div>
+                                       ))}
+                                   </div>
+                               )}
+                               <h1 className={`text-6xl font-black ${activeBattle.win ? 'text-yellow-400 stroke-black' : 'text-red-500 stroke-black'} drop-shadow-[6px_6px_0_#000] -rotate-6`} style={{WebkitTextStroke: '2px black'}}>
                                    {activeBattle.win ? 'VICTORY!' : 'DEFEATED'}
                                </h1>
                            </div>
@@ -966,7 +984,16 @@ export default function App() {
                                ))}
                            </div>
                       ) : (
-                           <h2 className="text-5xl font-black text-green-500 pop-in drop-shadow-[3px_3px_0_black] -rotate-3">{activeEvent.resultText}</h2>
+                           <div className="flex flex-col items-center gap-4">
+                               {activeEvent.rewards && (
+                                   <div className="flex gap-3 mb-2">
+                                       {activeEvent.rewards.exp && <span className="bg-yellow-400 px-3 py-1 rounded border-2 border-black font-black shadow-sm pop-in">+{activeEvent.rewards.exp} XP</span>}
+                                       {activeEvent.rewards.coins && <span className="bg-yellow-200 px-3 py-1 rounded border-2 border-black font-black shadow-sm pop-in">+{activeEvent.rewards.coins} G</span>}
+                                       {activeEvent.rewards.items && <span className="bg-green-400 px-3 py-1 rounded border-2 border-black font-black shadow-sm pop-in">LOOT!</span>}
+                                   </div>
+                               )}
+                               <h2 className="text-5xl font-black text-green-500 pop-in drop-shadow-[3px_3px_0_black] -rotate-3">{activeEvent.resultText}</h2>
+                           </div>
                       )}
                   </div>
               </div>
