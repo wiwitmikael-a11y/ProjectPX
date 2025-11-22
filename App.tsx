@@ -396,8 +396,7 @@ export default function App() {
   const [speechBubble, setSpeechBubble] = useState<string | null>(null);
   const [canInteract, setCanInteract] = useState(true);
   const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const iframeRef = useRef<any>(null); 
-
+  
   // FX
   const [purchaseAnim, setPurchaseAnim] = useState<string | null>(null);
 
@@ -450,7 +449,14 @@ export default function App() {
           const msg = getPetSpeech();
           setSpeechBubble(msg);
           if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
-          speechTimeoutRef.current = setTimeout(() => setSpeechBubble(null), 4000);
+          speechTimeoutRef.current = setTimeout(() => {
+              setSpeechBubble(null);
+              // Sync HIDE_EMOTES
+              const iframe = document.querySelector('iframe');
+              if (iframe && iframe.contentWindow) {
+                  iframe.contentWindow.postMessage({ type: 'HIDE_EMOTES' }, '*');
+              }
+          }, 2000);
       }
   }, [isPetIdle]);
 
@@ -496,7 +502,7 @@ export default function App() {
                 resultText: 'LOOT SECURED!',
                 rewards: { items: [item] }
             };
-            startAutoEvent(ev, () => addItem(item));
+            startAutoEvent(ev, () => addItem(item, true));
           }
       } else {
           const ev: any = getRandomSpecialEvent(user.currentLocation);
@@ -505,7 +511,7 @@ export default function App() {
           ev.rewards = rewards;
           
           startAutoEvent(ev, () => {
-             if(ev.type === 'DISCOVERY') { addExp(20); addCoins(20); }
+             if(ev.type === 'DISCOVERY') { addExp(20, true); addCoins(20, true); }
              if(ev.type === 'HAZARD') { damagePet(ev.effectValue); }
           });
       }
@@ -552,8 +558,8 @@ export default function App() {
               setActiveBattle((prev: any) => ({ ...prev, finished: true, win, rewards }));
               
               if (win) {
-                  addExp(rewards.exp); addCoins(rewards.coins);
-                  if (rewards.items) rewards.items.forEach((id: string) => addItem(id));
+                  addExp(rewards.exp, true); addCoins(rewards.coins, true);
+                  if (rewards.items) rewards.items.forEach((id: string) => addItem(id, true));
               } else { damagePet(10); }
               
               setTimeout(() => { setActiveBattle(null); }, 3000); 
@@ -599,11 +605,11 @@ export default function App() {
       }
   };
 
-  const addExp = (amount: number) => {
+  const addExp = (amount: number, silent: boolean = false) => {
       const updated = [...inventory];
       const pet = updated[activePetIndex];
       pet.exp += amount;
-      showFloatingText(`+${amount} XP`, 'text-yellow-400');
+      if (!silent) showFloatingText(`+${amount} XP`, 'text-yellow-400');
       if (pet.exp >= pet.maxExp) {
           pet.level++; pet.exp = 0; pet.maxExp = Math.floor(pet.maxExp * 1.4);
           pet.maxHp = (pet.maxHp || 100) + 20; pet.currentHp = pet.maxHp;
@@ -618,14 +624,14 @@ export default function App() {
       } else { setUser({ ...user, exp: newExp }); }
   };
 
-  const addCoins = (amt: number) => {
+  const addCoins = (amt: number, silent: boolean = false) => {
       setUser(u => ({ ...u, coins: u.coins + amt }));
-      showFloatingText(`+${amt} G`, 'text-yellow-300');
+      if (!silent) showFloatingText(`+${amt} G`, 'text-yellow-300');
   };
 
-  const addItem = (itemId: string) => {
+  const addItem = (itemId: string, silent: boolean = false) => {
       setUser(u => ({ ...u, inventory: [...u.inventory, itemId] }));
-      showFloatingText(`+ ${ITEMS_DB[itemId].name}!`, 'text-green-400');
+      if (!silent) showFloatingText(`+ ${ITEMS_DB[itemId].name}!`, 'text-green-400');
   };
 
   const removeItem = (index: number) => {
@@ -749,7 +755,14 @@ export default function App() {
       
       setSpeechBubble(msg);
       if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
-      speechTimeoutRef.current = setTimeout(() => setSpeechBubble(null), 2000); 
+      speechTimeoutRef.current = setTimeout(() => {
+          setSpeechBubble(null);
+          // Sync HIDE_EMOTES
+          const iframe = document.querySelector('iframe');
+          if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({ type: 'HIDE_EMOTES' }, '*');
+          }
+      }, 2000); 
   };
 
   // --- RENDER ---

@@ -622,6 +622,11 @@ window.addEventListener('message', (e) => {
     if (type === 'INTERACT_POKE') {
         triggerPoke();
     }
+    if (type === 'HIDE_EMOTES') {
+        for(let i=hearts.length-1; i>=0; i--) scene.remove(hearts[i].mesh);
+        hearts.length = 0;
+        emoteSprite.visible = false;
+    }
     if (type === 'SET_ACTION') { 
         // Only change if different AND not already queued AND not currently interacting
         if (currentAction !== value && nextAction !== value && overrideTimer <= 0) {
