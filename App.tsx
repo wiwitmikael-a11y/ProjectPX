@@ -240,7 +240,7 @@ const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
 
 // --- COMPONENTS ---
 
-const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Grass', equipment, onInteract, onStateChange, preEvent }: { code: string, mode?: string, action?: string, theme?: string, equipment?: any, onInteract?: ()=>void, onStateChange?: (s:string)=>void, preEvent?: string }) => {
+const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Grass', equipment, onInteract, onStateChange, preEvent, eventActive }: { code: string, mode?: string, action?: string, theme?: string, equipment?: any, onInteract?: ()=>void, onStateChange?: (s:string)=>void, preEvent?: string, eventActive?: boolean }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -282,6 +282,22 @@ const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Gr
     }
   }, [preEvent]);
 
+  // RESUME LOGIC when events finish
+  useEffect(() => {
+      if (!eventActive && iframeRef.current && iframeRef.current.contentWindow) {
+          // Send RESUME to unpause
+          setTimeout(() => {
+              iframeRef.current?.contentWindow?.postMessage({ type: 'RESUME' }, '*');
+          }, 100);
+      }
+  }, [eventActive]);
+
+  useEffect(() => {
+      // Send INTERACT_POKE if onInteract is called from parent, but we handle it inside VoxelViewer via postMessage usually.
+      // Actually the logic is reversed: Iframe sends PET_CLICKED -> App handles it -> App might want to send signal back.
+      // We will expose a way to send messages or just rely on props.
+  }, []);
+
   return (
     <div className="w-full h-full relative">
       <iframe 
@@ -291,7 +307,6 @@ const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Gr
         title="Voxel Viewer"
         sandbox="allow-scripts allow-same-origin"
       />
-      {/* Click overlay for simple touches if raycasting fails or for general area clicks */}
       <div className="absolute inset-0 pointer-events-none" />
     </div>
   );
@@ -385,6 +400,9 @@ export default function App() {
   // Interactive State
   const [isPetIdle, setIsPetIdle] = useState(false);
   const [speechBubble, setSpeechBubble] = useState<string | null>(null);
+  const [canInteract, setCanInteract] = useState(true);
+  const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const iframeRef = useRef<any>(null); // To send messages manually
 
   // FX
   const [purchaseAnim, setPurchaseAnim] = useState<string | null>(null);
@@ -400,7 +418,6 @@ export default function App() {
           const data = JSON.parse(saved);
           setUser(data.user);
           setInventory(data.inventory);
-          setGameState('NEXUS');
       }
   }, []);
 
@@ -410,31 +427,38 @@ export default function App() {
       }
   }, [user, inventory]);
 
+  const handleNewGame = () => {
+      localStorage.removeItem(`pixupet_save_${SAVE_VERSION}`);
+      setUser({ name: 'Tamer', level: 1, exp: 0, coins: 100, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob' });
+      setInventory([]);
+      setGameState('ONBOARDING');
+  };
+
   // --- GAME LOOP ---
   useEffect(() => {
       if (gameState !== 'NEXUS' || activeBattle || activeEvent || isAnalyzing || preEventEmote) return;
       
       const interval = setInterval(() => {
-          if (Math.random() > 0.7 && !isPetIdle) { // Only update text if moving, idle handles its own speech
+          if (Math.random() > 0.7 && !isPetIdle) { 
               const txt = getRandomEventText(user.currentLocation);
               setStatusText(txt);
           }
-          if (Math.random() > 0.85) { 
+          if (Math.random() > 0.9) { 
              triggerRandomEvent();
           }
-      }, 3000);
+      }, 8000); 
       return () => clearInterval(interval);
   }, [gameState, activeBattle, activeEvent, user.currentLocation, isAnalyzing, isPetIdle, preEventEmote]);
 
   // Speech Bubble Logic
   useEffect(() => {
       if (isPetIdle && !speechBubble && Math.random() > 0.6) {
-          setSpeechBubble(getPetSpeech());
-          setTimeout(() => setSpeechBubble(null), 3000);
-      } else if (!isPetIdle) {
-          setSpeechBubble(null);
+          const msg = getPetSpeech();
+          setSpeechBubble(msg);
+          if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
+          speechTimeoutRef.current = setTimeout(() => setSpeechBubble(null), 4000);
       }
-  }, [isPetIdle, speechBubble]);
+  }, [isPetIdle]);
 
   useEffect(() => {
       if (logScrollRef.current) {
@@ -447,7 +471,6 @@ export default function App() {
   const triggerRandomEvent = async () => {
       const rand = Math.random();
       
-      // Determine type first
       let type: 'BATTLE' | 'TREASURE' | 'SPECIAL' = 'SPECIAL';
       if (rand > 0.60) type = 'BATTLE';
       else if (rand > 0.30) type = 'TREASURE';
@@ -460,10 +483,10 @@ export default function App() {
       // 1. PRE-EVENT PHASE
       setPreEventEmote(emote);
       
-      // Wait 2 seconds for "Anticipation" animation
-      await new Promise(r => setTimeout(r, 2000));
+      // Wait 2.5 seconds for "Anticipation" animation
+      await new Promise(r => setTimeout(r, 2500));
       
-      setPreEventEmote(null); // Clear emote signal
+      setPreEventEmote(null); 
 
       // 2. TRIGGER ACTUAL EVENT
       if (type === 'BATTLE') {
@@ -476,7 +499,6 @@ export default function App() {
           }
       } else {
           const ev = getRandomSpecialEvent(user.currentLocation);
-          if (ev.type === 'HAZARD') { /* handled */ } 
           startAutoEvent(ev, () => {
              if(ev.type === 'DISCOVERY') { addExp(ev.effectValue); addCoins(20); }
              if(ev.type === 'HAZARD') { damagePet(ev.effectValue); }
@@ -605,7 +627,7 @@ export default function App() {
   const showFloatingText = (text: string, color: string) => {
       const id = Date.now() + Math.random();
       setNotifs(prev => [...prev, { id, text, x: 50, y: 40, color }]);
-      setTimeout(() => setNotifs(prev => prev.filter(n => n.id !== id)), 2000);
+      setTimeout(() => setNotifs(prev => prev.filter(n => n.id !== id)), 3000); 
   };
 
   const handleScan = async () => {
@@ -701,8 +723,25 @@ export default function App() {
   };
 
   const handlePetInteraction = () => {
-      setSpeechBubble("Hey! Don't poke me!");
-      setTimeout(() => setSpeechBubble(null), 2000);
+      if (!canInteract) return; 
+      setCanInteract(false);
+      setTimeout(() => setCanInteract(true), 2000); 
+
+      // Trigger visual reaction via message is handled by VoxelViewer receiving 'preEvent' or just internal logic, 
+      // but we want to force a specific POKE reaction now.
+      // We send a message to the iframe to trigger the visual 'JUMP' and hearts.
+      const iframe = document.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({ type: 'INTERACT_POKE' }, '*');
+      }
+
+      let msg = getPetSpeech(); // Use varied speech
+      if (statusText.toLowerCase().includes('nap') || statusText.toLowerCase().includes('rest')) msg = "Woke me up!";
+      
+      setSpeechBubble(msg);
+      if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
+      speechTimeoutRef.current = setTimeout(() => setSpeechBubble(null), 3000); 
+      
       showFloatingText("♥", "text-pink-500");
   };
 
@@ -719,10 +758,19 @@ export default function App() {
           <div className="neo-pop-box px-6 py-3 mb-8 rotate-2 bg-white max-w-xs sm:max-w-md text-center">
                <h2 className="font-['Bangers'] text-2xl sm:text-3xl text-black tracking-wide">Turn Anything into a Pet!</h2>
           </div>
-          <button onClick={() => setGameState(inventory.length > 0 ? 'NEXUS' : 'ONBOARDING')} 
-              className="pop-btn btn-primary text-xl sm:text-2xl px-12 sm:px-16 py-4 sm:py-6 pop-in hover:scale-105 active:scale-95 transition-all">
-              PRESS START
-          </button>
+          
+          <div className="flex flex-col gap-4 z-20">
+              {inventory.length > 0 && (
+                  <button onClick={() => setGameState('NEXUS')} 
+                      className="pop-btn btn-success text-xl sm:text-2xl px-12 sm:px-16 py-4 sm:py-6 pop-in hover:scale-105 active:scale-95 transition-all">
+                      RESUME GAME
+                  </button>
+              )}
+              <button onClick={handleNewGame} 
+                  className={`pop-btn ${inventory.length > 0 ? 'btn-danger text-sm py-2' : 'btn-primary text-xl py-4'} px-8 hover:scale-105 active:scale-95 transition-all`}>
+                  {inventory.length > 0 ? "RESET SAVE" : "NEW GAME"}
+              </button>
+          </div>
       </div>
   );
 
@@ -780,10 +828,10 @@ export default function App() {
             onInteract={handlePetInteraction}
             onStateChange={(state) => setIsPetIdle(state === 'ENTER_IDLE')}
             preEvent={preEventEmote || undefined}
+            eventActive={!!activeBattle || !!activeEvent || !!preEventEmote}
         />}
       </div>
 
-      {/* SPEECH BUBBLE */}
       {speechBubble && (
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pop-in pointer-events-none">
               <div className="bg-white border-4 border-black rounded-2xl p-3 relative shadow-[4px_4px_0_#000] max-w-[200px] text-center">
@@ -794,9 +842,7 @@ export default function App() {
           </div>
       )}
 
-      {/* HUD TOP (NEO-POP STYLE) */}
       <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-10 pointer-events-none safe-top">
-          {/* NAME PLATE */}
           <div className="neo-pop-box p-2 pointer-events-auto cursor-pointer flex items-center gap-3 hover:scale-105 active:scale-95 transition-transform bg-white" onClick={()=>setStatsOpen(true)}>
               <div className="flex flex-col">
                   <div className="text-[10px] font-black text-black uppercase tracking-wider flex items-center gap-1">
@@ -809,7 +855,6 @@ export default function App() {
               <div className="bg-blue-500 text-white border-2 border-black rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-[2px_2px_0_#000]">i</div>
           </div>
 
-          {/* RESOURCE PLATE */}
           <div className="neo-pop-box p-2 flex flex-col items-end bg-white">
               <div className="font-black text-yellow-600 flex items-center gap-1 text-base drop-shadow-sm">
                   <IconCoin /> {user.coins}
@@ -818,7 +863,6 @@ export default function App() {
           </div>
       </div>
 
-      {/* FLOATING NOTIFICATIONS - STACKED DOWNWARDS */}
       {notifs.map((n, idx) => (
           <div key={n.id} className={`absolute z-[60] text-lg font-black ${n.color} float-down pointer-events-none w-full text-center drop-shadow-[2px_2px_0_#000] stroke-black text-stroke`} 
                style={{top: `${100 + idx * 35}px`, left: '0', right: '0', WebkitTextStroke: '0.5px black'}}>
@@ -826,7 +870,6 @@ export default function App() {
           </div>
       ))}
 
-      {/* SHOP PURCHASE ANIMATION */}
       {purchaseAnim && (
           <div className="absolute inset-0 z-[70] flex items-center justify-center pointer-events-none">
               <div className="shop-pop w-32 h-32">
@@ -835,14 +878,12 @@ export default function App() {
           </div>
       )}
 
-      {/* EXPLORE STATUS */}
       <div className="absolute bottom-32 left-0 right-0 flex justify-center z-10 pointer-events-none">
           <div className="bg-black/90 text-white px-6 py-2 rounded-full border-2 border-white/50 backdrop-blur text-xs font-black tracking-widest uppercase shadow-lg">
               {statusText} <span className="animate-pulse">...</span>
           </div>
       </div>
 
-      {/* BOTTOM NAVIGATION (FLOATING NEO-POP) */}
       <div className="absolute bottom-4 left-4 right-4 bg-white border-4 border-black rounded-2xl p-2 flex justify-between items-end z-20 shadow-[0_10px_20px_rgba(0,0,0,0.4)] h-20 safe-bottom">
           
           <button onClick={()=>{ setGameState('COLLECTION') }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
@@ -855,7 +896,6 @@ export default function App() {
               <span className="text-[9px] font-black uppercase mt-1">Items</span>
           </button>
 
-          {/* CENTER SCAN BUTTON */}
           <div className="relative w-1/5 flex justify-center z-30">
               <button onClick={()=>setShowScan(true)} className="absolute -top-12 bg-yellow-400 w-24 h-24 rounded-full border-4 border-black flex items-center justify-center shadow-[0px_6px_0px_0px_#000] hover:-translate-y-2 hover:shadow-[0px_10px_0px_0px_#000] active:translate-y-1 active:shadow-[0px_2px_0px_0px_#000] transition-all overflow-hidden">
                   <div className="text-white drop-shadow-md relative z-10"><IconScan /></div>
@@ -873,8 +913,6 @@ export default function App() {
           </button>
       </div>
 
-      {/* --- MODALS --- */}
-      
       {activeBattle && (
           <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
               <div className="w-full max-w-lg bg-white border-4 border-black rounded-2xl overflow-hidden shadow-[10px_10px_0_#000] flex flex-col h-[75vh] pop-in">
@@ -882,7 +920,6 @@ export default function App() {
                       <IconSkull /> WILD ENCOUNTER
                   </div>
                   <div className="flex-1 bg-gradient-to-b from-slate-800 to-black relative overflow-hidden flex border-b-4 border-black">
-                       {/* Strict 50/50 split */}
                        <div className="w-1/2 h-full relative border-r-4 border-black">
                            <VoxelViewer code={activePet.voxelCode} mode="BATTLE_PLAYER" equipment={activePet.equipment} />
                            <div className="absolute bottom-2 left-2 bg-blue-600 text-white text-[9px] font-bold px-2 py-1 border-2 border-black rounded transform -skew-x-12 shadow-md">YOU</div>
@@ -997,7 +1034,6 @@ export default function App() {
                <div className="w-[200%] h-[200%] relative map-grid p-20 pt-32 origin-top-left">
                    {Object.values(LOCATIONS_DB).map(loc => {
                        const isCurrent = user.currentLocation === loc.id;
-                       // UNLOCK LOGIC FIX: Check ACTIVE PET LEVEL too
                        const isLocked = Math.max(user.level, activePet?.level || 0) < loc.levelReq;
                        
                        return (
@@ -1123,7 +1159,6 @@ export default function App() {
                        <h2 className="font-black text-xl text-white drop-shadow-md flex items-center gap-2"><IconBag /> BACKPACK</h2>
                        <button onClick={()=>setItemsOpen(false)} className="font-black text-xl w-8 h-8 hover:bg-green-500 rounded text-white">✕</button>
                    </div>
-                   {/* UPDATED TO LIST VIEW WITH DETAILS */}
                    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-green-50">
                        {user.inventory.length === 0 ? (
                            <div className="text-center text-gray-500 font-bold mt-10">Your bag is empty!</div>
@@ -1149,7 +1184,6 @@ export default function App() {
           </div>
       )}
 
-      {/* ITEM CONFIRMATION POPUP */}
       {confirmItem && itemsOpen && (
           <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
               <div className="bg-white w-full max-w-sm rounded-2xl p-6 border-4 border-black shadow-xl pop-in text-center">
@@ -1159,7 +1193,6 @@ export default function App() {
                   <div className="flex gap-4">
                       <button onClick={() => setConfirmItem(null)} className="flex-1 bg-gray-200 py-3 rounded-xl border-3 border-black font-black">CANCEL</button>
                       <button onClick={() => {
-                          // Find index of item to remove specific instance
                           const idx = user.inventory.indexOf(confirmItem.id);
                           if (idx !== -1) handleUseItem(confirmItem, idx);
                       }} className="flex-1 bg-green-400 py-3 rounded-xl border-3 border-black font-black hover:bg-green-500 shadow-[2px_2px_0_black]">USE / EQUIP</button>

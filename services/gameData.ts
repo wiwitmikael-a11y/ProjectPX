@@ -359,12 +359,12 @@ export const getRandomEventText = (locationId: string): string => {
     return pool[Math.floor(Math.random() * pool.length)];
 };
 
-export const getActionFromText = (text: string): 'WALK' | 'SLEEP' | 'JUMP' | 'SCAN' => {
+export const getActionFromText = (text: string): 'WALK' | 'SLEEP' | 'JUMP' | 'SCAN' | 'RUN' => {
     const lower = text.toLowerCase();
-    // REDUCED SLEEP TRIGGER
     if (lower.includes('rest') && Math.random() > 0.7) return 'SLEEP'; 
     if (lower.includes('jump') || lower.includes('hop') || lower.includes('dodge') || lower.includes('climb')) return 'JUMP';
-    if (lower.includes('scan') || lower.includes('hack') || lower.includes('look') || lower.includes('analyz') || lower.includes('track')) return 'SCAN';
+    if (lower.includes('scan') || lower.includes('hack') || lower.includes('look') || lower.includes('analyz')) return 'SCAN';
+    if (lower.includes('chase') || lower.includes('run') || lower.includes('track') || lower.includes('hunt') || lower.includes('fight')) return 'RUN';
     return 'WALK';
 };
 
