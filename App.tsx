@@ -658,7 +658,7 @@ export default function App() {
           if(!traits.def) traits.def = 10;
           if(!traits.spd) traits.spd = 10;
           
-          const voxelCode = getGenericVoxel(traits.element, traits.bodyType, 'Noob', traits.visualTraits);
+          const voxelCode = getGenericVoxel(traits.element, traits.bodyType, 'Noob', traits.visualTraits, traits.name);
           const newPet: Pixupet = {
               id: `pet_${Date.now()}`, dateCreated: Date.now(), ...traits,
               voxelCode, level: 1, exp: 0, maxExp: 100, hunger: 80, fatigue: 0, happiness: 80,
@@ -675,7 +675,7 @@ export default function App() {
   };
 
   const handleStarterSelect = (starter: any) => {
-      const voxelCode = getGenericVoxel(starter.element, starter.bodyType, 'Noob', starter.visualTraits);
+      const voxelCode = getGenericVoxel(starter.element, starter.bodyType, 'Noob', starter.visualTraits, starter.name);
       const newPet: Pixupet = {
           id: `starter_${Date.now()}`, dateCreated: Date.now(), name: starter.name, element: starter.element,
           description: starter.description, visual_design: starter.visual_design, bodyType: starter.bodyType,

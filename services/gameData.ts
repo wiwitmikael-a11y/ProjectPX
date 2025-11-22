@@ -11,6 +11,20 @@ export type AITactic = 'BALANCED' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SPEEDSTER';
 export type MonsterStage = 'Noob' | 'Pro' | 'Elite' | 'Legend';
 export type EquipmentSlot = 'HEAD' | 'BODY' | 'ACCESSORY';
 
+export const ELEMENT_THEMES: Record<string, { bg: string; text: string; icon: string }> = {
+    Fire: { bg: 'bg-red-500', text: 'text-red-500', icon: '🔥' },
+    Water: { bg: 'bg-blue-500', text: 'text-blue-500', icon: '💧' },
+    Grass: { bg: 'bg-green-500', text: 'text-green-500', icon: '🌿' },
+    Electric: { bg: 'bg-yellow-400', text: 'text-yellow-500', icon: '⚡' },
+    Psychic: { bg: 'bg-purple-500', text: 'text-purple-500', icon: '🔮' },
+    Metal: { bg: 'bg-gray-400', text: 'text-gray-500', icon: '🔩' },
+    Dark: { bg: 'bg-gray-800', text: 'text-gray-400', icon: '🌑' },
+    Light: { bg: 'bg-yellow-100', text: 'text-yellow-600', icon: '✨' },
+    Spirit: { bg: 'bg-indigo-400', text: 'text-indigo-400', icon: '👻' },
+    Toxic: { bg: 'bg-lime-500', text: 'text-lime-600', icon: '☠️' },
+    Neutral: { bg: 'bg-gray-300', text: 'text-gray-600', icon: '🥚' }
+};
+
 export const EVO_THRESHOLDS = {
     PRO: 10,
     ELITE: 25,
@@ -26,6 +40,7 @@ export interface VisualTraits {
     build: 'Chunky' | 'Slender' | 'Round';
     hasEars?: boolean; 
     surfaceFinish?: 'Matte' | 'Glossy' | 'Metallic' | 'Emissive';
+    materialType?: 'Standard' | 'Magma' | 'Jelly' | 'Moss'; // Advanced Material Physics
     extractedColors?: {
         primary: string;   
         secondary: string; 
@@ -232,27 +247,46 @@ export interface OfflineReport {
     hungerLost: number; hpLost: number; events: string[];
 }
 
+// --- ICONIC STARTERS V2 (AAA DESIGN) ---
 export const STARTER_PACKS = [
     {
-        id: 'starter_fire', name: 'Blaze Kid', element: 'Fire',
-        description: 'Hot-headed bipedal fighter.',
-        stats: { hp: 80, atk: 18, def: 8, spd: 12 },
-        visual_design: 'Robot with flame vents.', bodyType: 'BIPED',
-        visualTraits: { hasHorns: true, hornStyle: 'Uni', hasWings: false, build: 'Chunky', accessory: 'Scarf', hasEars: false, surfaceFinish: 'Matte', extractedColors: { primary: '#EF4444', secondary: '#FCA5A5', accent: '#FBBF24' } }
+        id: 'starter_fire', name: 'VOLCA-REX', element: 'Fire',
+        description: 'A playful T-Rex made of magma and rock. Its back vents pulse with intense heat.',
+        stats: { hp: 100, atk: 25, def: 15, spd: 18 },
+        visual_design: 'T-Rex with volcano back and glowing veins.', bodyType: 'BIPED',
+        visualTraits: { 
+            hasHorns: false, hornStyle: 'None', 
+            hasWings: false, wingStyle: 'None', 
+            build: 'Chunky', accessory: 'None', hasEars: false, 
+            surfaceFinish: 'Emissive', materialType: 'Magma',
+            extractedColors: { primary: '#EF4444', secondary: '#292524', accent: '#FCD34D' } // Red, DkGrey, Gold
+        }
     },
     {
-        id: 'starter_water', name: 'Aqua Drone', element: 'Water',
-        description: 'Balanced floating drone.',
-        stats: { hp: 100, atk: 10, def: 10, spd: 14 },
-        visual_design: 'Sphere drone with water.', bodyType: 'FLOATING',
-        visualTraits: { hasHorns: false, hasWings: true, wingStyle: 'Mech', build: 'Round', accessory: 'Goggles', hasEars: false, surfaceFinish: 'Glossy', extractedColors: { primary: '#3B82F6', secondary: '#93C5FD', accent: '#60A5FA' } }
+        id: 'starter_water', name: 'GLUB-GLUB', element: 'Water',
+        description: 'A hyper-intelligent octopus protected by a Hydro-Mech suit.',
+        stats: { hp: 110, atk: 15, def: 18, spd: 15 },
+        visual_design: 'Octopus in glass helmet mech.', bodyType: 'FLOATING',
+        visualTraits: { 
+            hasHorns: false, hornStyle: 'None', 
+            hasWings: false, wingStyle: 'None', 
+            build: 'Round', accessory: 'Helmet', hasEars: false, 
+            surfaceFinish: 'Glossy', materialType: 'Jelly',
+            extractedColors: { primary: '#3B82F6', secondary: '#93C5FD', accent: '#F472B6' } // Blue, LtBlue, Pink
+        }
     },
     {
-        id: 'starter_grass', name: 'Moss Pup', element: 'Grass',
-        description: 'Tanky quadruped.',
-        stats: { hp: 120, atk: 8, def: 18, spd: 6 },
-        visual_design: 'Mossy cyber-dog.', bodyType: 'QUADRUPED',
-        visualTraits: { hasHorns: true, hornStyle: 'Antenna', hasWings: false, build: 'Chunky', accessory: 'Backpack', hasEars: true, surfaceFinish: 'Matte', extractedColors: { primary: '#10B981', secondary: '#6EE7B7', accent: '#A7F3D0' } }
+        id: 'starter_grass', name: 'MOSS-KONG', element: 'Grass',
+        description: 'A gentle giant. Its wooden fists pack a punch, and moss grows on its stone skin.',
+        stats: { hp: 150, atk: 20, def: 25, spd: 10 },
+        visual_design: 'Gorilla made of stone and moss.', bodyType: 'BIPED',
+        visualTraits: { 
+            hasHorns: false, hornStyle: 'None', 
+            hasWings: false, wingStyle: 'None', 
+            build: 'Chunky', accessory: 'None', hasEars: true, 
+            surfaceFinish: 'Matte', materialType: 'Moss',
+            extractedColors: { primary: '#166534', secondary: '#57534E', accent: '#A3E635' } // DkGreen, Stone, Lime
+        }
     }
 ];
 
@@ -277,19 +311,6 @@ export const getProceduralMonsterArt = (name: string, element: string): string =
     const colors: any = { Fire: '#FF6B6B', Water: '#4D96FF', Grass: '#6BCB77', Electric: '#FFD93D', Psychic: '#C77dFF', Metal: '#94A3B8', Dark: '#6D28D9', Light: '#FDE047' };
     const hex = colors[element] || '#CBD5E1';
     return `data:image/svg+xml;base64,${btoa(`<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="${hex}"/><text x="50" y="50" text-anchor="middle">${element[0]}</text></svg>`)}`;
-};
-
-export const ELEMENT_THEMES: any = {
-  Fire: { bg: 'bg-orange-500', text: 'text-white', icon: '🔥', hex: 0xFF6B6B },
-  Water: { bg: 'bg-blue-400', text: 'text-white', icon: '💧', hex: 0x4D96FF },
-  Grass: { bg: 'bg-green-500', text: 'text-white', icon: '🌿', hex: 0x6BCB77 },
-  Electric: { bg: 'bg-yellow-400', text: 'text-black', icon: '⚡', hex: 0xFFD93D },
-  Psychic: { bg: 'bg-purple-400', text: 'text-white', icon: '🔮', hex: 0xC77DFF },
-  Metal: { bg: 'bg-slate-400', text: 'text-black', icon: '⚙️', hex: 0x94A3B8 },
-  Dark: { bg: 'bg-violet-800', text: 'text-white', icon: '🌑', hex: 0x6D28D9 },
-  Light: { bg: 'bg-yellow-100', text: 'text-black', icon: '✨', hex: 0xFFF176 },
-  Spirit: { bg: 'bg-indigo-400', text: 'text-white', icon: '👻', hex: 0x818CF8 },
-  Toxic: { bg: 'bg-lime-500', text: 'text-black', icon: '☣️', hex: 0xBEF264 },
 };
 
 export const getRandomEnemy = (locationId: string, playerLevel: number, genVoxelFunc: any): any => {

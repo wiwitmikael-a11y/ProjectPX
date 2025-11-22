@@ -51,6 +51,7 @@ export const analyzeObject = async (imageBase64: string): Promise<any> => {
                                 "build": "Chunky" | "Slender" | "Round",
                                 "hasEars": boolean,
                                 "surfaceFinish": "Matte" | "Glossy" | "Metallic" | "Emissive",
+                                "materialType": "Standard" | "Magma" | "Jelly" | "Moss",
                                 "extractedColors": {
                                     "primary": "Hex Code",
                                     "secondary": "Hex Code",
@@ -84,7 +85,7 @@ export const analyzeObject = async (imageBase64: string): Promise<any> => {
             visualTraits: { 
                 hasHorns: false, hasWings: false, 
                 build: 'Round', accessory: 'None', hasEars: false, 
-                surfaceFinish: 'Matte', 
+                surfaceFinish: 'Matte', materialType: 'Standard',
                 extractedColors: { primary: '#CBD5E1', secondary: '#F1F5F9', accent: '#333333' } 
             }
         };
@@ -92,37 +93,20 @@ export const analyzeObject = async (imageBase64: string): Promise<any> => {
 };
 
 /**
- * Generates the AAA Voxel Engine HTML string using PBR and deterministic physics.
+ * Generates the AAA Voxel Engine HTML string using PBR, Advanced Materials (Magma/Jelly/Moss), and deterministic physics.
  */
-export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 'BIPED', stage: string = 'Noob', visualTraits?: VisualTraits): string => {
+export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 'BIPED', stage: string = 'Noob', visualTraits?: VisualTraits, name?: string): string => {
     
     const dna = visualTraits || { 
         hasHorns: false, hasWings: false, 
         build: 'Chunky', accessory: 'None', hasEars: false, 
-        surfaceFinish: 'Matte', 
+        surfaceFinish: 'Matte', materialType: 'Standard',
         extractedColors: { primary: '#CBD5E1', secondary: '#F1F5F9', accent: '#333333' } 
     };
 
     const pCol = dna.extractedColors?.primary ? parseInt(dna.extractedColors.primary.replace('#', '0x'), 16) : 0xCBD5E1;
     const sCol = dna.extractedColors?.secondary ? parseInt(dna.extractedColors.secondary.replace('#', '0x'), 16) : 0xFFFFFF;
     const aCol = dna.extractedColors?.accent ? parseInt(dna.extractedColors.accent.replace('#', '0x'), 16) : 0x333333;
-
-    let materialType = 'Standard'; // Default to PBR Standard
-    let roughness = 0.6;
-    let metalness = 0.1;
-    let clearcoat = 0.0;
-
-    if (dna.surfaceFinish === 'Glossy') {
-        materialType = 'Physical';
-        roughness = 0.2;
-        clearcoat = 1.0;
-    } else if (dna.surfaceFinish === 'Metallic') {
-        materialType = 'Standard';
-        roughness = 0.3;
-        metalness = 0.9;
-    } else if (dna.surfaceFinish === 'Emissive') {
-        materialType = 'Toon'; 
-    }
 
     const scale = stage === 'Legend' ? 2.4 : stage === 'Elite' ? 1.8 : stage === 'Pro' ? 1.4 : 1.0;
 
@@ -148,7 +132,7 @@ scene.background = new THREE.Color(0xD1FAE5);
 scene.fog = new THREE.FogExp2(0xD1FAE5, 0.02);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(5, 4, 12); // Default Angle
+camera.position.set(5, 4, 12); 
 
 const renderer = new THREE.WebGLRenderer({alpha: true, antialias: true, powerPreference: "high-performance"});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -160,59 +144,121 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 document.body.appendChild(renderer.domElement);
 
+renderer.render(scene, camera);
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enablePan = false;
 controls.enableDamping = true;
 controls.dampingFactor = 0.05; 
 controls.minDistance = 4;
 controls.maxDistance = 20;
-controls.maxPolarAngle = Math.PI / 2 - 0.1; // Prevent going under ground
+controls.maxPolarAngle = Math.PI / 2 - 0.1; 
 controls.target.set(0, 1.5, 0);
 controls.enableRotate = true;
 
 // --- LIGHTING ---
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6); 
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8); 
 scene.add(hemiLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(10, 20, 10);
 dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 2048;
-dirLight.shadow.mapSize.height = 2048;
-dirLight.shadow.bias = -0.0005;
+dirLight.shadow.mapSize.width = 1024; 
+dirLight.shadow.mapSize.height = 1024;
 scene.add(dirLight);
 
 const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
 rimLight.position.set(-5, 5, -10); 
 scene.add(rimLight);
 
-// --- MATERIALS ---
-const matType = '${materialType}';
-const roughness = ${roughness};
-const metalness = ${metalness};
-const clearcoat = ${clearcoat};
-
-function createMat(col) {
-    if (matType === 'Physical') {
-        return new THREE.MeshPhysicalMaterial({ color: col, roughness, metalness, clearcoat, clearcoatRoughness: 0.1 });
-    } else if (matType === 'Standard') {
-        return new THREE.MeshStandardMaterial({ color: col, roughness, metalness });
-    } else {
-        return new THREE.MeshToonMaterial({ color: col, shininess: 10 });
-    }
+// --- ADVANCED MATERIAL FACTORY ---
+function createStandardMat(col, r = 0.6, m = 0.1) {
+    return new THREE.MeshStandardMaterial({ color: col, roughness: r, metalness: m });
 }
 
-const primMat = createMat(${pCol});
-const secMat = createMat(${sCol});
-const accMat = createMat(${aCol});
-const darkMat = createMat(0x222222);
-const goldMat = new THREE.MeshPhysicalMaterial({ color: 0xFFD700, metalness: 1.0, roughness: 0.2 });
-const silverMat = new THREE.MeshPhysicalMaterial({ color: 0xC0C0C0, metalness: 0.9, roughness: 0.3 });
-const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x88CCFF, transparent: true, opacity: 0.6, roughness: 0, metalness: 0.5, transmission: 0.9 });
-const leafMat = new THREE.MeshStandardMaterial({ color: 0x6BCB77, roughness: 0.8 }); 
-const woodMat = new THREE.MeshStandardMaterial({ color: 0x8D6E63, roughness: 0.9 });
-const rockMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 });
-const crystalMat = new THREE.MeshPhysicalMaterial({ color: 0xff00ff, emissive: 0xff00ff, emissiveIntensity: 0.5, transmission: 0.5, thickness: 1.0 });
+// MAGMA PULSE SHADER
+function createLavaMat(colorHex) {
+    const mat = new THREE.MeshStandardMaterial({
+        color: 0x000000,
+        emissive: colorHex,
+        emissiveIntensity: 1.0,
+        roughness: 0.9
+    });
+    
+    mat.onBeforeCompile = (shader) => {
+        shader.uniforms.time = uniforms.time;
+        shader.fragmentShader = \`
+            uniform float time;
+        \` + shader.fragmentShader;
+        
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <emissivemap_fragment>',
+            \`
+            float pulse = sin(time * 3.0) * 0.5 + 0.5;
+            diffuseColor.rgb += emissive * (0.5 + pulse * 0.5);
+            \`
+        );
+    };
+    return mat;
+}
+
+// JELLY WOBBLE SHADER (Transmission)
+function createJellyMat(colorHex) {
+    // Note: Transmission requires careful rendering, simple transparency is safer for mobile
+    const mat = new THREE.MeshPhysicalMaterial({
+        color: colorHex,
+        transmission: 0.6, // Glass-like
+        opacity: 1.0,
+        metalness: 0,
+        roughness: 0.1,
+        ior: 1.5,
+        thickness: 1.0,
+        transparent: true
+    });
+    // Vertex wobble could be added here but might break skinning/rigging logic later
+    return mat;
+}
+
+// MOSS NOISE SHADER
+function createMossMat(baseColor) {
+    // Create procedural noise texture
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#' + new THREE.Color(baseColor).getHexString();
+    ctx.fillRect(0,0,64,64);
+    for(let i=0; i<200; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)';
+        ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter;
+    
+    return new THREE.MeshStandardMaterial({
+        map: tex,
+        roughness: 1.0,
+        color: 0xffffff
+    });
+}
+
+const uniforms = { time: { value: 0 } };
+
+const primMat = createStandardMat(${pCol});
+const secMat = createStandardMat(${sCol});
+const accMat = createStandardMat(${aCol}, 0.3, 0.8); 
+const darkMat = createStandardMat(0x222222);
+const goldMat = createStandardMat(0xFFD700, 0.3, 0.8);
+const silverMat = createStandardMat(0xC0C0C0, 0.3, 0.8);
+const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x88CCFF, transmission: 0.9, roughness: 0.0, transparent: true, thickness: 0.5 });
+const leafMat = createStandardMat(0x6BCB77, 0.8, 0.0);
+const woodMat = createStandardMat(0x8D6E63, 0.9, 0.0);
+const rockMat = createStandardMat(0x888888, 0.8, 0.0);
+const crystalMat = createLavaMat(0xff00ff);
+
+// Specific Starter Materials
+const magmaMat = createLavaMat(0xFF4500); // Hot Orange
+const jellyMat = createJellyMat(0x60A5FA); // Blue Jelly
+const mossMat = createMossMat(0x166534);   // Dark Green Moss
 
 const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
 const OUTLINE_THICKNESS = 1.025; 
@@ -261,17 +307,17 @@ function getTerrainHeight(x, z) {
 
 function createGroundTexture(hexColor) {
     const canvas = document.createElement('canvas');
-    canvas.width = 512; canvas.height = 512;
+    canvas.width = 256; canvas.height = 256; 
     const ctx = canvas.getContext('2d');
     const baseCol = new THREE.Color(hexColor);
     ctx.fillStyle = '#' + baseCol.getHexString();
-    ctx.fillRect(0,0,512,512);
-    for(let i=0; i<2000; i++) {
-        const shade = Math.random() > 0.5 ? 0.9 : 1.1; 
+    ctx.fillRect(0,0,256,256);
+    for(let i=0; i<500; i++) {
+        const shade = Math.random() > 0.5 ? 0.95 : 1.05; 
         const col = baseCol.clone().multiplyScalar(shade);
         ctx.fillStyle = '#' + col.getHexString();
-        const x = Math.floor(Math.random()*64)*8;
-        const y = Math.floor(Math.random()*64)*8;
+        const x = Math.floor(Math.random()*32)*8;
+        const y = Math.floor(Math.random()*32)*8;
         ctx.fillRect(x,y,8,8);
     }
     const tex = new THREE.CanvasTexture(canvas);
@@ -291,7 +337,7 @@ let currentThemeColor = 0x6BCB77;
 class TerrainChunk {
     constructor(zStart) {
         this.zStart = zStart;
-        const geo = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, 32, 32);
+        const geo = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, 16, 16); 
         const pos = geo.attributes.position;
         
         for (let i = 0; i < pos.count; i++) {
@@ -317,7 +363,7 @@ class TerrainChunk {
     }
     
     populateProps() {
-        const count = 12;
+        const count = 8; 
         for(let i=0; i<count; i++) {
             const x = (Math.random() - 0.5) * (CHUNK_SIZE - 4);
             const zRel = (Math.random() - 0.5) * (CHUNK_SIZE - 4);
@@ -344,113 +390,251 @@ charGroup.scale.setScalar(${scale});
 
 const bodyType = '${bodyType}';
 const dna = ${JSON.stringify(dna)};
+const charName = "${name || ''}";
 
-const bodyGeo = new RoundedBoxGeometry(1, 1, 1, 8, 0.15);
-const headGeo = new RoundedBoxGeometry(0.8, 0.8, 0.8, 8, 0.15);
-const limbGeo = new RoundedBoxGeometry(0.25, 0.6, 0.25, 4, 0.05);
-const jointGeo = new THREE.SphereGeometry(0.18, 16, 16);
+// Common Geometries
+const bodyGeo = new RoundedBoxGeometry(1, 1, 1, 4, 0.1);
+const headGeo = new RoundedBoxGeometry(0.8, 0.8, 0.8, 4, 0.1);
+const limbGeo = new RoundedBoxGeometry(0.25, 0.6, 0.25, 2, 0.05);
+const jointGeo = new THREE.SphereGeometry(0.18, 8, 8);
 
-const torso = createMesh(bodyGeo, primMat, charGroup, 0, 0, 0);
+const animatedParts = { legs: [], arms: [], body: null };
+let headGroup, torso, headSlot, backSlot, accSlot;
 
-if (dna.build === 'Chunky') torso.scale.set(1.3, 1.1, 1.3);
-if (dna.build === 'Slender') torso.scale.set(0.7, 1.1, 0.7);
-if (bodyType === 'QUADRUPED') torso.scale.set(1.0, 0.8, 1.4);
+// --- BESPOKE V2 STARTER BUILDERS (NINTENDO QUALITY) ---
 
-addArmorPlate(torso, 0, 0, 0.52, 0.6, 0.6, 0.1, secMat);
-addGreebles(torso);
+function buildIgnis() {
+    // VOLCA-REX: Magma Dinosaur
+    // Body: Upright T-Rex Stance
+    torso = createMesh(new RoundedBoxGeometry(0.9, 1.0, 1.2, 4, 0.1), createMossMat(0x292524), charGroup, 0, 0, 0); // Rock Skin
+    animatedParts.body = torso;
 
-const headY = bodyType === 'QUADRUPED' ? 0.6 : 0.8;
-const headZ = bodyType === 'QUADRUPED' ? 0.8 : 0;
-const headGroup = new THREE.Group(); 
-headGroup.position.set(0, headY, headZ);
-torso.add(headGroup);
-const head = createMesh(headGeo, secMat, headGroup, 0, 0, 0);
+    // Head: Snout
+    headGroup = new THREE.Group(); headGroup.position.set(0, 0.7, 0.6); torso.add(headGroup);
+    createMesh(new RoundedBoxGeometry(0.8, 0.7, 0.9, 4, 0.1), createMossMat(0x292524), headGroup, 0, 0, 0);
+    // Jaw
+    createMesh(new RoundedBoxGeometry(0.6, 0.2, 0.6, 2, 0.05), secMat, headGroup, 0, -0.3, 0.2);
+    
+    // Magma Vents (Pulsing)
+    const ventG = new THREE.ConeGeometry(0.2, 0.6, 5);
+    createMesh(ventG, magmaMat, torso, 0.2, 0.5, -0.3);
+    createMesh(ventG, magmaMat, torso, -0.2, 0.5, -0.3);
+    
+    // Glowing Veins/Plates
+    addArmorPlate(torso, 0, 0, 0.62, 0.5, 0.5, 0.05, magmaMat);
 
-addArmorPlate(head, 0, 0.1, 0.42, 0.7, 0.5, 0.05, primMat);
-const eyeGeo = new THREE.BoxGeometry(0.15, 0.2, 0.05);
-createMesh(eyeGeo, accMat, head, 0.2, 0.1, 0.42);
-createMesh(eyeGeo, accMat, head, -0.2, 0.1, 0.42);
+    // Tail
+    const tailG = new THREE.ConeGeometry(0.3, 1.0, 8);
+    const tail = createMesh(tailG, createMossMat(0x292524), torso, 0, -0.2, -0.8);
+    tail.rotation.x = -1.2;
 
-if (dna.hasEars) {
-    const earGeo = new THREE.ConeGeometry(0.15, 0.4, 16);
-    const earL = createMesh(earGeo, primMat, head, 0.3, 0.5, 0);
-    const earR = createMesh(earGeo, primMat, head, -0.3, 0.5, 0);
-    earL.rotation.z = -0.3; earR.rotation.z = 0.3;
+    // Biped Legs (Strong)
+    const legG = new RoundedBoxGeometry(0.35, 0.7, 0.4, 2, 0.05);
+    const l1g = createLimbGroup(torso, 0.4, -0.4, 0);
+    createMesh(legG, secMat, l1g, 0, -0.35, 0);
+    animatedParts.legs.push({ mesh: l1g, phase: 0 });
+
+    const l2g = createLimbGroup(torso, -0.4, -0.4, 0);
+    createMesh(legG, secMat, l2g, 0, -0.35, 0);
+    animatedParts.legs.push({ mesh: l2g, phase: Math.PI });
+
+    // T-Rex Arms (Small)
+    const armG = new RoundedBoxGeometry(0.15, 0.4, 0.15, 2, 0.02);
+    const a1g = createLimbGroup(torso, 0.45, 0.2, 0.4);
+    createMesh(armG, secMat, a1g, 0, -0.2, 0);
+    a1g.rotation.x = -0.5;
+    animatedParts.arms.push({ mesh: a1g, phase: Math.PI, side: 1 });
+
+    const a2g = createLimbGroup(torso, -0.45, 0.2, 0.4);
+    createMesh(armG, secMat, a2g, 0, -0.2, 0);
+    a2g.rotation.x = -0.5;
+    animatedParts.arms.push({ mesh: a2g, phase: 0, side: -1 });
+
+    headSlot = new THREE.Group(); headGroup.add(headSlot); headSlot.position.y = 0.5;
+    backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.z = -0.6;
+    accSlot = new THREE.Group(); torso.add(accSlot); accSlot.position.x = 0.6;
 }
 
-if (dna.hasHorns) {
-    if (dna.hornStyle === 'Antenna') createMesh(new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8), accMat, head, 0, 0.6, 0);
-    else {
-        const hornGeo = new THREE.ConeGeometry(0.1, 0.4, 16);
-        if (dna.hornStyle === 'Uni') createMesh(hornGeo, accMat, head, 0, 0.5, 0.2);
-        else { createMesh(hornGeo, accMat, head, 0.25, 0.5, 0); createMesh(hornGeo, accMat, head, -0.25, 0.5, 0); }
+function buildAqua() {
+    // GLUB-GLUB: Jelly Octopus in Mech Suit
+    // Glass Helmet
+    torso = createMesh(new THREE.SphereGeometry(0.8, 16, 16, 0, Math.PI*2, 0, Math.PI/2), glassMat, charGroup, 0, 0.6, 0);
+    animatedParts.body = torso;
+    
+    // Jelly Core (Wobbling)
+    const core = createMesh(new THREE.SphereGeometry(0.5, 16, 16), jellyMat, torso, 0, 0.2, 0);
+    // Face inside
+    const eyeG = new THREE.SphereGeometry(0.1);
+    createMesh(eyeG, darkMat, core, 0.2, 0.1, 0.4);
+    createMesh(eyeG, darkMat, core, -0.2, 0.1, 0.4);
+
+    // Mech Base (Ring)
+    const base = createMesh(new THREE.CylinderGeometry(0.8, 0.7, 0.2, 16), secMat, torso, 0, -0.1, 0);
+    addGreebles(base);
+
+    // Tentacles (Animated)
+    const tentG = new THREE.CylinderGeometry(0.08, 0.02, 0.8, 4);
+    for(let i=0; i<6; i++) {
+        const angle = (i/6) * Math.PI * 2;
+        const x = Math.cos(angle) * 0.5;
+        const z = Math.sin(angle) * 0.5;
+        const g = createLimbGroup(charGroup, x, 0.5, z);
+        createMesh(tentG, jellyMat, g, 0, -0.4, 0); // Jelly tentacles
+        animatedParts.legs.push({ mesh: g, phase: i }); 
+    }
+
+    headSlot = new THREE.Group(); charGroup.add(headSlot); headSlot.position.y = 1.2;
+    backSlot = new THREE.Group(); charGroup.add(backSlot); backSlot.position.z = -0.6;
+    accSlot = new THREE.Group(); charGroup.add(accSlot); accSlot.position.x = 0.7;
+}
+
+function buildTerra() {
+    // MOSS-KONG: Rock Gorilla
+    // Huge Torso
+    torso = createMesh(new RoundedBoxGeometry(1.4, 1.2, 1.0, 4, 0.1), mossMat, charGroup, 0, 0.2, 0);
+    animatedParts.body = torso;
+
+    // Head (Low set)
+    headGroup = new THREE.Group(); headGroup.position.set(0, 0.6, 0.4); torso.add(headGroup);
+    createMesh(new RoundedBoxGeometry(0.7, 0.7, 0.7, 4, 0.1), mossMat, headGroup, 0, 0, 0);
+    createMesh(new THREE.BoxGeometry(0.6, 0.2, 0.1), darkMat, headGroup, 0, 0, 0.36); // Visor/Brow
+
+    // Huge Arms (Knuckle walking)
+    const armG = new RoundedBoxGeometry(0.4, 1.2, 0.4, 2, 0.1);
+    const a1g = createLimbGroup(torso, 0.8, 0.4, 0);
+    createMesh(armG, woodMat, a1g, 0, -0.6, 0); // Wood arms
+    createMesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), woodMat, a1g, 0, -1.2, 0); // Fist
+    animatedParts.arms.push({ mesh: a1g, phase: Math.PI, side: 1 });
+
+    const a2g = createLimbGroup(torso, -0.8, 0.4, 0);
+    createMesh(armG, woodMat, a2g, 0, -0.6, 0);
+    createMesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), woodMat, a2g, 0, -1.2, 0);
+    animatedParts.arms.push({ mesh: a2g, phase: 0, side: -1 });
+
+    // Small Legs
+    const legG = new RoundedBoxGeometry(0.3, 0.5, 0.3, 2, 0.05);
+    const l1g = createLimbGroup(torso, 0.3, -0.5, 0);
+    createMesh(legG, mossMat, l1g, 0, -0.25, 0);
+    animatedParts.legs.push({ mesh: l1g, phase: 0 });
+
+    const l2g = createLimbGroup(torso, -0.3, -0.5, 0);
+    createMesh(legG, mossMat, l2g, 0, -0.25, 0);
+    animatedParts.legs.push({ mesh: l2g, phase: Math.PI });
+
+    // Plant growth
+    spawnBush(0,0)[0].position.set(0, 0.7, -0.4); // Plant on back
+    torso.add(spawnBush(0,0)[0]);
+
+    headSlot = new THREE.Group(); headGroup.add(headSlot); headSlot.position.y = 0.5;
+    backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.z = -0.6;
+    accSlot = new THREE.Group(); torso.add(accSlot); accSlot.position.x = 0.6;
+}
+
+function buildGeneric() {
+    torso = createMesh(bodyGeo, primMat, charGroup, 0, 0, 0);
+    animatedParts.body = torso;
+
+    if (dna.build === 'Chunky') torso.scale.set(1.3, 1.1, 1.3);
+    if (dna.build === 'Slender') torso.scale.set(0.7, 1.1, 0.7);
+    if (bodyType === 'QUADRUPED') torso.scale.set(1.0, 0.8, 1.4);
+
+    addArmorPlate(torso, 0, 0, 0.52, 0.6, 0.6, 0.1, secMat);
+    addGreebles(torso);
+
+    const headY = bodyType === 'QUADRUPED' ? 0.6 : 0.8;
+    const headZ = bodyType === 'QUADRUPED' ? 0.8 : 0;
+    headGroup = new THREE.Group(); 
+    headGroup.position.set(0, headY, headZ);
+    torso.add(headGroup);
+    const head = createMesh(headGeo, secMat, headGroup, 0, 0, 0);
+
+    addArmorPlate(head, 0, 0.1, 0.42, 0.7, 0.5, 0.05, primMat);
+    const eyeGeo = new THREE.BoxGeometry(0.15, 0.2, 0.05);
+    createMesh(eyeGeo, accMat, head, 0.2, 0.1, 0.42);
+    createMesh(eyeGeo, accMat, head, -0.2, 0.1, 0.42);
+
+    if (dna.hasEars) {
+        const earGeo = new THREE.ConeGeometry(0.15, 0.4, 16);
+        const earL = createMesh(earGeo, primMat, head, 0.3, 0.5, 0);
+        const earR = createMesh(earGeo, primMat, head, -0.3, 0.5, 0);
+        earL.rotation.z = -0.3; earR.rotation.z = 0.3;
+    }
+
+    if (dna.hasHorns) {
+        if (dna.hornStyle === 'Antenna') createMesh(new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8), accMat, head, 0, 0.6, 0);
+        else {
+            const hornGeo = new THREE.ConeGeometry(0.1, 0.4, 16);
+            if (dna.hornStyle === 'Uni') createMesh(hornGeo, accMat, head, 0, 0.5, 0.2);
+            else { createMesh(hornGeo, accMat, head, 0.25, 0.5, 0); createMesh(hornGeo, accMat, head, -0.25, 0.5, 0); }
+        }
+    }
+
+    if (dna.hasWings) {
+        const wingGeo = new RoundedBoxGeometry(0.8, 0.1, 0.4, 4, 0.02);
+        const wY = bodyType === 'QUADRUPED' ? 0.5 : 0.2;
+        const w1 = createMesh(wingGeo, accMat, torso, 0.6, wY, -0.2);
+        const w2 = createMesh(wingGeo, accMat, torso, -0.6, wY, -0.2);
+        w1.rotation.z = -0.3; w2.rotation.z = 0.3;
+    }
+
+    headSlot = new THREE.Group(); headSlot.position.set(0, 0.6, 0); head.add(headSlot);
+    backSlot = new THREE.Group(); backSlot.position.set(0, 0, -0.5); torso.add(backSlot);
+    accSlot = new THREE.Group(); accSlot.position.set(0.8, 0, 0); torso.add(accSlot);
+
+    const limbOffset = bodyType === 'QUADRUPED' ? 0.35 : 0.3; 
+
+    if (bodyType === 'QUADRUPED') {
+        const pos = [[limbOffset, -0.4, 0.5], [-limbOffset, -0.4, 0.5], [limbOffset, -0.4, -0.5], [-limbOffset, -0.4, -0.5]];
+        pos.forEach((p, i) => {
+            const group = createLimbGroup(torso, p[0], -0.1, p[2]);
+            createMesh(jointGeo, darkMat, group, 0, 0, 0);
+            const l = createMesh(limbGeo, secMat, group, 0, -0.3, 0);
+            createMesh(new THREE.BoxGeometry(0.26, 0.1, 0.26), darkMat, l, 0, -0.3, 0);
+            animatedParts.legs.push({ mesh: group, baseZ: p[2], phase: i%2===0 ? 0 : Math.PI });
+        });
+    } else if (bodyType === 'BIPED') {
+        // LEGS
+        const lGroup1 = createLimbGroup(torso, 0.2, -0.5, 0);
+        createMesh(jointGeo, darkMat, lGroup1, 0, 0, 0);
+        const l1 = createMesh(limbGeo, secMat, lGroup1, 0, -0.3, 0);
+        createMesh(new THREE.BoxGeometry(0.26, 0.15, 0.3), darkMat, l1, 0, -0.3, 0.05);
+        animatedParts.legs.push({ mesh: lGroup1, baseZ: 0, phase: 0 });
+
+        const lGroup2 = createLimbGroup(torso, -0.2, -0.5, 0);
+        createMesh(jointGeo, darkMat, lGroup2, 0, 0, 0);
+        const l2 = createMesh(limbGeo, secMat, lGroup2, 0, -0.3, 0);
+        createMesh(new THREE.BoxGeometry(0.26, 0.15, 0.3), darkMat, l2, 0, -0.3, 0.05);
+        animatedParts.legs.push({ mesh: lGroup2, baseZ: 0, phase: Math.PI });
+
+        // ARMS
+        const aGroup1 = createLimbGroup(torso, 0.6, 0.3, 0);
+        createMesh(jointGeo, darkMat, aGroup1, 0, 0, 0);
+        const aGroup2 = createLimbGroup(torso, -0.6, 0.3, 0);
+        createMesh(jointGeo, darkMat, aGroup2, 0, 0, 0);
+        
+        const armGeo = new RoundedBoxGeometry(0.15, 0.9, 0.15, 4, 0.05);
+        const a1 = createMesh(armGeo, primMat, aGroup1, 0, -0.45, 0);
+        const a2 = createMesh(armGeo, primMat, aGroup2, 0, -0.45, 0);
+        createMesh(new THREE.SphereGeometry(0.12), secMat, a1, 0, -0.45, 0);
+        createMesh(new THREE.SphereGeometry(0.12), secMat, a2, 0, -0.45, 0);
+
+        aGroup1.rotation.z = 0.2; 
+        aGroup2.rotation.z = -0.2;
+
+        animatedParts.arms.push({ mesh: aGroup1, phase: Math.PI, side: 1 });
+        animatedParts.arms.push({ mesh: aGroup2, phase: 0, side: -1 });
     }
 }
 
-if (dna.hasWings) {
-    const wingGeo = new RoundedBoxGeometry(0.8, 0.1, 0.4, 4, 0.02);
-    const wY = bodyType === 'QUADRUPED' ? 0.5 : 0.2;
-    const w1 = createMesh(wingGeo, accMat, torso, 0.6, wY, -0.2);
-    const w2 = createMesh(wingGeo, accMat, torso, -0.6, wY, -0.2);
-    w1.rotation.z = -0.3; w2.rotation.z = 0.3;
-}
-
-const headSlot = new THREE.Group(); headSlot.position.set(0, 0.6, 0); head.add(headSlot);
-const backSlot = new THREE.Group(); backSlot.position.set(0, 0, -0.5); torso.add(backSlot);
-const accSlot = new THREE.Group(); accSlot.position.set(0.8, 0, 0); torso.add(accSlot);
-
-function clearSlot(slot) { while(slot.children.length>0) slot.remove(slot.children[0]); }
-function buildCrown(p) { const b = createMesh(new THREE.CylinderGeometry(0.5,0.5,0.2,16), goldMat, p, 0,0,0); for(let i=0;i<5;i++) { const a=(i/5)*Math.PI*2; createMesh(new THREE.ConeGeometry(0.08,0.3,8), goldMat, b, Math.sin(a)*0.45,0.2,Math.cos(a)*0.45); } }
-function buildVisor(p) { createMesh(new RoundedBoxGeometry(0.7,0.2,0.3,4,0.05), glassMat, p, 0,-0.1,0.3); }
-function buildHelmetIron(p) { createMesh(new RoundedBoxGeometry(0.9,0.5,0.9,4,0.1), silverMat, p, 0,0.2,0); }
-function buildWingsAngel(p) { const g=new RoundedBoxGeometry(1.5,0.1,0.5,4,0.05); const m=new THREE.MeshPhysicalMaterial({color:0xffffff, transmission:0.5, thickness:0.5}); createMesh(g,m,p,0.8,0.5,0).rotation.z=-0.5; createMesh(g,m,p,-0.8,0.5,0).rotation.z=0.5; }
-function buildJetpack(p) { createMesh(new THREE.CylinderGeometry(0.15,0.15,0.6), silverMat, p, 0.2,0.2,0); createMesh(new THREE.CylinderGeometry(0.15,0.15,0.6), silverMat, p, -0.2,0.2,0); }
-
-const animatedParts = { legs: [], arms: [], body: torso };
-const limbOffset = bodyType === 'QUADRUPED' ? 0.35 : 0.3; 
-
-if (bodyType === 'QUADRUPED') {
-    const pos = [[limbOffset, -0.4, 0.5], [-limbOffset, -0.4, 0.5], [limbOffset, -0.4, -0.5], [-limbOffset, -0.4, -0.5]];
-    pos.forEach((p, i) => {
-        const group = createLimbGroup(torso, p[0], -0.1, p[2]);
-        createMesh(jointGeo, darkMat, group, 0, 0, 0);
-        const l = createMesh(limbGeo, secMat, group, 0, -0.3, 0);
-        createMesh(new THREE.BoxGeometry(0.26, 0.1, 0.26), darkMat, l, 0, -0.3, 0);
-        animatedParts.legs.push({ mesh: group, baseZ: p[2], phase: i%2===0 ? 0 : Math.PI });
-    });
-} else if (bodyType === 'BIPED') {
-    // LEGS
-    const lGroup1 = createLimbGroup(torso, 0.2, -0.5, 0);
-    createMesh(jointGeo, darkMat, lGroup1, 0, 0, 0);
-    const l1 = createMesh(limbGeo, secMat, lGroup1, 0, -0.3, 0);
-    createMesh(new THREE.BoxGeometry(0.26, 0.15, 0.3), darkMat, l1, 0, -0.3, 0.05);
-    animatedParts.legs.push({ mesh: lGroup1, baseZ: 0, phase: 0 });
-
-    const lGroup2 = createLimbGroup(torso, -0.2, -0.5, 0);
-    createMesh(jointGeo, darkMat, lGroup2, 0, 0, 0);
-    const l2 = createMesh(limbGeo, secMat, lGroup2, 0, -0.3, 0);
-    createMesh(new THREE.BoxGeometry(0.26, 0.15, 0.3), darkMat, l2, 0, -0.3, 0.05);
-    animatedParts.legs.push({ mesh: lGroup2, baseZ: 0, phase: Math.PI });
-
-    // ARMS - FIXED ROTATION OFFSET
-    const aGroup1 = createLimbGroup(torso, 0.6, 0.3, 0);
-    createMesh(jointGeo, darkMat, aGroup1, 0, 0, 0);
-    const aGroup2 = createLimbGroup(torso, -0.6, 0.3, 0);
-    createMesh(jointGeo, darkMat, aGroup2, 0, 0, 0);
-    
-    const armGeo = new RoundedBoxGeometry(0.15, 0.9, 0.15, 4, 0.05);
-    const a1 = createMesh(armGeo, primMat, aGroup1, 0, -0.45, 0);
-    const a2 = createMesh(armGeo, primMat, aGroup2, 0, -0.45, 0);
-    createMesh(new THREE.SphereGeometry(0.12), secMat, a1, 0, -0.45, 0);
-    createMesh(new THREE.SphereGeometry(0.12), secMat, a2, 0, -0.45, 0);
-
-    // Side 1 = Left (Positive X), Side -1 = Right (Negative X)
-    // Initialize arm rotations correctly for resting state
-    aGroup1.rotation.z = 0.2; 
-    aGroup2.rotation.z = -0.2;
-
-    animatedParts.arms.push({ mesh: aGroup1, phase: Math.PI, side: 1 });
-    animatedParts.arms.push({ mesh: aGroup2, phase: 0, side: -1 });
+// --- EXECUTE BUILD ---
+if (charName === 'VOLCA-REX') {
+    buildIgnis();
+} else if (charName === 'GLUB-GLUB') {
+    buildAqua();
+} else if (charName === 'MOSS-KONG') {
+    buildTerra();
+} else {
+    buildGeneric();
 }
 
 // --- PROPS ---
@@ -499,7 +683,6 @@ const heartGeo = new THREE.ShapeGeometry(heartShape);
 const heartMat = new THREE.MeshBasicMaterial({ color: 0xff69b4, side: THREE.DoubleSide });
 
 function spawnHearts() {
-    // Clean up existing hearts to prevent spam
     for(let i=hearts.length-1; i>=0; i--) scene.remove(hearts[i].mesh);
     hearts.length = 0;
 
@@ -537,17 +720,13 @@ function showEmote(emoji) {
     emoteSprite.visible = true;
 }
 
-// --- INTERACTION ---
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 window.addEventListener('message', (e) => {
     if (e.data.type === 'PET_CLICKED') {
-        // This message now comes from iframe click handler directly, 
-        // but we can also listen for external triggers
         triggerPoke();
     }
-    // ... other handlers
 });
 
 function triggerPoke() {
@@ -558,29 +737,19 @@ function triggerPoke() {
     isLookingAtCamera = true; 
     lookAtTimer = 0; 
     lookAtDuration = 3.0;
-    // Force transition logic to handle this gracefully
     currentAction = 'IDLE'; 
     transitionTimer = 0.2;
-    
-    // Notify parent to show speech bubble
     window.parent.postMessage({ type: 'PET_CLICKED_CONFIRM' }, '*');
 }
 
-// Handle click inside canvas
 window.addEventListener('pointerdown', (event) => {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
-    
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(charGroup.children, true);
-    
-    if (intersects.length > 0) {
-        triggerPoke();
-    }
+    if (intersects.length > 0) triggerPoke();
 });
 
-
-// --- MAIN LOOP ---
 renderer.render(scene, camera);
 
 const clock = new THREE.Clock();
@@ -592,7 +761,6 @@ let isPaused = false;
 let overrideTimer = 0;
 const targetCamPos = new THREE.Vector3();
 
-// Head Tracking Vars
 let lookAtTimer = 0;
 let lookAtDuration = 0;
 let isLookingAtCamera = false;
@@ -616,24 +784,19 @@ window.addEventListener('message', (e) => {
     }
     if (type === 'RESUME') { 
         isPaused = false; nextAction = 'WALK'; isBattle = false; overrideTimer = 0; emoteSprite.visible = false;
-        transitionTimer = 0.5; // Seamless transition
+        transitionTimer = 0.5; 
         currentAction = 'IDLE';
     }
-    if (type === 'INTERACT_POKE') {
-        triggerPoke();
-    }
+    if (type === 'INTERACT_POKE') { triggerPoke(); }
     if (type === 'HIDE_EMOTES') {
         for(let i=hearts.length-1; i>=0; i--) scene.remove(hearts[i].mesh);
         hearts.length = 0;
         emoteSprite.visible = false;
     }
     if (type === 'SET_ACTION') { 
-        // Only change if different AND not already queued AND not currently interacting
         if (currentAction !== value && nextAction !== value && overrideTimer <= 0) {
             nextAction = value;
-            // Don't force IDLE immediately, let transition happen
-            // currentAction = 'IDLE'; 
-            transitionTimer = 0.5; // Start blending/waiting
+            transitionTimer = 0.5; 
         }
         if (value === 'SLEEP' || value === 'SCAN') { overrideTimer = 8.0; isPaused = true; } 
         if (value === 'JUMP') { overrideTimer = 0.5; }
@@ -656,20 +819,23 @@ window.addEventListener('message', (e) => {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
-function snapToFloor() {
+function updateGrounding() {
     if (bodyType === 'FLOATING') {
-        charGroup.position.y = getTerrainHeight(charGroup.position.x, charGroup.position.z) + 2.0 + Math.sin(clock.elapsedTime)*0.2;
+        const terrainY = getTerrainHeight(charGroup.position.x, charGroup.position.z);
+        charGroup.position.y = terrainY + 2.0 + Math.sin(clock.elapsedTime)*0.2;
         return;
     }
     
     const terrainY = getTerrainHeight(charGroup.position.x, charGroup.position.z);
     
-    let legOffset = 0;
-    if (bodyType === 'QUADRUPED') legOffset = 0.7 * ${scale}; 
-    else if (bodyType === 'BIPED') legOffset = 1.3 * ${scale};
+    let legLength = 0;
+    if (bodyType === 'QUADRUPED') legLength = 0.75; 
+    else if (bodyType === 'BIPED') legLength = 1.3;
     
-    const targetY = terrainY + legOffset;
-    charGroup.position.y = lerp(charGroup.position.y, targetY, 0.2);
+    const targetY = terrainY + (legLength * ${scale});
+    
+    if (Math.abs(charGroup.position.y - targetY) > 1.0) charGroup.position.y = targetY;
+    else charGroup.position.y = lerp(charGroup.position.y, targetY, 0.3);
 }
 
 function updateChunks(playerZ) {
@@ -689,20 +855,20 @@ function animate() {
     const t = clock.getElapsedTime();
     const delta = clock.getDelta();
     
-    // Transition Logic
+    uniforms.time.value += delta; // Update Shader Time
+
     if (transitionTimer > 0) {
         transitionTimer -= delta;
-        // Blend phase
         if (transitionTimer <= 0 && nextAction) {
             currentAction = nextAction;
             nextAction = null;
         } else if (transitionTimer > 0) {
-            // During transition, lerp to IDLE stance
              charGroup.rotation.x = lerp(charGroup.rotation.x, 0, 0.1);
              if (bodyType !== 'FLOATING') {
                 animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
                 animatedParts.arms.forEach(a => { 
                     const side = a.side || 1;
+                    // Clamp arm rotation during reset to prevent clipping
                     a.mesh.rotation.x = lerp(a.mesh.rotation.x, 0, 0.1); 
                     a.mesh.rotation.z = lerp(a.mesh.rotation.z, 0.1 * side, 0.1); 
                 });
@@ -740,9 +906,8 @@ function animate() {
              torso.position.y = lerp(torso.position.y, 0, 0.1);
         }
 
-        snapToFloor();
+        updateGrounding();
 
-        // ONLY APPLY ANIMATIONS IF NOT TRANSITIONING
         if (transitionTimer <= 0) {
             if (currentAction === 'JUMP' || currentAction === 'HAPPY') {
                 torso.position.y = Math.abs(Math.sin(t * 10)) * 0.8;
@@ -759,17 +924,22 @@ function animate() {
                  const swingAmp = currentAction === 'RUN' ? 1.2 : 0.8;
                  
                  if (bodyType !== 'FLOATING') {
-                    animatedParts.legs.forEach(l => { l.mesh.rotation.x = Math.sin(t * limbSpeed + l.phase) * swingAmp; });
+                    animatedParts.legs.forEach(l => { 
+                        let rot = Math.sin(t * limbSpeed + l.phase) * swingAmp;
+                        // Clamp legs
+                        rot = Math.max(-1.0, Math.min(1.0, rot));
+                        l.mesh.rotation.x = rot; 
+                    });
                     animatedParts.arms.forEach(a => { 
-                        a.mesh.rotation.x = Math.sin(t * limbSpeed + a.phase) * swingAmp; 
-                        // CORRECT ARM ROTATION using side property
+                        let rot = Math.sin(t * limbSpeed + a.phase) * swingAmp;
+                        rot = Math.max(-1.0, Math.min(1.0, rot)); // Clamp arm swing
+                        a.mesh.rotation.x = rot; 
                         const side = a.side || 1; 
-                        a.mesh.rotation.z = (Math.abs(Math.sin(t * limbSpeed)) * 0.2 + 0.1) * side; // Swing OUT relative to body
-                        a.mesh.rotation.y = Math.sin(t * limbSpeed) * 0.2 * side; // Twist properly
+                        a.mesh.rotation.z = (Math.abs(Math.sin(t * limbSpeed)) * 0.2 + 0.1) * side; 
+                        a.mesh.rotation.y = Math.sin(t * limbSpeed) * 0.2 * side; 
                     });
                 } else charGroup.position.y += Math.sin(t * 5) * 0.05; 
             } else {
-                 // IDLE Stance
                  charGroup.rotation.x = 0;
                  if (bodyType !== 'FLOATING') {
                     animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
@@ -789,13 +959,12 @@ function animate() {
         lookAtTimer += delta;
         if (lookAtTimer > lookAtDuration) {
             lookAtTimer = 0;
-            // Chance to look at camera only if moving or idle, not doing specific action like sleep
             if (Math.random() > 0.7 && dot > 0 && currentAction !== 'SLEEP' && currentAction !== 'SCAN') {
                 isLookingAtCamera = true;
-                lookAtDuration = 2.0 + Math.random() * 1.0; // Brief look (2-3s)
+                lookAtDuration = 2.0 + Math.random() * 1.0; 
             } else {
                 isLookingAtCamera = false;
-                lookAtDuration = 5.0 + Math.random() * 5.0; // Long break (5-10s)
+                lookAtDuration = 5.0 + Math.random() * 5.0; 
             }
         }
 
@@ -809,8 +978,6 @@ function animate() {
             dummyObj.lookAt(target);
             headTargetRot.copy(dummyObj.quaternion);
         } else {
-            // Look around (celingak celinguk)
-            // Slow sine wave for Y rotation
             const lookAround = Math.sin(t * 0.5) * 0.3; 
             headTargetRot.setFromEuler(new THREE.Euler(Math.sin(t*0.5)*0.05, lookAround, 0));
         }
@@ -818,7 +985,7 @@ function animate() {
         headGroup.quaternion.slerp(headTargetRot, 0.1);
 
     } else {
-        snapToFloor(); 
+        updateGrounding(); 
         if (targetCamPos.x > 0) { 
             charGroup.rotation.y = Math.PI / 3;
             const zBase = charGroup.position.z;
@@ -839,7 +1006,7 @@ function animate() {
 
     for (let i = hearts.length - 1; i >= 0; i--) {
         const h = hearts[i];
-        h.life -= delta * 2.0; // Faster fade (0.5s)
+        h.life -= delta * 2.0; 
         h.mesh.position.y += h.velY * delta;
         h.mesh.material.opacity = h.life;
         h.mesh.rotation.z = Math.PI + Math.sin(t * 10 + i)*0.5; 
@@ -861,7 +1028,7 @@ window.addEventListener('resize', () => { camera.aspect = window.innerWidth/wind
 
 export const evolveVoxelScene = async (pet: any) => {
     const nextStage = getNextStage(pet.stage);
-    const code = getGenericVoxel(pet.element, pet.bodyType, nextStage, pet.visualTraits);
+    const code = getGenericVoxel(pet.element, pet.bodyType, nextStage, pet.visualTraits, pet.name);
     return {
         code,
         nextStage,
