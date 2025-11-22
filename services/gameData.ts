@@ -250,42 +250,42 @@ export interface OfflineReport {
 // --- ICONIC STARTERS V2 (AAA DESIGN) ---
 export const STARTER_PACKS = [
     {
-        id: 'starter_fire', name: 'VOLCA-REX', element: 'Fire',
-        description: 'A playful T-Rex made of magma and rock. Its back vents pulse with intense heat.',
-        stats: { hp: 100, atk: 25, def: 15, spd: 18 },
-        visual_design: 'T-Rex with volcano back and glowing veins.', bodyType: 'BIPED',
-        visualTraits: { 
-            hasHorns: false, hornStyle: 'None', 
-            hasWings: false, wingStyle: 'None', 
-            build: 'Chunky', accessory: 'None', hasEars: false, 
-            surfaceFinish: 'Emissive', materialType: 'Magma',
-            extractedColors: { primary: '#EF4444', secondary: '#292524', accent: '#FCD34D' } // Red, DkGrey, Gold
-        }
-    },
-    {
-        id: 'starter_water', name: 'GLUB-GLUB', element: 'Water',
-        description: 'A hyper-intelligent octopus protected by a Hydro-Mech suit.',
-        stats: { hp: 110, atk: 15, def: 18, spd: 15 },
-        visual_design: 'Octopus in glass helmet mech.', bodyType: 'FLOATING',
-        visualTraits: { 
-            hasHorns: false, hornStyle: 'None', 
-            hasWings: false, wingStyle: 'None', 
-            build: 'Round', accessory: 'Helmet', hasEars: false, 
-            surfaceFinish: 'Glossy', materialType: 'Jelly',
-            extractedColors: { primary: '#3B82F6', secondary: '#93C5FD', accent: '#F472B6' } // Blue, LtBlue, Pink
-        }
-    },
-    {
-        id: 'starter_grass', name: 'MOSS-KONG', element: 'Grass',
-        description: 'A gentle giant. Its wooden fists pack a punch, and moss grows on its stone skin.',
-        stats: { hp: 150, atk: 20, def: 25, spd: 10 },
-        visual_design: 'Gorilla made of stone and moss.', bodyType: 'BIPED',
+        id: 'starter_fire', name: 'PYRO-BIT', element: 'Fire',
+        description: 'A hybrid of a fox and a retro toaster. Its transparent amber body reveals a glowing heating element skeleton.',
+        stats: { hp: 100, atk: 25, def: 15, spd: 20 },
+        visual_design: 'Transparent fox with glowing internal ribs and sparkplug tail.', bodyType: 'QUADRUPED',
         visualTraits: { 
             hasHorns: false, hornStyle: 'None', 
             hasWings: false, wingStyle: 'None', 
             build: 'Chunky', accessory: 'None', hasEars: true, 
+            surfaceFinish: 'Glossy', materialType: 'Jelly',
+            extractedColors: { primary: '#F97316', secondary: '#FCD34D', accent: '#292524' } // Orange, Gold, DarkGrey
+        }
+    },
+    {
+        id: 'starter_water', name: 'FIZZ-BOT', element: 'Water',
+        description: 'A bubble-tea mech piloted by a tiny axolotl. It hovers on water jets and shoots pearls.',
+        stats: { hp: 110, atk: 15, def: 18, spd: 15 },
+        visual_design: 'Floating blue cup with pink thrusters and axolotl inside.', bodyType: 'FLOATING',
+        visualTraits: { 
+            hasHorns: false, hornStyle: 'None', 
+            hasWings: false, wingStyle: 'Mech', 
+            build: 'Round', accessory: 'Helmet', hasEars: false, 
+            surfaceFinish: 'Glossy', materialType: 'Jelly',
+            extractedColors: { primary: '#06B6D4', secondary: '#F472B6', accent: '#EC4899' } // Cyan, Pink, HotPink
+        }
+    },
+    {
+        id: 'starter_grass', name: 'MOSS-AMP', element: 'Grass',
+        description: 'A groovy frog carrying a massive mossy boombox on its back. Its vibes are heavy.',
+        stats: { hp: 150, atk: 20, def: 25, spd: 10 },
+        visual_design: 'Green frog with speaker box on back.', bodyType: 'QUADRUPED',
+        visualTraits: { 
+            hasHorns: false, hornStyle: 'None', 
+            hasWings: false, wingStyle: 'None', 
+            build: 'Chunky', accessory: 'Backpack', hasEars: false, 
             surfaceFinish: 'Matte', materialType: 'Moss',
-            extractedColors: { primary: '#166534', secondary: '#57534E', accent: '#A3E635' } // DkGreen, Stone, Lime
+            extractedColors: { primary: '#4ADE80', secondary: '#3F6212', accent: '#166534' } // Green, DarkMoss, DkGreen
         }
     }
 ];

@@ -130,13 +130,6 @@ export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { IcosahedronGeometry } from 'three/src/geometries/IcosahedronGeometry.js';
-import { CylinderGeometry } from 'three/src/geometries/CylinderGeometry.js';
-import { DodecahedronGeometry } from 'three/src/geometries/DodecahedronGeometry.js';
-import { ConeGeometry } from 'three/src/geometries/ConeGeometry.js';
-import { TorusGeometry } from 'three/src/geometries/TorusGeometry.js';
-import { TubeGeometry } from 'three/src/geometries/TubeGeometry.js';
-import { ExtrudeGeometry } from 'three/src/geometries/ExtrudeGeometry.js';
 
 // --- AAA SCENE SETUP ---
 const scene = new THREE.Scene();
@@ -429,126 +422,145 @@ let headGroup, torso, headSlot, backSlot, accSlot;
 
 // --- BESPOKE V2 SCULPTED STARTER BUILDERS ---
 
-function buildIgnis() {
-    // VOLCA-REX: Sculpted Magma Dino
-    torso = createMesh(new THREE.IcosahedronGeometry(0.7, 1), createMossMat(0x292524), charGroup, 0, 0, 0);
+function buildPyro() {
+    // PYRO-BIT: Transparent Toaster-Fox
+    // Body: Orange Glass Box
+    torso = createMesh(new RoundedBoxGeometry(1.0, 0.8, 1.6, 4, 0.1), jellyMat, charGroup, 0, 0.6, 0);
     animatedParts.body = torso;
 
-    // Head
-    headGroup = new THREE.Group(); headGroup.position.set(0, 0.6, 0.5); torso.add(headGroup);
-    createMesh(new THREE.IcosahedronGeometry(0.5, 1), createMossMat(0x292524), headGroup, 0, 0, 0);
-    const jaw = createMesh(new THREE.DodecahedronGeometry(0.35), secMat, headGroup, 0, -0.25, 0.3);
-    jaw.scale.set(1, 0.5, 1.5);
-    
-    // Magma Spines
-    const spineCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0, 0.6, 0.2),
-        new THREE.Vector3(0, 0.7, -0.3),
-        new THREE.Vector3(0, 0.4, -0.8)
-    ]);
-    const spineTube = new THREE.TubeGeometry(spineCurve, 8, 0.15, 4, false);
-    createMesh(spineTube, magmaMat, torso, 0, 0, 0);
+    // Internal Skeleton (Glowing Ribs)
+    for(let i=0; i<3; i++) {
+        const rib = createMesh(new THREE.TorusGeometry(0.35, 0.05, 8, 16), magmaMat, torso, 0, 0, -0.4 + i*0.4);
+        rib.rotation.y = Math.PI / 2;
+    }
 
-    // Tail
-    const tailRoot = createLimbGroup(torso, 0, -0.2, -0.6);
-    const t1 = createMesh(new THREE.ConeGeometry(0.3, 0.6, 6), createMossMat(0x292524), tailRoot, 0, -0.3, -0.2);
-    t1.rotation.x = -1.5;
-    const t2 = createMesh(new THREE.ConeGeometry(0.2, 0.5, 6), createMossMat(0x292524), tailRoot, 0, -0.3, -0.7);
-    t2.rotation.x = -1.8;
+    // Head: Console Screen
+    headGroup = new THREE.Group(); headGroup.position.set(0, 0.6, 0.9); torso.add(headGroup);
+    const headBox = createMesh(new RoundedBoxGeometry(0.9, 0.7, 0.6, 4, 0.05), createStandardMat(0xFCD34D), headGroup, 0, 0, 0); // Outer casing
+    const screen = createMesh(new THREE.BoxGeometry(0.8, 0.5, 0.05), darkMat, headGroup, 0, 0, 0.3); // Screen
+    // Pixel Eyes
+    createMesh(new THREE.PlaneGeometry(0.2, 0.2), magmaMat, screen, 0.2, 0.05, 0.03);
+    createMesh(new THREE.PlaneGeometry(0.2, 0.2), magmaMat, screen, -0.2, 0.05, 0.03);
+    // Big Ears
+    const earG = new THREE.ConeGeometry(0.3, 0.8, 4);
+    const e1 = createMesh(earG, jellyMat, headGroup, 0.4, 0.6, 0); e1.rotation.z = -0.4; e1.rotation.y = 0.2;
+    const e2 = createMesh(earG, jellyMat, headGroup, -0.4, 0.6, 0); e2.rotation.z = 0.4; e2.rotation.y = -0.2;
 
-    // Legs
-    const legG = new THREE.CylinderGeometry(0.2, 0.15, 0.7, 6);
-    const l1g = createLimbGroup(torso, 0.4, -0.3, 0);
-    createMesh(legG, secMat, l1g, 0, -0.35, 0);
-    animatedParts.legs.push({ mesh: l1g, phase: 0 });
+    // Tail: Braided Cord + Spark Plug
+    const tailCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(0,0,0), new THREE.Vector3(0, 0.5, -0.5), new THREE.Vector3(0, 0.8, -1.0)]);
+    const tailTube = new THREE.TubeGeometry(tailCurve, 8, 0.08, 6, false);
+    const tailRoot = createLimbGroup(torso, 0, 0.2, -0.8);
+    createMesh(tailTube, darkMat, tailRoot, 0, 0, 0);
+    // Spark Plug Tip
+    const plug = createMesh(new THREE.CylinderGeometry(0.1, 0.1, 0.4), createStandardMat(0xCCCCCC, 0.8, 0.8), tailRoot, 0, 0.9, -1.0);
+    plug.rotation.x = -0.5;
+    // Fire Particle Emitter placeholder (Orange Box)
+    createMesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), magmaMat, plug, 0, 0.25, 0);
 
-    const l2g = createLimbGroup(torso, -0.4, -0.3, 0);
-    createMesh(legG, secMat, l2g, 0, -0.35, 0);
-    animatedParts.legs.push({ mesh: l2g, phase: Math.PI });
-
-    // Arms
-    const armG = new THREE.CylinderGeometry(0.1, 0.08, 0.4, 6);
-    const a1g = createLimbGroup(torso, 0.4, 0.2, 0.3);
-    createMesh(armG, secMat, a1g, 0, -0.2, 0);
-    a1g.rotation.x = -0.5;
-    animatedParts.arms.push({ mesh: a1g, phase: Math.PI, side: 1 });
-
-    const a2g = createLimbGroup(torso, -0.4, 0.2, 0.3);
-    createMesh(armG, secMat, a2g, 0, -0.2, 0);
-    a2g.rotation.x = -0.5;
-    animatedParts.arms.push({ mesh: a2g, phase: 0, side: -1 });
+    // Legs (Transparent with boots)
+    const legG = new THREE.CylinderGeometry(0.15, 0.12, 0.6, 8);
+    const pos = [[0.35, -0.4, 0.5], [-0.35, -0.4, 0.5], [0.35, -0.4, -0.5], [-0.35, -0.4, -0.5]];
+    pos.forEach((p, i) => {
+        const group = createLimbGroup(torso, p[0], -0.1, p[2]);
+        const l = createMesh(legG, jellyMat, group, 0, -0.3, 0);
+        createMesh(new THREE.BoxGeometry(0.2, 0.15, 0.25), darkMat, l, 0, -0.3, 0.05); // Boot
+        animatedParts.legs.push({ mesh: group, baseZ: p[2], phase: i%2===0 ? 0 : Math.PI });
+    });
 
     headSlot = new THREE.Group(); headGroup.add(headSlot); headSlot.position.y = 0.5;
-    backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.z = -0.6;
+    backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.y = 0.5;
     accSlot = new THREE.Group(); torso.add(accSlot); accSlot.position.x = 0.6;
 }
 
-function buildAqua() {
-    // GLUB-GLUB: Geosphere Tank & Fluid Tentacles
-    torso = createMesh(new THREE.IcosahedronGeometry(0.7, 2), glassMat, charGroup, 0, 0.5, 0);
+function buildFizz() {
+    // FIZZ-BOT: Bubble Tea Mech
+    // Body: Transparent Blue Cup
+    torso = createMesh(new THREE.CylinderGeometry(0.7, 0.5, 1.4, 16), glassMat, charGroup, 0, 1.2, 0);
     animatedParts.body = torso;
     
-    const core = createMesh(new THREE.IcosahedronGeometry(0.4, 1), jellyMat, torso, 0, 0, 0);
-    createMesh(new THREE.TorusGeometry(0.1, 0.03, 8, 16), darkMat, core, 0.2, 0.1, 0.35);
-    createMesh(new THREE.TorusGeometry(0.1, 0.03, 8, 16), darkMat, core, -0.2, 0.1, 0.35);
+    // Liquid Surface inside
+    createMesh(new THREE.CylinderGeometry(0.6, 0.4, 1.0, 16), createJellyMat(0x3B82F6), torso, 0, -0.1, 0);
 
-    createMesh(new THREE.TorusGeometry(0.6, 0.15, 8, 24), secMat, torso, 0, -0.5, 0).rotation.x = Math.PI/2;
+    // Axolotl Core (Pilot)
+    const core = createMesh(new THREE.BoxGeometry(0.4, 0.3, 0.4), createStandardMat(0xF472B6), torso, 0, 0, 0);
+    // Axolotl Face
+    createMesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), darkMat, core, 0.1, 0, 0.2);
+    createMesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), darkMat, core, -0.1, 0, 0.2);
+    // Gills
+    createMesh(new THREE.BoxGeometry(0.1, 0.2, 0.05), createStandardMat(0xEC4899), core, 0.25, 0, 0);
+    createMesh(new THREE.BoxGeometry(0.1, 0.2, 0.05), createStandardMat(0xEC4899), core, -0.25, 0, 0);
 
-    const path = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0.1, -0.3, 0.1),
-        new THREE.Vector3(0.2, -0.6, 0)
-    ]);
-    const tentG = new THREE.TubeGeometry(path, 8, 0.06, 4, false);
+    // Bubbles
+    for(let i=0; i<5; i++) {
+        createMesh(new THREE.SphereGeometry(0.1), darkMat, torso, (Math.random()-0.5)*0.8, -0.4 + Math.random()*0.6, (Math.random()-0.5)*0.8);
+    }
 
-    for(let i=0; i<6; i++) {
-        const angle = (i/6) * Math.PI * 2;
-        const x = Math.cos(angle) * 0.4;
-        const z = Math.sin(angle) * 0.4;
-        const g = createLimbGroup(charGroup, x, 0.0, z);
-        const t = createMesh(tentG, jellyMat, g, 0, 0, 0); 
-        t.rotation.y = angle; 
+    // Base & Thruster Legs
+    const base = createMesh(new THREE.CylinderGeometry(0.5, 0.5, 0.2), createStandardMat(0xEC4899), torso, 0, -0.8, 0);
+    
+    for(let i=0; i<4; i++) {
+        const angle = (i/4) * Math.PI * 2 + (Math.PI/4);
+        const x = Math.cos(angle) * 0.6;
+        const z = Math.sin(angle) * 0.6;
+        const g = createLimbGroup(base, x, 0, z);
+        // Thruster
+        const t = createMesh(new THREE.CylinderGeometry(0.1, 0.15, 0.4), createStandardMat(0x06B6D4), g, 0, -0.3, 0);
+        // Flame
+        createMesh(new THREE.ConeGeometry(0.08, 0.3, 4), magmaMat, t, 0, -0.35, 0).rotation.x = Math.PI;
         animatedParts.legs.push({ mesh: g, phase: i }); 
     }
 
-    headSlot = new THREE.Group(); charGroup.add(headSlot); headSlot.position.y = 1.2;
-    backSlot = new THREE.Group(); charGroup.add(backSlot); backSlot.position.z = -0.6;
-    accSlot = new THREE.Group(); charGroup.add(accSlot); accSlot.position.x = 0.7;
+    // Straw Cannon
+    const straw = createMesh(new THREE.CylinderGeometry(0.1, 0.1, 1.0), createStandardMat(0xFFFFFF), torso, 0.4, 0.8, -0.2);
+    straw.rotation.z = -0.3;
+    straw.rotation.x = 0.2;
+
+    headSlot = new THREE.Group(); torso.add(headSlot); headSlot.position.y = 0.8;
+    backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.z = -0.6;
+    accSlot = new THREE.Group(); torso.add(accSlot); accSlot.position.x = 0.7;
 }
 
-function buildTerra() {
-    // MOSS-KONG: Dodecahedron Golem
-    torso = createMesh(new THREE.DodecahedronGeometry(0.9), mossMat, charGroup, 0, 0.4, 0);
-    torso.scale.set(1.2, 1.0, 0.8);
+function buildMoss() {
+    // MOSS-AMP: Boombox Frog
+    // Body: Chunky Green Frog
+    torso = createMesh(new RoundedBoxGeometry(1.4, 1.0, 1.6, 4, 0.2), createStandardMat(0x4ADE80), charGroup, 0, 0.5, 0);
     animatedParts.body = torso;
 
-    headGroup = new THREE.Group(); headGroup.position.set(0, 0.7, 0.4); torso.add(headGroup);
-    createMesh(new THREE.DodecahedronGeometry(0.5), mossMat, headGroup, 0, 0, 0);
-    createMesh(new THREE.BoxGeometry(0.5, 0.15, 0.1), darkMat, headGroup, 0, 0, 0.4); 
+    // Head (Integrated into body front)
+    headGroup = new THREE.Group(); headGroup.position.set(0, 0.6, 0.8); torso.add(headGroup);
+    // Eyes
+    createMesh(new THREE.SphereGeometry(0.25), createStandardMat(0x3F6212), headGroup, 0.4, 0.2, 0);
+    createMesh(new THREE.SphereGeometry(0.25), createStandardMat(0x3F6212), headGroup, -0.4, 0.2, 0);
+    
+    // BOOMBOX Back
+    const box = createMesh(new THREE.BoxGeometry(1.6, 1.2, 0.6), createStandardMat(0x57534E), torso, 0, 0.4, -0.4);
+    // Speakers
+    const speakerRing = new THREE.TorusGeometry(0.3, 0.05, 8, 16);
+    const s1 = createMesh(speakerRing, darkMat, box, 0.4, 0, 0.31);
+    createMesh(new THREE.CircleGeometry(0.25), magmaMat, s1, 0, 0, 0); // Pulse center
+    
+    const s2 = createMesh(speakerRing, darkMat, box, -0.4, 0, 0.31);
+    createMesh(new THREE.CircleGeometry(0.25), magmaMat, s2, 0, 0, 0);
 
-    const armG = new THREE.CylinderGeometry(0.25, 0.2, 1.0, 8);
-    const a1g = createLimbGroup(torso, 0.8, 0.3, 0);
-    createMesh(armG, woodMat, a1g, 0, -0.5, 0);
-    createMesh(new THREE.DodecahedronGeometry(0.3), woodMat, a1g, 0, -1.1, 0);
-    animatedParts.arms.push({ mesh: a1g, phase: Math.PI, side: 1 });
+    // Handle
+    const handle = createMesh(new THREE.TorusGeometry(0.6, 0.05, 8, 16, Math.PI), darkMat, box, 0, 0.6, 0);
+    
+    // Vines
+    const vineCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.7, 0.6, 0), new THREE.Vector3(-0.8, 0, 0.4), new THREE.Vector3(-0.6, -0.5, 0.6)]);
+    createMesh(new THREE.TubeGeometry(vineCurve, 8, 0.05, 4, false), mossMat, box, 0, 0, 0);
 
-    const a2g = createLimbGroup(torso, -0.8, 0.3, 0);
-    createMesh(armG, woodMat, a2g, 0, -0.5, 0);
-    createMesh(new THREE.DodecahedronGeometry(0.3), woodMat, a2g, 0, -1.1, 0);
-    animatedParts.arms.push({ mesh: a2g, phase: 0, side: -1 });
-
-    const legG = new THREE.CylinderGeometry(0.2, 0.25, 0.6, 8);
-    const l1g = createLimbGroup(torso, 0.3, -0.6, 0);
-    createMesh(legG, mossMat, l1g, 0, -0.3, 0);
-    animatedParts.legs.push({ mesh: l1g, phase: 0 });
-
-    const l2g = createLimbGroup(torso, -0.3, -0.6, 0);
-    createMesh(legG, mossMat, l2g, 0, -0.3, 0);
-    animatedParts.legs.push({ mesh: l2g, phase: Math.PI });
+    // Legs: Tree Stumps
+    const legG = new THREE.CylinderGeometry(0.25, 0.3, 0.6, 8);
+    const pos = [[0.6, -0.4, 0.6], [-0.6, -0.4, 0.6], [0.6, -0.4, -0.6], [-0.6, -0.4, -0.6]];
+    pos.forEach((p, i) => {
+        const group = createLimbGroup(torso, p[0], -0.2, p[2]);
+        createMesh(legG, woodMat, group, 0, -0.3, 0);
+        animatedParts.legs.push({ mesh: group, baseZ: p[2], phase: i%2===0 ? 0 : Math.PI });
+    });
 
     headSlot = new THREE.Group(); headGroup.add(headSlot); headSlot.position.y = 0.5;
-    backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.z = -0.6;
-    accSlot = new THREE.Group(); torso.add(accSlot); accSlot.position.x = 0.6;
+    backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.z = -0.8;
+    accSlot = new THREE.Group(); torso.add(accSlot); accSlot.position.x = 0.8;
 }
 
 function buildGeneric() {
@@ -659,12 +671,12 @@ function buildGeneric() {
 }
 
 // --- EXECUTE BUILD ---
-if (charName === 'VOLCA-REX') {
-    buildIgnis();
-} else if (charName === 'GLUB-GLUB') {
-    buildAqua();
-} else if (charName === 'MOSS-KONG') {
-    buildTerra();
+if (charName === 'PYRO-BIT') {
+    buildPyro();
+} else if (charName === 'FIZZ-BOT') {
+    buildFizz();
+} else if (charName === 'MOSS-AMP') {
+    buildMoss();
 } else {
     buildGeneric();
 }
