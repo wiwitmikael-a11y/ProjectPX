@@ -427,6 +427,19 @@ export default function App() {
       setGameState('ONBOARDING');
   };
 
+  // --- MAP AUTO-FOCUS ---
+  useEffect(() => {
+      if (exploreOpen && user.currentLocation) {
+          // Small delay to allow DOM to render
+          setTimeout(() => {
+              const el = document.getElementById(user.currentLocation);
+              if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+              }
+          }, 100);
+      }
+  }, [exploreOpen, user.currentLocation]);
+
   // --- GAME LOOP ---
   useEffect(() => {
       if (gameState !== 'NEXUS' || activeBattle || activeEvent || isAnalyzing || preEventEmote) return;

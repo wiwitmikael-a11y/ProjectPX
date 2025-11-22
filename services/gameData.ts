@@ -307,10 +307,105 @@ export const determineEvolutionPath = (stats: {atk: number, def: number, spd: nu
     return { dominant, alignment, protocolName, color, borderColor, icon, desc };
 };
 
+/**
+ * GENERATES "GEMINI 2.5 HIGH-FIDELITY" SVG ART
+ * This function simulates the output of a generative AI model like Imagen or Gemini 2.5 Flash Image
+ * by creating complex, layered vector graphics with noise gradients, patterns, and holographic effects.
+ * 
+ * Note: In a production app with backend, this would call `imagen-3.0-generate-001` or `gemini-2.5-flash-image`
+ * via the API using a prompt based on the pet's visual design.
+ */
 export const getProceduralMonsterArt = (name: string, element: string): string => {
-    const colors: any = { Fire: '#FF6B6B', Water: '#4D96FF', Grass: '#6BCB77', Electric: '#FFD93D', Psychic: '#C77dFF', Metal: '#94A3B8', Dark: '#6D28D9', Light: '#FDE047' };
-    const hex = colors[element] || '#CBD5E1';
-    return `data:image/svg+xml;base64,${btoa(`<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="${hex}"/><text x="50" y="50" text-anchor="middle">${element[0]}</text></svg>`)}`;
+    const colors: any = { 
+        Fire: { a: '#EF4444', b: '#7F1D1D', light: '#FCA5A5' }, 
+        Water: { a: '#3B82F6', b: '#1E3A8A', light: '#93C5FD' }, 
+        Grass: { a: '#10B981', b: '#064E3B', light: '#6EE7B7' }, 
+        Electric: { a: '#F59E0B', b: '#78350F', light: '#FDE047' }, 
+        Psychic: { a: '#8B5CF6', b: '#4C1D95', light: '#C4B5FD' }, 
+        Metal: { a: '#94A3B8', b: '#475569', light: '#CBD5E1' }, 
+        Dark: { a: '#374151', b: '#111827', light: '#9CA3AF' }, 
+        Light: { a: '#FCD34D', b: '#B45309', light: '#FEF08A' }, 
+        Toxic: { a: '#84CC16', b: '#365314', light: '#BEF264' }
+    };
+    const c = colors[element] || { a: '#CBD5E1', b: '#64748B', light: '#F1F5F9' };
+    const initial = name.charAt(0).toUpperCase();
+
+    // Complex SVG imitating "Gemini 2.5" Generative Vector Art
+    const svg = `
+    <svg width="300" height="450" viewBox="0 0 300 450" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <!-- Dynamic Gradient Background -->
+            <radialGradient id="gradMain" cx="50%" cy="50%" r="70%" fx="50%" fy="30%">
+                <stop offset="0%" style="stop-color:${c.light};stop-opacity:1" />
+                <stop offset="50%" style="stop-color:${c.a};stop-opacity:1" />
+                <stop offset="100%" style="stop-color:${c.b};stop-opacity:1" />
+            </radialGradient>
+            
+            <!-- Noise Filter for Texture -->
+            <filter id="noiseTexture" x="0" y="0" width="100%" height="100%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch" result="noise"/>
+                <feColorMatrix type="saturate" values="0" in="noise" result="desaturatedNoise"/>
+                <feComponentTransfer in="desaturatedNoise" result="fadedNoise">
+                    <feFuncA type="linear" slope="0.3"/> 
+                </feComponentTransfer>
+                <feComposite operator="in" in="fadedNoise" in2="SourceGraphic" result="texturedGraphic"/>
+                <feBlend mode="overlay" in="texturedGraphic" in2="SourceGraphic"/>
+            </filter>
+
+            <!-- Holographic Glow -->
+            <filter id="holographicGlow">
+                <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+            </filter>
+
+            <!-- Tech Pattern -->
+            <pattern id="techPattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                <rect x="0" y="0" width="40" height="40" fill="none"/>
+                <path d="M10 10h20v20h-20z" fill="none" stroke="${c.light}" stroke-opacity="0.1" stroke-width="2"/>
+                <circle cx="20" cy="20" r="2" fill="${c.light}" fill-opacity="0.2"/>
+                <path d="M0 0l10 10M40 0l-10 10M0 40l10-10M40 40l-10-10" stroke="${c.light}" stroke-opacity="0.1" stroke-width="1"/>
+            </pattern>
+        </defs>
+        
+        <!-- Card Body -->
+        <rect x="0" y="0" width="300" height="450" fill="url(#gradMain)" />
+        
+        <!-- Texture Overlay -->
+        <rect x="0" y="0" width="300" height="450" filter="url(#noiseTexture)" opacity="0.6" />
+        
+        <!-- Tech Pattern Overlay -->
+        <rect x="0" y="0" width="300" height="450" fill="url(#techPattern)" />
+        
+        <!-- Center Art (Abstract Representation) -->
+        <g transform="translate(150, 200)">
+            <circle cx="0" cy="0" r="90" fill="none" stroke="white" stroke-width="4" stroke-opacity="0.5" />
+            <circle cx="0" cy="0" r="80" fill="${c.b}" fill-opacity="0.8" />
+            <circle cx="0" cy="0" r="70" fill="none" stroke="${c.light}" stroke-width="2" stroke-dasharray="10,5" />
+            
+            <!-- Elemental Glyph -->
+            <text x="0" y="35" font-family="monospace" font-size="120" font-weight="900" fill="white" text-anchor="middle" filter="url(#holographicGlow)" opacity="0.9">${initial}</text>
+        </g>
+        
+        <!-- Holographic Sheen Lines -->
+        <path d="M0 0 L300 450 L300 0 Z" fill="url(#gradMain)" opacity="0.1" style="mix-blend-mode: screen;" />
+        <line x1="0" y1="450" x2="300" y2="0" stroke="white" stroke-width="2" opacity="0.2" />
+        
+        <!-- Card Frame -->
+        <rect x="10" y="10" width="280" height="430" rx="20" fill="none" stroke="white" stroke-width="8" stroke-opacity="0.8" />
+        <rect x="18" y="18" width="264" height="414" rx="15" fill="none" stroke="${c.b}" stroke-width="2" />
+
+        <!-- Element Badge Bottom -->
+        <g transform="translate(150, 380)">
+            <rect x="-60" y="-15" width="120" height="30" rx="15" fill="black" fill-opacity="0.6" stroke="white" stroke-width="2" />
+            <text x="0" y="5" font-family="sans-serif" font-size="14" font-weight="bold" fill="${c.light}" text-anchor="middle" letter-spacing="2" style="text-transform: uppercase;">${element}</text>
+        </g>
+
+    </svg>`;
+
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
 };
 
 export const getRandomEnemy = (locationId: string, playerLevel: number, genVoxelFunc: any): any => {

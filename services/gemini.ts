@@ -10,13 +10,14 @@ import { VisualTraits, MonsterStage } from "./gameData";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
- * Analyzes an image using the most advanced Gemini model (1.5 Pro) 
+ * Analyzes an image using the most advanced Gemini model (gemini-3-pro-preview)
  * to extract deep "Visual DNA" for AAA character generation.
  */
 export const analyzeObject = async (imageBase64: string): Promise<any> => {
     try {
+        // Use the requested high-tier model string
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-pro',
+            model: 'gemini-3-pro-preview',
             contents: {
                 parts: [
                     { inlineData: { mimeType: 'image/jpeg', data: imageBase64.split(',')[1] } },
@@ -28,6 +29,7 @@ export const analyzeObject = async (imageBase64: string): Promise<any> => {
                         1. Material properties (Is it shiny plastic? Matte fur? Glowing metal?).
                         2. Structural details (Does it have distinct limbs, floating parts, armor plates?).
                         3. Dominant colors (Extract exact hex codes).
+                        4. PRIMARY SHAPE: Is the main body mostly Round (Sphere), Slender (Cylinder/Tall), or Chunky (Box/Cube)?
                         
                         STRICTLY RETURN JSON ONLY. No markdown blocks.
                         
@@ -52,6 +54,9 @@ export const analyzeObject = async (imageBase64: string): Promise<any> => {
                                 "hasEars": boolean,
                                 "surfaceFinish": "Matte" | "Glossy" | "Metallic" | "Emissive",
                                 "materialType": "Standard" | "Magma" | "Jelly" | "Moss",
+                                "tailStyle": "Segmented" | "Smooth" | "None",
+                                "legJointStyle": "Digitigrade" | "Plantigrade",
+                                "spineCurve": "Straight" | "Hunched",
                                 "extractedColors": {
                                     "primary": "Hex Code",
                                     "secondary": "Hex Code",
@@ -125,6 +130,13 @@ export const getGenericVoxel = (element: string = 'Neutral', bodyType: string = 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { IcosahedronGeometry } from 'three/src/geometries/IcosahedronGeometry.js';
+import { CylinderGeometry } from 'three/src/geometries/CylinderGeometry.js';
+import { DodecahedronGeometry } from 'three/src/geometries/DodecahedronGeometry.js';
+import { ConeGeometry } from 'three/src/geometries/ConeGeometry.js';
+import { TorusGeometry } from 'three/src/geometries/TorusGeometry.js';
+import { TubeGeometry } from 'three/src/geometries/TubeGeometry.js';
+import { ExtrudeGeometry } from 'three/src/geometries/ExtrudeGeometry.js';
 
 // --- AAA SCENE SETUP ---
 const scene = new THREE.Scene();
@@ -172,15 +184,25 @@ rimLight.position.set(-5, 5, -10);
 scene.add(rimLight);
 
 // --- ADVANCED MATERIAL FACTORY ---
-function createStandardMat(col, r = 0.6, m = 0.1) {
-    return new THREE.MeshStandardMaterial({ color: col, roughness: r, metalness: m });
+function boostColor(hex) {
+    const c = new THREE.Color(hex);
+    const hsl = {};
+    c.getHSL(hsl);
+    hsl.s = Math.max(0.8, hsl.s); // Force High Saturation for Pop Look
+    hsl.l = Math.max(0.4, Math.min(0.8, hsl.l)); // Avoid too dark/bright
+    c.setHSL(hsl.h, hsl.s, hsl.l);
+    return c.getHex();
+}
+
+function createStandardMat(col, r = 0.4, m = 0.1) {
+    return new THREE.MeshStandardMaterial({ color: boostColor(col), roughness: r, metalness: m });
 }
 
 // MAGMA PULSE SHADER
 function createLavaMat(colorHex) {
     const mat = new THREE.MeshStandardMaterial({
         color: 0x000000,
-        emissive: colorHex,
+        emissive: boostColor(colorHex),
         emissiveIntensity: 1.0,
         roughness: 0.9
     });
@@ -202,12 +224,11 @@ function createLavaMat(colorHex) {
     return mat;
 }
 
-// JELLY WOBBLE SHADER (Transmission)
+// JELLY WOBBLE SHADER
 function createJellyMat(colorHex) {
-    // Note: Transmission requires careful rendering, simple transparency is safer for mobile
     const mat = new THREE.MeshPhysicalMaterial({
-        color: colorHex,
-        transmission: 0.6, // Glass-like
+        color: boostColor(colorHex),
+        transmission: 0.6, 
         opacity: 1.0,
         metalness: 0,
         roughness: 0.1,
@@ -215,17 +236,15 @@ function createJellyMat(colorHex) {
         thickness: 1.0,
         transparent: true
     });
-    // Vertex wobble could be added here but might break skinning/rigging logic later
     return mat;
 }
 
 // MOSS NOISE SHADER
 function createMossMat(baseColor) {
-    // Create procedural noise texture
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#' + new THREE.Color(baseColor).getHexString();
+    ctx.fillStyle = '#' + new THREE.Color(boostColor(baseColor)).getHexString();
     ctx.fillRect(0,0,64,64);
     for(let i=0; i<200; i++) {
         ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)';
@@ -233,12 +252,7 @@ function createMossMat(baseColor) {
     }
     const tex = new THREE.CanvasTexture(canvas);
     tex.magFilter = THREE.NearestFilter;
-    
-    return new THREE.MeshStandardMaterial({
-        map: tex,
-        roughness: 1.0,
-        color: 0xffffff
-    });
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 1.0, color: 0xffffff });
 }
 
 const uniforms = { time: { value: 0 } };
@@ -248,17 +262,16 @@ const secMat = createStandardMat(${sCol});
 const accMat = createStandardMat(${aCol}, 0.3, 0.8); 
 const darkMat = createStandardMat(0x222222);
 const goldMat = createStandardMat(0xFFD700, 0.3, 0.8);
-const silverMat = createStandardMat(0xC0C0C0, 0.3, 0.8);
-const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x88CCFF, transmission: 0.9, roughness: 0.0, transparent: true, thickness: 0.5 });
-const leafMat = createStandardMat(0x6BCB77, 0.8, 0.0);
 const woodMat = createStandardMat(0x8D6E63, 0.9, 0.0);
 const rockMat = createStandardMat(0x888888, 0.8, 0.0);
 const crystalMat = createLavaMat(0xff00ff);
+const leafMat = createStandardMat(0x6BCB77, 0.8, 0.0);
+const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x88CCFF, transmission: 0.9, roughness: 0.0, transparent: true, thickness: 0.5 });
 
 // Specific Starter Materials
-const magmaMat = createLavaMat(0xFF4500); // Hot Orange
-const jellyMat = createJellyMat(0x60A5FA); // Blue Jelly
-const mossMat = createMossMat(0x166534);   // Dark Green Moss
+const magmaMat = createLavaMat(0xFF4500); 
+const jellyMat = createJellyMat(0x60A5FA);
+const mossMat = createMossMat(0x166534);   
 
 const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
 const OUTLINE_THICKNESS = 1.025; 
@@ -309,7 +322,7 @@ function createGroundTexture(hexColor) {
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 256; 
     const ctx = canvas.getContext('2d');
-    const baseCol = new THREE.Color(hexColor);
+    const baseCol = new THREE.Color(boostColor(hexColor));
     ctx.fillStyle = '#' + baseCol.getHexString();
     ctx.fillRect(0,0,256,256);
     for(let i=0; i<500; i++) {
@@ -393,59 +406,74 @@ const dna = ${JSON.stringify(dna)};
 const charName = "${name || ''}";
 
 // Common Geometries
-const bodyGeo = new RoundedBoxGeometry(1, 1, 1, 4, 0.1);
-const headGeo = new RoundedBoxGeometry(0.8, 0.8, 0.8, 4, 0.1);
+let bodyGeo, headGeo;
+
+// QUANTUM LEAP: Use complex shapes based on build
+if (dna.build === 'Round') {
+    bodyGeo = new THREE.IcosahedronGeometry(0.6, 1);
+    headGeo = new THREE.IcosahedronGeometry(0.5, 1);
+} else if (dna.build === 'Slender') {
+    bodyGeo = new THREE.CylinderGeometry(0.25, 0.35, 1.0, 8); // Tapered cylinder
+    headGeo = new THREE.SphereGeometry(0.4, 12, 12);
+} else {
+    // Chunky / Default - Use Dodecahedron for a rocky/muscular look if Stage is high, else Box
+    bodyGeo = new RoundedBoxGeometry(1, 1, 1, 4, 0.1);
+    headGeo = new RoundedBoxGeometry(0.8, 0.8, 0.8, 4, 0.1);
+}
+
 const limbGeo = new RoundedBoxGeometry(0.25, 0.6, 0.25, 2, 0.05);
 const jointGeo = new THREE.SphereGeometry(0.18, 8, 8);
 
 const animatedParts = { legs: [], arms: [], body: null };
 let headGroup, torso, headSlot, backSlot, accSlot;
 
-// --- BESPOKE V2 STARTER BUILDERS (NINTENDO QUALITY) ---
+// --- BESPOKE V2 SCULPTED STARTER BUILDERS ---
 
 function buildIgnis() {
-    // VOLCA-REX: Magma Dinosaur
-    // Body: Upright T-Rex Stance
-    torso = createMesh(new RoundedBoxGeometry(0.9, 1.0, 1.2, 4, 0.1), createMossMat(0x292524), charGroup, 0, 0, 0); // Rock Skin
+    // VOLCA-REX: Sculpted Magma Dino
+    torso = createMesh(new THREE.IcosahedronGeometry(0.7, 1), createMossMat(0x292524), charGroup, 0, 0, 0);
     animatedParts.body = torso;
 
-    // Head: Snout
-    headGroup = new THREE.Group(); headGroup.position.set(0, 0.7, 0.6); torso.add(headGroup);
-    createMesh(new RoundedBoxGeometry(0.8, 0.7, 0.9, 4, 0.1), createMossMat(0x292524), headGroup, 0, 0, 0);
-    // Jaw
-    createMesh(new RoundedBoxGeometry(0.6, 0.2, 0.6, 2, 0.05), secMat, headGroup, 0, -0.3, 0.2);
+    // Head
+    headGroup = new THREE.Group(); headGroup.position.set(0, 0.6, 0.5); torso.add(headGroup);
+    createMesh(new THREE.IcosahedronGeometry(0.5, 1), createMossMat(0x292524), headGroup, 0, 0, 0);
+    const jaw = createMesh(new THREE.DodecahedronGeometry(0.35), secMat, headGroup, 0, -0.25, 0.3);
+    jaw.scale.set(1, 0.5, 1.5);
     
-    // Magma Vents (Pulsing)
-    const ventG = new THREE.ConeGeometry(0.2, 0.6, 5);
-    createMesh(ventG, magmaMat, torso, 0.2, 0.5, -0.3);
-    createMesh(ventG, magmaMat, torso, -0.2, 0.5, -0.3);
-    
-    // Glowing Veins/Plates
-    addArmorPlate(torso, 0, 0, 0.62, 0.5, 0.5, 0.05, magmaMat);
+    // Magma Spines
+    const spineCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0.6, 0.2),
+        new THREE.Vector3(0, 0.7, -0.3),
+        new THREE.Vector3(0, 0.4, -0.8)
+    ]);
+    const spineTube = new THREE.TubeGeometry(spineCurve, 8, 0.15, 4, false);
+    createMesh(spineTube, magmaMat, torso, 0, 0, 0);
 
     // Tail
-    const tailG = new THREE.ConeGeometry(0.3, 1.0, 8);
-    const tail = createMesh(tailG, createMossMat(0x292524), torso, 0, -0.2, -0.8);
-    tail.rotation.x = -1.2;
+    const tailRoot = createLimbGroup(torso, 0, -0.2, -0.6);
+    const t1 = createMesh(new THREE.ConeGeometry(0.3, 0.6, 6), createMossMat(0x292524), tailRoot, 0, -0.3, -0.2);
+    t1.rotation.x = -1.5;
+    const t2 = createMesh(new THREE.ConeGeometry(0.2, 0.5, 6), createMossMat(0x292524), tailRoot, 0, -0.3, -0.7);
+    t2.rotation.x = -1.8;
 
-    // Biped Legs (Strong)
-    const legG = new RoundedBoxGeometry(0.35, 0.7, 0.4, 2, 0.05);
-    const l1g = createLimbGroup(torso, 0.4, -0.4, 0);
+    // Legs
+    const legG = new THREE.CylinderGeometry(0.2, 0.15, 0.7, 6);
+    const l1g = createLimbGroup(torso, 0.4, -0.3, 0);
     createMesh(legG, secMat, l1g, 0, -0.35, 0);
     animatedParts.legs.push({ mesh: l1g, phase: 0 });
 
-    const l2g = createLimbGroup(torso, -0.4, -0.4, 0);
+    const l2g = createLimbGroup(torso, -0.4, -0.3, 0);
     createMesh(legG, secMat, l2g, 0, -0.35, 0);
     animatedParts.legs.push({ mesh: l2g, phase: Math.PI });
 
-    // T-Rex Arms (Small)
-    const armG = new RoundedBoxGeometry(0.15, 0.4, 0.15, 2, 0.02);
-    const a1g = createLimbGroup(torso, 0.45, 0.2, 0.4);
+    // Arms
+    const armG = new THREE.CylinderGeometry(0.1, 0.08, 0.4, 6);
+    const a1g = createLimbGroup(torso, 0.4, 0.2, 0.3);
     createMesh(armG, secMat, a1g, 0, -0.2, 0);
     a1g.rotation.x = -0.5;
     animatedParts.arms.push({ mesh: a1g, phase: Math.PI, side: 1 });
 
-    const a2g = createLimbGroup(torso, -0.45, 0.2, 0.4);
+    const a2g = createLimbGroup(torso, -0.4, 0.2, 0.3);
     createMesh(armG, secMat, a2g, 0, -0.2, 0);
     a2g.rotation.x = -0.5;
     animatedParts.arms.push({ mesh: a2g, phase: 0, side: -1 });
@@ -456,30 +484,30 @@ function buildIgnis() {
 }
 
 function buildAqua() {
-    // GLUB-GLUB: Jelly Octopus in Mech Suit
-    // Glass Helmet
-    torso = createMesh(new THREE.SphereGeometry(0.8, 16, 16, 0, Math.PI*2, 0, Math.PI/2), glassMat, charGroup, 0, 0.6, 0);
+    // GLUB-GLUB: Geosphere Tank & Fluid Tentacles
+    torso = createMesh(new THREE.IcosahedronGeometry(0.7, 2), glassMat, charGroup, 0, 0.5, 0);
     animatedParts.body = torso;
     
-    // Jelly Core (Wobbling)
-    const core = createMesh(new THREE.SphereGeometry(0.5, 16, 16), jellyMat, torso, 0, 0.2, 0);
-    // Face inside
-    const eyeG = new THREE.SphereGeometry(0.1);
-    createMesh(eyeG, darkMat, core, 0.2, 0.1, 0.4);
-    createMesh(eyeG, darkMat, core, -0.2, 0.1, 0.4);
+    const core = createMesh(new THREE.IcosahedronGeometry(0.4, 1), jellyMat, torso, 0, 0, 0);
+    createMesh(new THREE.TorusGeometry(0.1, 0.03, 8, 16), darkMat, core, 0.2, 0.1, 0.35);
+    createMesh(new THREE.TorusGeometry(0.1, 0.03, 8, 16), darkMat, core, -0.2, 0.1, 0.35);
 
-    // Mech Base (Ring)
-    const base = createMesh(new THREE.CylinderGeometry(0.8, 0.7, 0.2, 16), secMat, torso, 0, -0.1, 0);
-    addGreebles(base);
+    createMesh(new THREE.TorusGeometry(0.6, 0.15, 8, 24), secMat, torso, 0, -0.5, 0).rotation.x = Math.PI/2;
 
-    // Tentacles (Animated)
-    const tentG = new THREE.CylinderGeometry(0.08, 0.02, 0.8, 4);
+    const path = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0.1, -0.3, 0.1),
+        new THREE.Vector3(0.2, -0.6, 0)
+    ]);
+    const tentG = new THREE.TubeGeometry(path, 8, 0.06, 4, false);
+
     for(let i=0; i<6; i++) {
         const angle = (i/6) * Math.PI * 2;
-        const x = Math.cos(angle) * 0.5;
-        const z = Math.sin(angle) * 0.5;
-        const g = createLimbGroup(charGroup, x, 0.5, z);
-        createMesh(tentG, jellyMat, g, 0, -0.4, 0); // Jelly tentacles
+        const x = Math.cos(angle) * 0.4;
+        const z = Math.sin(angle) * 0.4;
+        const g = createLimbGroup(charGroup, x, 0.0, z);
+        const t = createMesh(tentG, jellyMat, g, 0, 0, 0); 
+        t.rotation.y = angle; 
         animatedParts.legs.push({ mesh: g, phase: i }); 
     }
 
@@ -489,41 +517,34 @@ function buildAqua() {
 }
 
 function buildTerra() {
-    // MOSS-KONG: Rock Gorilla
-    // Huge Torso
-    torso = createMesh(new RoundedBoxGeometry(1.4, 1.2, 1.0, 4, 0.1), mossMat, charGroup, 0, 0.2, 0);
+    // MOSS-KONG: Dodecahedron Golem
+    torso = createMesh(new THREE.DodecahedronGeometry(0.9), mossMat, charGroup, 0, 0.4, 0);
+    torso.scale.set(1.2, 1.0, 0.8);
     animatedParts.body = torso;
 
-    // Head (Low set)
-    headGroup = new THREE.Group(); headGroup.position.set(0, 0.6, 0.4); torso.add(headGroup);
-    createMesh(new RoundedBoxGeometry(0.7, 0.7, 0.7, 4, 0.1), mossMat, headGroup, 0, 0, 0);
-    createMesh(new THREE.BoxGeometry(0.6, 0.2, 0.1), darkMat, headGroup, 0, 0, 0.36); // Visor/Brow
+    headGroup = new THREE.Group(); headGroup.position.set(0, 0.7, 0.4); torso.add(headGroup);
+    createMesh(new THREE.DodecahedronGeometry(0.5), mossMat, headGroup, 0, 0, 0);
+    createMesh(new THREE.BoxGeometry(0.5, 0.15, 0.1), darkMat, headGroup, 0, 0, 0.4); 
 
-    // Huge Arms (Knuckle walking)
-    const armG = new RoundedBoxGeometry(0.4, 1.2, 0.4, 2, 0.1);
-    const a1g = createLimbGroup(torso, 0.8, 0.4, 0);
-    createMesh(armG, woodMat, a1g, 0, -0.6, 0); // Wood arms
-    createMesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), woodMat, a1g, 0, -1.2, 0); // Fist
+    const armG = new THREE.CylinderGeometry(0.25, 0.2, 1.0, 8);
+    const a1g = createLimbGroup(torso, 0.8, 0.3, 0);
+    createMesh(armG, woodMat, a1g, 0, -0.5, 0);
+    createMesh(new THREE.DodecahedronGeometry(0.3), woodMat, a1g, 0, -1.1, 0);
     animatedParts.arms.push({ mesh: a1g, phase: Math.PI, side: 1 });
 
-    const a2g = createLimbGroup(torso, -0.8, 0.4, 0);
-    createMesh(armG, woodMat, a2g, 0, -0.6, 0);
-    createMesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), woodMat, a2g, 0, -1.2, 0);
+    const a2g = createLimbGroup(torso, -0.8, 0.3, 0);
+    createMesh(armG, woodMat, a2g, 0, -0.5, 0);
+    createMesh(new THREE.DodecahedronGeometry(0.3), woodMat, a2g, 0, -1.1, 0);
     animatedParts.arms.push({ mesh: a2g, phase: 0, side: -1 });
 
-    // Small Legs
-    const legG = new RoundedBoxGeometry(0.3, 0.5, 0.3, 2, 0.05);
-    const l1g = createLimbGroup(torso, 0.3, -0.5, 0);
-    createMesh(legG, mossMat, l1g, 0, -0.25, 0);
+    const legG = new THREE.CylinderGeometry(0.2, 0.25, 0.6, 8);
+    const l1g = createLimbGroup(torso, 0.3, -0.6, 0);
+    createMesh(legG, mossMat, l1g, 0, -0.3, 0);
     animatedParts.legs.push({ mesh: l1g, phase: 0 });
 
-    const l2g = createLimbGroup(torso, -0.3, -0.5, 0);
-    createMesh(legG, mossMat, l2g, 0, -0.25, 0);
+    const l2g = createLimbGroup(torso, -0.3, -0.6, 0);
+    createMesh(legG, mossMat, l2g, 0, -0.3, 0);
     animatedParts.legs.push({ mesh: l2g, phase: Math.PI });
-
-    // Plant growth
-    spawnBush(0,0)[0].position.set(0, 0.7, -0.4); // Plant on back
-    torso.add(spawnBush(0,0)[0]);
 
     headSlot = new THREE.Group(); headGroup.add(headSlot); headSlot.position.y = 0.5;
     backSlot = new THREE.Group(); torso.add(backSlot); backSlot.position.z = -0.6;
@@ -531,14 +552,25 @@ function buildTerra() {
 }
 
 function buildGeneric() {
-    torso = createMesh(bodyGeo, primMat, charGroup, 0, 0, 0);
+    // AAA GENERATOR FOR SCANNED OBJECTS
+    // Uses dynamic bodyGeo based on analysis (Round/Slender/Chunky)
+    
+    // Material Logic based on surfaceFinish
+    let mainMat = primMat;
+    if (dna.surfaceFinish === 'Metallic') mainMat = createStandardMat(pCol, 0.2, 0.8);
+    if (dna.surfaceFinish === 'Glossy') mainMat = createStandardMat(pCol, 0.1, 0.0);
+    if (dna.surfaceFinish === 'Emissive') mainMat = createLavaMat(pCol);
+    if (dna.materialType === 'Jelly') mainMat = jellyMat;
+    
+    torso = createMesh(bodyGeo, mainMat, charGroup, 0, 0, 0);
     animatedParts.body = torso;
 
-    if (dna.build === 'Chunky') torso.scale.set(1.3, 1.1, 1.3);
-    if (dna.build === 'Slender') torso.scale.set(0.7, 1.1, 0.7);
     if (bodyType === 'QUADRUPED') torso.scale.set(1.0, 0.8, 1.4);
 
-    addArmorPlate(torso, 0, 0, 0.52, 0.6, 0.6, 0.1, secMat);
+    // Add detail based on build
+    if (dna.build !== 'Round') {
+        addArmorPlate(torso, 0, 0, 0.52, 0.6, 0.6, 0.1, secMat);
+    }
     addGreebles(torso);
 
     const headY = bodyType === 'QUADRUPED' ? 0.6 : 0.8;
@@ -546,12 +578,12 @@ function buildGeneric() {
     headGroup = new THREE.Group(); 
     headGroup.position.set(0, headY, headZ);
     torso.add(headGroup);
+    
     const head = createMesh(headGeo, secMat, headGroup, 0, 0, 0);
 
-    addArmorPlate(head, 0, 0.1, 0.42, 0.7, 0.5, 0.05, primMat);
-    const eyeGeo = new THREE.BoxGeometry(0.15, 0.2, 0.05);
-    createMesh(eyeGeo, accMat, head, 0.2, 0.1, 0.42);
-    createMesh(eyeGeo, accMat, head, -0.2, 0.1, 0.42);
+    const eyeGeo = new THREE.BoxGeometry(0.15, 0.2, 0.02); // Flat Eyes
+    createMesh(eyeGeo, accMat, head, 0.2, 0.1, (dna.build === 'Round' || dna.build === 'Slender') ? 0.45 : 0.42);
+    createMesh(eyeGeo, accMat, head, -0.2, 0.1, (dna.build === 'Round' || dna.build === 'Slender') ? 0.45 : 0.42);
 
     if (dna.hasEars) {
         const earGeo = new THREE.ConeGeometry(0.15, 0.4, 16);
@@ -645,11 +677,11 @@ function spawnTree(x, z) {
     const h = 2 + Math.random();
     const y = getTerrainHeight(x, z);
     const m1 = createMesh(new RoundedBoxGeometry(0.3, h, 0.3, 1, 0.05), woodMat, props, x, y + h/2, z);
-    const m2 = createMesh(new RoundedBoxGeometry(1, 1, 1, 2, 0.1), leafMat, props, x, y + h + 0.4, z);
+    const m2 = createMesh(new THREE.IcosahedronGeometry(0.8, 1), leafMat, props, x, y + h + 0.4, z);
     return [m1, m2];
 }
-function spawnBush(x, z) { const y = getTerrainHeight(x, z); const m = createMesh(new RoundedBoxGeometry(0.6, 0.5, 0.6, 2, 0.1), leafMat, props, x, y + 0.25, z); return [m]; }
-function spawnRock(x, z) { const y = getTerrainHeight(x, z); const m = createMesh(new RoundedBoxGeometry(0.5, 0.4, 0.5, 2, 0.1), rockMat, props, x, y + 0.2, z); return [m]; }
+function spawnBush(x, z) { const y = getTerrainHeight(x, z); const m = createMesh(new THREE.IcosahedronGeometry(0.5, 0), leafMat, props, x, y + 0.25, z); return [m]; }
+function spawnRock(x, z) { const y = getTerrainHeight(x, z); const m = createMesh(new THREE.DodecahedronGeometry(0.4), rockMat, props, x, y + 0.2, z); return [m]; }
 function spawnCrystal(x, z) { const y = getTerrainHeight(x, z); const m = createMesh(new THREE.ConeGeometry(0.3, 1, 4), crystalMat, props, x, y + 0.5, z); return [m]; }
 
 let currentBiomeFuncs = [spawnTree, spawnBush]; 
@@ -885,6 +917,11 @@ function animate() {
         }
     }
 
+    // --- VITALITY ANIMATION (Always Breathe & Sway) ---
+    const breathe = Math.sin(t * 2) * 0.02;
+    torso.scale.set(1 + breathe, 1 + breathe, 1 + breathe); 
+    charGroup.rotation.z = Math.sin(t * 1.5) * 0.02; 
+
     if (!isBattle) {
         if (!isPaused || currentAction === 'RUN') {
              const moveSpeed = currentAction === 'RUN' ? 10.0 : 5.0;
@@ -926,13 +963,12 @@ function animate() {
                  if (bodyType !== 'FLOATING') {
                     animatedParts.legs.forEach(l => { 
                         let rot = Math.sin(t * limbSpeed + l.phase) * swingAmp;
-                        // Clamp legs
                         rot = Math.max(-1.0, Math.min(1.0, rot));
                         l.mesh.rotation.x = rot; 
                     });
                     animatedParts.arms.forEach(a => { 
                         let rot = Math.sin(t * limbSpeed + a.phase) * swingAmp;
-                        rot = Math.max(-1.0, Math.min(1.0, rot)); // Clamp arm swing
+                        rot = Math.max(-1.0, Math.min(1.0, rot)); 
                         a.mesh.rotation.x = rot; 
                         const side = a.side || 1; 
                         a.mesh.rotation.z = (Math.abs(Math.sin(t * limbSpeed)) * 0.2 + 0.1) * side; 
@@ -940,13 +976,14 @@ function animate() {
                     });
                 } else charGroup.position.y += Math.sin(t * 5) * 0.05; 
             } else {
+                 // IDLE VITALITY (Swaying limbs gently)
                  charGroup.rotation.x = 0;
                  if (bodyType !== 'FLOATING') {
                     animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
                     animatedParts.arms.forEach(a => { 
                         const side = a.side || 1;
-                        a.mesh.rotation.x = lerp(a.mesh.rotation.x, 0, 0.1); 
-                        a.mesh.rotation.z = lerp(a.mesh.rotation.z, 0.1 * side, 0.1); 
+                        a.mesh.rotation.x = Math.sin(t * 2) * 0.05; // Idle sway
+                        a.mesh.rotation.z = 0.1 * side + Math.sin(t * 1.5) * 0.05; 
                     });
                  }
             }
