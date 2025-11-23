@@ -7,12 +7,12 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { analyzeObject, getGenericVoxel, evolveVoxelScene } from './services/gemini';
 import { makeBackgroundTransparent } from './utils/html';
-import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, MonsterStats, LOCATIONS_DB, LocationNode, STARTER_PACKS, determineEvolutionPath, EVO_THRESHOLDS, getProceduralMonsterArt, getRandomEventText, getRandomSpecialEvent, getActionFromText, EquipmentSlot, getPetSpeech, EMOTE_ICONS } from './services/gameData';
+import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, MonsterStats, LOCATIONS_DB, LocationNode, STARTER_PACKS, determineEvolutionPath, EVO_THRESHOLDS, getProceduralMonsterArt, getRandomEventText, getRandomSpecialEvent, getActionFromText, EquipmentSlot, getPetSpeech, EMOTE_ICONS, MONSTER_DB, MonsterEntry, checkDiscovery } from './services/gameData';
 
 // --- TYPES ---
-type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP' | 'ITEMS' | 'EXPLORE';
+type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP' | 'ITEMS' | 'EXPLORE' | 'CODEX';
 
-const SAVE_VERSION = 'v13.9_VECTOR_CHIP_FIX'; 
+const SAVE_VERSION = 'v14.0_CODEX_EXPANSION'; 
 
 interface UserProfile {
   name: string;
@@ -23,6 +23,8 @@ interface UserProfile {
   joinedAt: number;
   inventory: string[]; 
   currentRank: string;
+  seen: string[]; // Array of Monster IDs seen
+  caught: string[]; // Array of Monster IDs caught
 }
 
 interface Pixupet extends MonsterStats {
@@ -82,6 +84,14 @@ const IconCards = () => (
         <rect x="4" y="6" width="12" height="16" rx="1" transform="rotate(-5 10 14)" fill="#F87171" stroke="black" strokeWidth="2"/>
         <rect x="8" y="4" width="12" height="16" rx="1" transform="rotate(5 14 12)" fill="#60A5FA" stroke="black" strokeWidth="2"/>
         <rect x="6" y="2" width="12" height="16" rx="1" fill="#FCD34D" stroke="black" strokeWidth="2"/>
+    </svg>
+);
+
+const IconBook = () => (
+    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+        <path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" fill="#6366F1" stroke="black" strokeWidth="2"/>
+        <path d="M8 4v16M16 4v16" stroke="black" strokeWidth="1" strokeDasharray="2 2"/>
+        <circle cx="12" cy="12" r="3" fill="#4338CA" stroke="black" strokeWidth="1"/>
     </svg>
 );
 
@@ -366,7 +376,7 @@ const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void }> = ({ pet, onCli
 export default function App() {
   const [gameState, setGameState] = useState<GameState>('SPLASH');
   const [user, setUser] = useState<UserProfile>({ 
-      name: 'Tamer', level: 1, exp: 0, coins: 100, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob' 
+      name: 'Tamer', level: 1, exp: 0, coins: 100, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob', seen: [], caught: [] 
   });
   const [inventory, setInventory] = useState<Pixupet[]>([]);
   const [activePetIndex, setActivePetIndex] = useState<number>(0);
@@ -390,6 +400,8 @@ export default function App() {
   const [shopOpen, setShopOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [exploreOpen, setExploreOpen] = useState(false);
+  const [codexOpen, setCodexOpen] = useState(false); // CODEX STATE
+  const [selectedCodexEntry, setSelectedCodexEntry] = useState<MonsterEntry | null>(null);
 
   // Interactive State
   const [isPetIdle, setIsPetIdle] = useState(false);
@@ -422,7 +434,7 @@ export default function App() {
 
   const handleNewGame = () => {
       localStorage.removeItem(`pixupet_save_${SAVE_VERSION}`);
-      setUser({ name: 'Tamer', level: 1, exp: 0, coins: 100, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob' });
+      setUser({ name: 'Tamer', level: 1, exp: 0, coins: 100, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob', seen: [], caught: [] });
       setInventory([]);
       setGameState('ONBOARDING');
   };
@@ -430,7 +442,6 @@ export default function App() {
   // --- MAP AUTO-FOCUS ---
   useEffect(() => {
       if (exploreOpen && user.currentLocation) {
-          // Small delay to allow DOM to render
           setTimeout(() => {
               const el = document.getElementById(user.currentLocation);
               if (el) {
@@ -548,6 +559,14 @@ export default function App() {
 
   const startAutoBattle = () => {
       const enemy = getRandomEnemy(user.currentLocation, activePet.level, getGenericVoxel);
+      
+      // CODEX: Track Seen
+      const { isNew, updates } = checkDiscovery(user, enemy.speciesId, 'SEEN');
+      if(isNew) {
+          setUser(u => ({ ...u, ...updates }));
+          showFloatingText(`New Data: ${MONSTER_DB[enemy.speciesId]?.name || 'Unknown'}`, "text-blue-300");
+      }
+
       const battleState = { enemy, logs: [`A wild ${enemy.name} appeared!`, "Combat protocols initiated!"], finished: false, win: false, rewards: {} };
       setActiveBattle(battleState);
       const { win, combatLogs } = runBattleSimulation(activePet, enemy);
@@ -680,6 +699,11 @@ export default function App() {
           };
           setInventory([...inventory, newPet]);
           setActivePetIndex(inventory.length); 
+
+          // CODEX: Register as caught (Map to ANOMALY or element)
+          const { isNew, updates } = checkDiscovery(user, 'ANOMALY', 'CAUGHT');
+          if(isNew) setUser(u => ({ ...u, ...updates }));
+          
           setGameState('NEXUS');
           setShowScan(false);
           setScanPreview(null);
@@ -700,6 +724,11 @@ export default function App() {
       };
       setInventory([newPet]);
       setActivePetIndex(0);
+      
+      // CODEX: Register Starter
+      const { isNew, updates } = checkDiscovery(user, starter.name, 'CAUGHT');
+      if(isNew) setUser(u => ({ ...u, ...updates }));
+
       setGameState('NEXUS');
   };
 
@@ -919,32 +948,109 @@ export default function App() {
 
       <div className="absolute bottom-4 left-4 right-4 bg-white border-4 border-black rounded-2xl p-2 flex justify-between items-end z-20 shadow-[0_10px_20px_rgba(0,0,0,0.4)] h-20 safe-bottom">
           
-          <button onClick={()=>{ setGameState('COLLECTION') }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
+          <button onClick={()=>{ setGameState('COLLECTION') }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
               <IconCards />
               <span className="text-[9px] font-black uppercase mt-1">Cards</span>
           </button>
 
-          <button onClick={()=>{ setItemsOpen(true) }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
-              <IconBag />
-              <span className="text-[9px] font-black uppercase mt-1">Items</span>
+          <button onClick={()=>{ setCodexOpen(true) }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
+              <IconBook />
+              <span className="text-[9px] font-black uppercase mt-1">Dex</span>
           </button>
 
-          <div className="relative w-1/5 flex justify-center z-30">
+          <div className="relative w-1/6 flex justify-center z-30">
               <button onClick={()=>setShowScan(true)} className="absolute -top-12 bg-yellow-400 w-24 h-24 rounded-full border-4 border-black flex items-center justify-center shadow-[0px_6px_0px_0px_#000] hover:-translate-y-2 hover:shadow-[0px_10px_0px_0px_#000] active:translate-y-1 active:shadow-[0px_2px_0px_0px_#000] transition-all overflow-hidden">
                   <div className="text-white drop-shadow-md relative z-10"><IconScan /></div>
               </button>
           </div>
 
-          <button onClick={()=>{ setShopOpen(true) }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
+          <button onClick={()=>{ setItemsOpen(true) }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
+              <IconBag />
+              <span className="text-[9px] font-black uppercase mt-1">Bag</span>
+          </button>
+
+          <button onClick={()=>{ setShopOpen(true) }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
               <IconCart />
               <span className="text-[9px] font-black uppercase mt-1">Shop</span>
           </button>
 
-          <button onClick={()=>{ setExploreOpen(true) }} className="flex flex-col items-center justify-center w-1/5 h-full group active:scale-95 transition-transform">
+          <button onClick={()=>{ setExploreOpen(true) }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
               <IconMap />
               <span className="text-[9px] font-black uppercase mt-1">Map</span>
           </button>
       </div>
+
+      {codexOpen && (
+          <div className="absolute inset-0 z-50 bg-slate-900 flex flex-col overflow-hidden">
+              <div className="scan-line"></div>
+              <div className="bg-slate-800 p-4 border-b-4 border-white z-50 flex justify-between items-center shadow-lg safe-top">
+                   <h2 className="text-white font-black text-2xl flex items-center gap-2 italic tracking-wider"><IconBook /> PIXU-DEX</h2>
+                   <button onClick={() => {setCodexOpen(false); setSelectedCodexEntry(null);}} className="bg-red-500 w-10 h-10 rounded-lg border-3 border-white text-white font-black shadow-md hover:bg-red-400">✕</button>
+               </div>
+               
+               {selectedCodexEntry ? (
+                   <div className="flex-1 flex flex-col bg-slate-900 overflow-y-auto relative">
+                        <div className="h-1/2 relative bg-black border-b-4 border-white">
+                            {/* Live Voxel Preview would go here, using the generic voxel generator */}
+                            <div className="absolute inset-0 opacity-50 bg-[url('https://www.transparenttextures.com/patterns/graphy.png')]"></div>
+                            <div className="absolute bottom-4 left-4">
+                                <h1 className="text-4xl font-black text-white drop-shadow-[4px_4px_0_#000]">{selectedCodexEntry.name}</h1>
+                                <span className={`inline-block px-2 py-1 rounded font-bold text-xs border border-white mt-2 ${ELEMENT_THEMES[selectedCodexEntry.element]?.bg || 'bg-gray-500'} text-white`}>{selectedCodexEntry.element}</span>
+                            </div>
+                        </div>
+                        <div className="p-6 text-white">
+                            <button onClick={() => setSelectedCodexEntry(null)} className="mb-4 text-xs font-bold text-blue-400 hover:underline">← BACK TO GRID</button>
+                            <div className="bg-slate-800 p-4 rounded-xl border-2 border-slate-600 mb-4 shadow-lg">
+                                <h3 className="font-black text-lg mb-2 text-yellow-400">ARCHIVE DATA</h3>
+                                <p className="text-sm leading-relaxed text-gray-300 italic">"{selectedCodexEntry.description}"</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
+                                    <div className="text-[10px] text-gray-400 uppercase">Habitat</div>
+                                    <div className="font-bold text-sm">{selectedCodexEntry.habitat}</div>
+                                </div>
+                                <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
+                                    <div className="text-[10px] text-gray-400 uppercase">Discovery</div>
+                                    <div className="font-bold text-sm text-green-400">REGISTERED</div>
+                                </div>
+                            </div>
+                            <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
+                                <div className="text-[10px] text-gray-400 uppercase mb-2">Base Stats</div>
+                                <div className="flex gap-2 text-xs font-mono">
+                                    <span className="text-red-400">ATK {selectedCodexEntry.baseStats.atk}</span>
+                                    <span className="text-blue-400">DEF {selectedCodexEntry.baseStats.def}</span>
+                                    <span className="text-yellow-400">SPD {selectedCodexEntry.baseStats.spd}</span>
+                                </div>
+                            </div>
+                        </div>
+                   </div>
+               ) : (
+                   <div className="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-3 content-start">
+                       {Object.values(MONSTER_DB).map(entry => {
+                           const isSeen = user.seen.includes(entry.id);
+                           const isCaught = user.caught.includes(entry.id);
+                           
+                           return (
+                               <div key={entry.id} onClick={() => isSeen ? setSelectedCodexEntry(entry) : null}
+                                    className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-center p-2 text-center cursor-pointer transition-all relative overflow-hidden
+                                        ${isCaught ? 'bg-slate-700 border-green-400 shadow-[0_0_10px_rgba(74,222,128,0.3)]' : isSeen ? 'bg-slate-800 border-gray-500' : 'bg-slate-900 border-slate-700 opacity-50'}
+                                    `}>
+                                    {isSeen ? (
+                                        <>
+                                            <div className={`text-3xl mb-1 ${!isCaught && 'grayscale brightness-50'}`}>{ELEMENT_THEMES[entry.element]?.icon || '❓'}</div>
+                                            <div className={`text-[9px] font-bold leading-tight ${isCaught ? 'text-white' : 'text-gray-500'}`}>{entry.name}</div>
+                                        </>
+                                    ) : (
+                                        <div className="text-2xl text-slate-700 font-black">?</div>
+                                    )}
+                                    {isCaught && <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full shadow-[0_0_5px_green]"></div>}
+                               </div>
+                           );
+                       })}
+                   </div>
+               )}
+          </div>
+      )}
 
       {activeBattle && (
           <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4 backdrop-blur-sm">

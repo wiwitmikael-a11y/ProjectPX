@@ -163,6 +163,25 @@ body {
     100% { opacity: 0.2; transform: translateX(30px); }
 }
 
+/* SCAN-LINE FOR CODEX */
+.scan-line {
+    width: 100%;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.5);
+    animation: scan 2s linear infinite;
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 60;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes scan {
+    0% { top: 0%; }
+    100% { top: 100%; }
+}
+
 /* SAFE AREA PADDING */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 20px); }
 .safe-top { padding-top: env(safe-area-inset-top, 20px); }

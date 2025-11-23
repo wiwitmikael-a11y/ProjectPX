@@ -473,16 +473,17 @@ function buildPyro() {
     createMesh(new RoundedBoxGeometry(0.3, 0.2, 0.2, 2, 0.05), createStandardMat(0xFFFFFF), headGroup, 0, -0.2, 0.35);
     createMesh(new THREE.SphereGeometry(0.08), darkMat, headGroup, 0, -0.15, 0.45);
 
-    // Ears (Twitching)
+    // Ears (Twitching) - Pivoted at base
     const earShape = new THREE.ConeGeometry(0.3, 0.8, 4);
-    const e1Group = new THREE.Group(); e1Group.position.set(0.45, 0.6, -0.1); headGroup.add(e1Group);
-    const e1 = createMesh(earShape, jellyMat, e1Group, 0, 0, 0); 
-    e1.rotation.z = -0.4; e1.rotation.y = 0.2; e1.rotation.x = -0.2;
+    
+    const e1Group = new THREE.Group(); e1Group.position.set(0.45, 0.4, -0.1); headGroup.add(e1Group);
+    e1Group.rotation.z = -0.4; e1Group.rotation.y = 0.2; e1Group.rotation.x = -0.2;
+    const e1 = createMesh(earShape, jellyMat, e1Group, 0, 0.4, 0); // Offset mesh up so pivot is at base
     animatedParts.special.push({ mesh: e1Group, type: 'twitch' });
 
-    const e2Group = new THREE.Group(); e2Group.position.set(-0.45, 0.6, -0.1); headGroup.add(e2Group);
-    const e2 = createMesh(earShape, jellyMat, e2Group, 0, 0, 0); 
-    e2.rotation.z = 0.4; e2.rotation.y = -0.2; e2.rotation.x = -0.2;
+    const e2Group = new THREE.Group(); e2Group.position.set(-0.45, 0.4, -0.1); headGroup.add(e2Group);
+    e2Group.rotation.z = 0.4; e2Group.rotation.y = -0.2; e2Group.rotation.x = -0.2;
+    const e2 = createMesh(earShape, jellyMat, e2Group, 0, 0.4, 0); // Offset mesh up
     animatedParts.special.push({ mesh: e2Group, type: 'twitch' });
 
     // 4. TAIL (Flexible Braided Cord)
@@ -1017,30 +1018,30 @@ function updateChunks(playerZ) {
 }
 
 function animatePyro(t) {
-    // Tail Wave
+    // Tail Wave (Snake)
     if(animatedParts.tail) {
-        const speed = currentAction === 'RUN' ? 18 : 8;
-        const amp = currentAction === 'RUN' ? 0.4 : 0.2;
+        const speed = currentAction === 'RUN' ? 20 : 8;
+        const amp = currentAction === 'RUN' ? 0.5 : 0.2;
         animatedParts.tail.forEach((seg, i) => {
-            seg.rotation.y = Math.sin(t * speed - i * 0.5) * amp;
+            seg.rotation.y = Math.sin(t * speed - i * 0.4) * amp;
             seg.rotation.x = Math.sin(t * speed * 0.5 - i * 0.2) * 0.1;
         });
     }
-    // Ear Twitch
+    // Ear Twitch & Particles
     animatedParts.special.forEach(p => {
-        if(p.type === 'twitch' && Math.random() > 0.95) {
-            p.mesh.rotation.z = (Math.random()-0.5)*0.5;
+        if(p.type === 'twitch' && Math.random() > 0.96) {
+            p.mesh.rotation.z = (Math.random()-0.5)*0.4;
+            p.mesh.rotation.z = lerp(p.mesh.rotation.z, 0, 0.2);
         }
-        // Pulse
         if(p.type === 'pulse') {
-             const scale = 1.0 + Math.sin(t * 8.0) * 0.2;
+             const scale = 1.0 + Math.sin(t * 10.0) * 0.2;
              p.mesh.scale.setScalar(scale);
         }
-        // Fire
         if(p.type === 'pulse_fire') {
-             const scale = 1.0 + Math.sin(t * 20.0) * 0.4;
+             const scale = 1.0 + Math.sin(t * 25.0) * 0.4;
              p.mesh.scale.setScalar(scale);
-             p.mesh.rotation.y += 0.2;
+             p.mesh.rotation.y += 0.3;
+             p.mesh.position.y = 0.5 + Math.sin(t * 20) * 0.1; // Flicker
         }
     });
 }
@@ -1049,20 +1050,25 @@ function animateFizz(t, delta) {
     animatedParts.special.forEach(p => {
         // Bobbing Pilot
         if (p.type === 'bob') {
-            p.mesh.position.y = Math.sin(t * 2) * 0.1;
+            p.mesh.position.y = Math.sin(t * 3) * 0.15;
         }
         // Bubbles
         if (p.type === 'bubble') {
-            p.mesh.position.y += p.speed * delta * (currentAction === 'RUN' ? 2 : 1);
-            if (p.mesh.position.y > 0.8) p.mesh.position.y = p.startY;
+            p.mesh.position.y += p.speed * delta * (currentAction === 'RUN' ? 3 : 1);
+            if (p.mesh.position.y > 1.0) p.mesh.position.y = p.startY;
         }
         // Thrusters
         if (p.type === 'bob_limb') {
-             p.mesh.position.y += Math.sin(t * 8 + p.offset) * 0.005;
+             p.mesh.position.y += Math.sin(t * 10 + p.offset) * 0.01;
         }
-        // Flame
+        // Flame Particles
         if (p.type === 'thruster_flame') {
-             p.mesh.scale.y = (currentAction === 'RUN' ? 1.5 : 1.0) + Math.random() * 0.5;
+             p.mesh.scale.y = (currentAction === 'RUN' ? 2.0 : 1.0) + Math.random() * 0.8;
+             p.mesh.scale.x = 0.8 + Math.random() * 0.4;
+        }
+        // Straw
+        if (p.type === 'bob_straw') {
+            p.mesh.rotation.z = -0.3 + Math.sin(t * 4) * 0.08;
         }
     });
 }
@@ -1071,13 +1077,15 @@ function animateMoss(t) {
     animatedParts.special.forEach(p => {
         // Speaker Pulse
         if (p.type === 'pulse_beat') {
-             const beat = currentAction === 'RUN' ? 16 : 8;
-             p.mesh.scale.setScalar(1.0 + Math.max(0, Math.sin(t * beat)) * 0.3);
+             const beat = currentAction === 'RUN' ? 20 : 10;
+             const bass = Math.max(0, Math.sin(t * beat));
+             p.mesh.scale.setScalar(1.0 + bass * 0.4);
+             p.mesh.position.z = bass * 0.05; // Push out
         }
         // Vine sway
         if (p.type === 'wave_vine') {
-             // Shader handles wobble, but we can rotate parent slightly
-             p.mesh.rotation.z = Math.sin(t * 2) * 0.02;
+             p.mesh.rotation.z = Math.sin(t * 3) * 0.03;
+             p.mesh.rotation.x = Math.cos(t * 2) * 0.03;
         }
     });
 }
@@ -1089,6 +1097,7 @@ function animate() {
     
     uniforms.time.value += delta; // Update Shader Time
 
+    // --- STATE TRANSITION ---
     if (transitionTimer > 0) {
         transitionTimer -= delta;
         if (transitionTimer <= 0 && nextAction) {
@@ -1111,7 +1120,11 @@ function animate() {
     }
 
     // --- VITALITY ANIMATION (Always Breathe & Sway) ---
-    const breathe = Math.sin(t * 2) * 0.02;
+    let breatheRate = 2;
+    if(currentAction === 'RUN') breatheRate = 6;
+    if(currentAction === 'SLEEP') breatheRate = 1;
+    
+    const breathe = Math.sin(t * breatheRate) * 0.02;
     torso.scale.set(1 + breathe, 1 + breathe, 1 + breathe); 
     
     // Specific Animations based on Char Name
@@ -1123,10 +1136,7 @@ function animate() {
         animatedParts.tail.forEach((seg) => {
              seg.rotation.y = Math.sin(t * 8) * 0.2;
         });
-    }
-    
-    // Generic Greebles
-    if (charName === '') {
+        // Generic Special
         animatedParts.special.forEach(p => {
             if(p.type === 'flap') {
                 const speed = currentAction === 'RUN' ? 20 : 5;
@@ -1140,10 +1150,10 @@ function animate() {
              }
         });
     }
-
+    
     if (!isBattle) {
         if (!isPaused || currentAction === 'RUN') {
-             const moveSpeed = currentAction === 'RUN' ? 12.0 : 6.0;
+             const moveSpeed = currentAction === 'RUN' ? 15.0 : 6.0; // RUN IS 2.5x FASTER
              const speed = moveSpeed * delta;
              
              charGroup.position.z += speed;
@@ -1151,7 +1161,7 @@ function animate() {
              
              // WATCHDOG: Prevent stuck walk
              if (charGroup.position.distanceTo(lastPos) < 0.001 && currentAction === 'WALK') {
-                 // Stuck?
+                 // Force move if stuck logic needed
              }
              lastPos.copy(charGroup.position);
 
@@ -1161,41 +1171,44 @@ function animate() {
              rimLight.position.z = charGroup.position.z - 10;
              particles.position.z = charGroup.position.z;
              
-             const bounceFreq = currentAction === 'RUN' ? 18 : 8;
+             const bounceFreq = currentAction === 'RUN' ? 20 : 10;
              torso.position.y = Math.abs(Math.sin(t * bounceFreq)) * 0.1; 
         } else {
              // IDLE
              torso.position.y = lerp(torso.position.y, 0, 0.1);
         }
         
-        // Dynamic Camera Target (Head Tracking)
+        // --- SMART CAMERA TARGETING ---
+        // Always track the head world position for optimal framing
         const headWorld = new THREE.Vector3();
         if(headGroup) {
             headGroup.getWorldPosition(headWorld);
-            // Smooth lerp to head
-            controls.target.lerp(headWorld, 0.1);
+            // Smooth lerp to head height, but keep forward distance relative to char z
+            const targetZ = charGroup.position.z + (currentAction === 'RUN' ? 2 : 0); // Look ahead when running
+            controls.target.lerp(new THREE.Vector3(0, headWorld.y, targetZ), 0.1);
         }
 
         updateGrounding();
 
         if (transitionTimer <= 0) {
             if (currentAction === 'JUMP' || currentAction === 'HAPPY') {
-                torso.position.y = Math.abs(Math.sin(t * 10)) * 1.5; // High bounce
+                torso.position.y = Math.abs(Math.sin(t * 10)) * 2.0; // High bounce
                 if (currentAction === 'HAPPY') charGroup.rotation.y += 0.2;
             } 
             else if (currentAction === 'SCAN') {
-                headGroup.rotation.y = Math.sin(t * 4) * 0.8;
+                headGroup.rotation.y = Math.sin(t * 4) * 1.2; // Deep scan
                 isLookingAtCamera = false;
             }
             else if (currentAction === 'SLEEP') { 
-                // Lie down
-                charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI / 2, 0.1); 
-                charGroup.position.y = lerp(charGroup.position.y, charGroup.position.y - 0.5, 0.1);
+                // Lie down flat
+                charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI / 2, 0.05); 
+                // Sink slightly
+                charGroup.position.y = lerp(charGroup.position.y, charGroup.position.y - 0.8, 0.05);
             }
             else if ((!isPaused || currentAction === 'RUN')) {
                  charGroup.rotation.x = 0;
-                 const limbSpeed = currentAction === 'RUN' ? 22 : 12;
-                 const swingAmp = currentAction === 'RUN' ? 1.4 : 0.8;
+                 const limbSpeed = currentAction === 'RUN' ? 25 : 12;
+                 const swingAmp = currentAction === 'RUN' ? 1.5 : 0.8;
                  
                  if (bodyType !== 'FLOATING') {
                     animatedParts.legs.forEach(l => { 
@@ -1301,24 +1314,81 @@ window.addEventListener('resize', () => { camera.aspect = window.innerWidth/wind
 </html>`;
 };
 
-export const evolveVoxelScene = async (pet: any) => {
-    const nextStage = getNextStage(pet.stage);
-    const code = getGenericVoxel(pet.element, pet.bodyType, nextStage, pet.visualTraits, pet.name);
-    return {
-        code,
-        nextStage,
-        nextName: getEvolvedName(pet.name, nextStage),
-        visual_design: `Evolved form of ${pet.name}`
-    };
+/**
+ * Evolves a pet by generating a new visual design description using Gemini and then creating a new Voxel scene.
+ */
+export const evolveVoxelScene = async (pet: any): Promise<{nextStage: string, nextName: string, code: string}> => {
+    const nextStages: Record<string, string> = { 'Noob': 'Pro', 'Pro': 'Elite', 'Elite': 'Legend' };
+    const nextStage = nextStages[pet.stage] || 'Legend';
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: {
+                parts: [{
+                    text: `You are a "Digital Sculptor" for a monster taming game.
+                    Evolve this monster: "${pet.name}" (Element: ${pet.element}, Stage: ${pet.stage}) into its next stage: "${nextStage}".
+                    Current Description: ${pet.description}.
+                    
+                    The evolution should be impressive, adding more details, armor, or elemental effects.
+                    
+                    STRICTLY RETURN JSON ONLY.
+                    Structure:
+                    {
+                        "nextName": "string",
+                        "newDescription": "string",
+                        "visualTraits": {
+                             "hasHorns": boolean,
+                             "hornStyle": "Uni" | "Dual" | "Antenna" | "None",
+                             "hasWings": boolean,
+                             "wingStyle": "Feather" | "Bat" | "Mech" | "None",
+                             "accessory": "Goggles" | "Scarf" | "Helmet" | "Backpack" | "None",
+                             "build": "Chunky" | "Slender" | "Round",
+                             "hasEars": boolean,
+                             "surfaceFinish": "Matte" | "Glossy" | "Metallic" | "Emissive",
+                             "materialType": "Standard" | "Magma" | "Jelly" | "Moss",
+                             "tailStyle": "Segmented" | "Smooth" | "None",
+                             "legJointStyle": "Digitigrade" | "Plantigrade",
+                             "spineCurve": "Straight" | "Hunched",
+                             "specialFeature": "ThrusterFlames" | "GlowingEyes" | "None",
+                             "extractedColors": {
+                                 "primary": "Hex Code",
+                                 "secondary": "Hex Code",
+                                 "accent": "Hex Code"
+                             }
+                        }
+                    }`
+                }]
+            },
+            config: {
+                responseMimeType: "application/json"
+            }
+        });
+        
+        const text = response.text;
+        if (!text) throw new Error("No response");
+        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const data = JSON.parse(cleanText);
+        
+        // Ensure defaults for visualTraits if missing
+        const traits = data.visualTraits || pet.visualTraits;
+        
+        const code = getGenericVoxel(pet.element, pet.bodyType, nextStage, traits, data.nextName);
+        
+        return {
+            nextStage,
+            nextName: data.nextName || `${pet.name} X`,
+            code
+        };
+
+    } catch (error) {
+        console.error("Evolution error", error);
+        // Fallback
+        const code = getGenericVoxel(pet.element, pet.bodyType, nextStage, pet.visualTraits, pet.name);
+        return {
+            nextStage,
+            nextName: pet.name,
+            code
+        };
+    }
 };
-
-function getNextStage(current: string): MonsterStage {
-    if (current === 'Noob') return 'Pro';
-    if (current === 'Pro') return 'Elite';
-    return 'Legend';
-}
-
-function getEvolvedName(name: string, stage: string): string {
-    if (name.includes('Mega')) return name.replace('Mega', 'Giga');
-    return `Mega ${name}`;
-}

@@ -46,6 +46,7 @@ export interface VisualTraits {
         secondary: string; 
         accent: string;    
     };
+    specialFeature?: 'ThrusterFlames' | 'GlowingEyes' | 'None';
 }
 
 export interface GameItem {
@@ -247,6 +248,62 @@ export interface OfflineReport {
     hungerLost: number; hpLost: number; events: string[];
 }
 
+// --- MONSTER CODEX DATABASE (THE PIXU-DEX) ---
+
+export interface MonsterEntry {
+    id: string;
+    name: string;
+    element: string;
+    description: string;
+    habitat: string;
+    baseStats: { hp: number; atk: number; def: number; spd: number };
+    visual_design: string;
+}
+
+export const MONSTER_DB: Record<string, MonsterEntry> = {
+    // Starters
+    'PYRO-BIT': { id: 'PYRO-BIT', name: 'PYRO-BIT', element: 'Fire', description: 'A hybrid of a fox and a retro toaster. Its internal heating elements glow with intense heat.', habitat: 'Crimson Caldera (Native)', baseStats: { hp: 100, atk: 25, def: 15, spd: 20 }, visual_design: 'Transparent fox with glowing internal ribs.' },
+    'FIZZ-BOT': { id: 'FIZZ-BOT', name: 'FIZZ-BOT', element: 'Water', description: 'A bubble-tea mech piloted by a tiny axolotl. Hovering on carbonated thrusters.', habitat: 'Sapphire Coast (Native)', baseStats: { hp: 110, atk: 15, def: 18, spd: 15 }, visual_design: 'Floating blue cup with pink thrusters.' },
+    'MOSS-AMP': { id: 'MOSS-AMP', name: 'MOSS-AMP', element: 'Grass', description: 'A groovy frog carrying a massive mossy boombox. Emits heavy bass frequencies.', habitat: 'Whispering Woods (Native)', baseStats: { hp: 150, atk: 20, def: 25, spd: 10 }, visual_design: 'Green frog with speaker box on back.' },
+    
+    // Wild Bots (Procedural Archetypes)
+    'BOT_FIRE': { id: 'BOT_FIRE', name: 'Magma Drone', element: 'Fire', description: 'A standard security bot found in volcanic regions. Powered by a unstable core.', habitat: 'Crimson Caldera', baseStats: { hp: 80, atk: 20, def: 10, spd: 15 }, visual_design: 'Robot with fire core.' },
+    'BOT_WATER': { id: 'BOT_WATER', name: 'Hydro Unit', element: 'Water', description: 'Maintains aquatic ecosystems. Shoots pressurized water.', habitat: 'Sapphire Coast', baseStats: { hp: 90, atk: 15, def: 15, spd: 15 }, visual_design: 'Robot with water tanks.' },
+    'BOT_GRASS': { id: 'BOT_GRASS', name: 'Timber Scout', element: 'Grass', description: 'Camouflaged surveillance unit. Blends into the forest.', habitat: 'Whispering Woods', baseStats: { hp: 100, atk: 15, def: 20, spd: 10 }, visual_design: 'Wooden robot with leaves.' },
+    'BOT_ELECTRIC': { id: 'BOT_ELECTRIC', name: 'Volt Sentry', element: 'Electric', description: 'Fast and dangerous. Patrols the peaks during storms.', habitat: 'Thunder Peaks', baseStats: { hp: 70, atk: 25, def: 10, spd: 25 }, visual_design: 'Spiky yellow robot.' },
+    'BOT_METAL': { id: 'BOT_METAL', name: 'Iron Guard', element: 'Metal', description: 'Heavily armored industrial protector. Very hard to scratch.', habitat: 'Iron Foundry', baseStats: { hp: 120, atk: 20, def: 30, spd: 5 }, visual_design: 'Bulky grey mech.' },
+    'BOT_PSYCHIC': { id: 'BOT_PSYCHIC', name: 'Mind Orb', element: 'Psychic', description: 'Floating construct that affects cognition. Watch your thoughts.', habitat: 'Mystic Sanctum', baseStats: { hp: 80, atk: 30, def: 10, spd: 20 }, visual_design: 'Floating purple eye.' },
+    'BOT_TOXIC': { id: 'BOT_TOXIC', name: 'Hazmat Droid', element: 'Toxic', description: 'Leaking dangerous fluids. Stay clear.', habitat: 'Toxic Waste', baseStats: { hp: 110, atk: 15, def: 20, spd: 10 }, visual_design: 'Green rusted robot.' },
+    'BOT_DARK': { id: 'BOT_DARK', name: 'Shadow Glitch', element: 'Dark', description: 'A tear in the reality code. Extremely hostile.', habitat: 'Glitch Badlands', baseStats: { hp: 90, atk: 25, def: 15, spd: 20 }, visual_design: 'Dark shadowy form.' },
+    'BOT_LIGHT': { id: 'BOT_LIGHT', name: 'Prism Core', element: 'Light', description: 'Refracts light into focused lasers.', habitat: 'Thunder Peaks', baseStats: { hp: 80, atk: 20, def: 20, spd: 20 }, visual_design: 'Glowing crystal geometry.' },
+    'ANOMALY': { id: 'ANOMALY', name: 'Unknown Anomaly', element: 'Neutral', description: 'A creature generated from raw user data. Properties vary wildly.', habitat: 'Everywhere', baseStats: { hp: 100, atk: 15, def: 15, spd: 15 }, visual_design: 'Glitchy voxel shape.' }
+};
+
+// --- DISCOVERY LOGIC ---
+export const checkDiscovery = (profile: {seen: string[], caught: string[]}, speciesId: string, mode: 'SEEN' | 'CAUGHT') => {
+    const updates: any = {};
+    let isNew = false;
+    // Ensure valid ID
+    const validId = MONSTER_DB[speciesId] ? speciesId : 'ANOMALY';
+
+    if (mode === 'SEEN') {
+        if (!profile.seen.includes(validId)) {
+            updates.seen = [...profile.seen, validId];
+            isNew = true;
+        }
+    } else if (mode === 'CAUGHT') {
+        if (!profile.caught.includes(validId)) {
+            updates.caught = [...profile.caught, validId];
+            // Catching implies seeing
+            if (!profile.seen.includes(validId)) {
+                updates.seen = [...profile.seen, validId];
+            }
+            isNew = true;
+        }
+    }
+    return { isNew, updates, name: MONSTER_DB[validId].name };
+};
+
 // --- ICONIC STARTERS V2 (AAA DESIGN) ---
 export const STARTER_PACKS = [
     {
@@ -418,6 +475,9 @@ export const getRandomEnemy = (locationId: string, playerLevel: number, genVoxel
     const level = Math.max(1, Math.floor(playerLevel * loc.difficultyMod)); 
     const enemyStage = level > 40 ? 'Legend' : level > 25 ? 'Elite' : level > 10 ? 'Pro' : 'Noob';
     
+    // DETERMINE SPECIES ID FOR CODEX
+    const speciesId = `BOT_${element.toUpperCase()}`;
+    
     const wildTraits: VisualTraits = {
         hasHorns: Math.random() > 0.5,
         hornStyle: ['Uni', 'Dual', 'Antenna'][Math.floor(Math.random()*3)] as any,
@@ -433,7 +493,7 @@ export const getRandomEnemy = (locationId: string, playerLevel: number, genVoxel
     const maxHp = Math.floor(60 * loc.difficultyMod + level*10);
 
     return {
-        id: `wild_${Date.now()}`, name, element, stage: enemyStage,
+        id: `wild_${Date.now()}`, speciesId, name, element, stage: enemyStage,
         hp: maxHp,
         currentHp: maxHp,
         maxHp: maxHp,
