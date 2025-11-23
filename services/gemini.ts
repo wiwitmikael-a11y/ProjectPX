@@ -929,6 +929,9 @@ let isLookingAtCamera = false;
 const headTargetRot = new THREE.Quaternion();
 const dummyObj = new THREE.Object3D();
 
+let lastMoveTime = 0;
+const lastPos = new THREE.Vector3();
+
 window.addEventListener('message', (e) => {
     const { type, value } = e.data;
     if (type === 'SET_THEME') {
@@ -948,6 +951,7 @@ window.addEventListener('message', (e) => {
         isPaused = false; nextAction = 'WALK'; isBattle = false; overrideTimer = 0; emoteSprite.visible = false;
         transitionTimer = 0.5; 
         currentAction = 'IDLE';
+        lastMoveTime = clock.getElapsedTime();
     }
     if (type === 'INTERACT_POKE') { triggerPoke(); }
     if (type === 'HIDE_EMOTES') {
@@ -1012,6 +1016,72 @@ function updateChunks(playerZ) {
     }
 }
 
+function animatePyro(t) {
+    // Tail Wave
+    if(animatedParts.tail) {
+        const speed = currentAction === 'RUN' ? 18 : 8;
+        const amp = currentAction === 'RUN' ? 0.4 : 0.2;
+        animatedParts.tail.forEach((seg, i) => {
+            seg.rotation.y = Math.sin(t * speed - i * 0.5) * amp;
+            seg.rotation.x = Math.sin(t * speed * 0.5 - i * 0.2) * 0.1;
+        });
+    }
+    // Ear Twitch
+    animatedParts.special.forEach(p => {
+        if(p.type === 'twitch' && Math.random() > 0.95) {
+            p.mesh.rotation.z = (Math.random()-0.5)*0.5;
+        }
+        // Pulse
+        if(p.type === 'pulse') {
+             const scale = 1.0 + Math.sin(t * 8.0) * 0.2;
+             p.mesh.scale.setScalar(scale);
+        }
+        // Fire
+        if(p.type === 'pulse_fire') {
+             const scale = 1.0 + Math.sin(t * 20.0) * 0.4;
+             p.mesh.scale.setScalar(scale);
+             p.mesh.rotation.y += 0.2;
+        }
+    });
+}
+
+function animateFizz(t, delta) {
+    animatedParts.special.forEach(p => {
+        // Bobbing Pilot
+        if (p.type === 'bob') {
+            p.mesh.position.y = Math.sin(t * 2) * 0.1;
+        }
+        // Bubbles
+        if (p.type === 'bubble') {
+            p.mesh.position.y += p.speed * delta * (currentAction === 'RUN' ? 2 : 1);
+            if (p.mesh.position.y > 0.8) p.mesh.position.y = p.startY;
+        }
+        // Thrusters
+        if (p.type === 'bob_limb') {
+             p.mesh.position.y += Math.sin(t * 8 + p.offset) * 0.005;
+        }
+        // Flame
+        if (p.type === 'thruster_flame') {
+             p.mesh.scale.y = (currentAction === 'RUN' ? 1.5 : 1.0) + Math.random() * 0.5;
+        }
+    });
+}
+
+function animateMoss(t) {
+    animatedParts.special.forEach(p => {
+        // Speaker Pulse
+        if (p.type === 'pulse_beat') {
+             const beat = currentAction === 'RUN' ? 16 : 8;
+             p.mesh.scale.setScalar(1.0 + Math.max(0, Math.sin(t * beat)) * 0.3);
+        }
+        // Vine sway
+        if (p.type === 'wave_vine') {
+             // Shader handles wobble, but we can rotate parent slightly
+             p.mesh.rotation.z = Math.sin(t * 2) * 0.02;
+        }
+    });
+}
+
 function animate() {
     requestAnimationFrame(animate);
     const t = clock.getElapsedTime();
@@ -1022,19 +1092,13 @@ function animate() {
     if (transitionTimer > 0) {
         transitionTimer -= delta;
         if (transitionTimer <= 0 && nextAction) {
+            window.parent.postMessage({ type: 'ENTER_' + nextAction }, '*');
             currentAction = nextAction;
             nextAction = null;
         } else if (transitionTimer > 0) {
+             // Smooth reset to neutral
              charGroup.rotation.x = lerp(charGroup.rotation.x, 0, 0.1);
-             if (bodyType !== 'FLOATING') {
-                animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
-                animatedParts.arms.forEach(a => { 
-                    const side = a.side || 1;
-                    // Clamp arm rotation during reset to prevent clipping
-                    a.mesh.rotation.x = lerp(a.mesh.rotation.x, 0, 0.1); 
-                    a.mesh.rotation.z = lerp(a.mesh.rotation.z, 0.1 * side, 0.1); 
-                });
-             }
+             torso.position.y = lerp(torso.position.y, 0, 0.1);
         }
     }
 
@@ -1043,90 +1107,80 @@ function animate() {
         if (overrideTimer <= 0 && !isBattle) { 
             nextAction = 'WALK'; isPaused = false; emoteSprite.visible = false; 
             transitionTimer = 0.5;
-            torso.position.y = 0;
         }
     }
 
     // --- VITALITY ANIMATION (Always Breathe & Sway) ---
     const breathe = Math.sin(t * 2) * 0.02;
     torso.scale.set(1 + breathe, 1 + breathe, 1 + breathe); 
-    charGroup.rotation.z = Math.sin(t * 1.5) * 0.02; 
-
-    // Animate special parts like glowing embers
-    animatedParts.special.forEach(p => {
-        if(p.type === 'pulse' || p.type === 'pulse_green') {
-            const scale = 1.0 + Math.sin(t * 8.0) * 0.2;
-            p.mesh.scale.setScalar(scale);
-        } else if (p.type === 'pulse_fire') {
-            const scale = 1.0 + Math.sin(t * 15.0) * 0.3; // Faster flicker for fire
-            p.mesh.scale.setScalar(scale);
-            p.mesh.rotation.y += delta * 2;
-        } else if (p.type === 'twitch') {
-            if (Math.random() > 0.98) p.mesh.rotation.z += (Math.random()-0.5)*0.2;
-            p.mesh.rotation.z = lerp(p.mesh.rotation.z, 0, 0.1);
-        } else if (p.type === 'bob') {
-            p.mesh.position.y = Math.sin(t * 2) * 0.05;
-        } else if (p.type === 'bubble') {
-            p.mesh.position.y += p.speed * delta;
-            if (p.mesh.position.y > 0.6) p.mesh.position.y = p.startY;
-        } else if (p.type === 'bob_limb') {
-            p.mesh.position.y += Math.sin(t * 4 + p.offset) * 0.002; 
-        } else if (p.type === 'thruster_flame') {
-            p.mesh.scale.y = 1.0 + Math.random() * 0.5;
-        } else if (p.type === 'bob_straw') {
-            p.mesh.rotation.z = -0.3 + Math.sin(t * 3) * 0.05;
-        } else if (p.type === 'pulse_beat') {
-            p.mesh.scale.setScalar(1.0 + Math.max(0, Math.sin(t * 8)) * 0.2); // Beat sync
-        } else if (p.type === 'wave_vine') {
-            // No easy way to wave a static TubeGeometry without shader or vertex manipulation here
-        } else if (p.type === 'flap') {
-            const speed = currentAction === 'RUN' ? 15 : 5;
-            p.mesh.rotation.z = Math.sin(t * speed) * 0.4;
-        }
-    });
     
-    // Animate Tail Waves (Snake motion)
-    animatedParts.tail.forEach((seg, i) => {
-        const speed = currentAction === 'RUN' ? 12 : 6;
-        const amp = currentAction === 'RUN' ? 0.4 : 0.2;
-        seg.rotation.y = Math.sin(t * speed + i * 0.5) * amp;
-    });
+    // Specific Animations based on Char Name
+    if (charName === 'PYRO-BIT') animatePyro(t);
+    else if (charName === 'FIZZ-BOT') animateFizz(t, delta);
+    else if (charName === 'MOSS-AMP') animateMoss(t);
+    else {
+        // Generic Tail
+        animatedParts.tail.forEach((seg) => {
+             seg.rotation.y = Math.sin(t * 8) * 0.2;
+        });
+    }
+    
+    // Generic Greebles
+    if (charName === '') {
+        animatedParts.special.forEach(p => {
+            if(p.type === 'flap') {
+                const speed = currentAction === 'RUN' ? 20 : 5;
+                p.mesh.rotation.z = Math.sin(t * speed) * 0.4;
+            }
+             if(p.type === 'twitch') {
+                if (Math.random() > 0.98) p.mesh.rotation.z = (Math.random()-0.5)*0.2;
+             }
+             if(p.type === 'thruster_flame') {
+                 p.mesh.scale.y = 1.0 + Math.random() * 0.5;
+             }
+        });
+    }
 
     if (!isBattle) {
-        let moveSpeed = 0;
         if (!isPaused || currentAction === 'RUN') {
-             moveSpeed = currentAction === 'RUN' ? 10.0 : 5.0;
+             const moveSpeed = currentAction === 'RUN' ? 12.0 : 6.0;
              const speed = moveSpeed * delta;
              
              charGroup.position.z += speed;
-             // Lerp camera target to head height for perfect framing
-             const headWorld = new THREE.Vector3();
-             headGroup.getWorldPosition(headWorld);
-             controls.target.lerp(headWorld, 0.1);
-             
              camera.position.z += speed;
              
+             // WATCHDOG: Prevent stuck walk
+             if (charGroup.position.distanceTo(lastPos) < 0.001 && currentAction === 'WALK') {
+                 // Stuck?
+             }
+             lastPos.copy(charGroup.position);
+
              updateChunks(charGroup.position.z);
              
              dirLight.position.z = charGroup.position.z + 8;
              rimLight.position.z = charGroup.position.z - 10;
              particles.position.z = charGroup.position.z;
              
-             const bounceFreq = currentAction === 'RUN' ? 15 : 8;
+             const bounceFreq = currentAction === 'RUN' ? 18 : 8;
              torso.position.y = Math.abs(Math.sin(t * bounceFreq)) * 0.1; 
         } else {
+             // IDLE
              torso.position.y = lerp(torso.position.y, 0, 0.1);
-             // Still track head in Idle
-             const headWorld = new THREE.Vector3();
-             headGroup.getWorldPosition(headWorld);
-             controls.target.lerp(headWorld, 0.05);
+        }
+        
+        // Dynamic Camera Target (Head Tracking)
+        const headWorld = new THREE.Vector3();
+        if(headGroup) {
+            headGroup.getWorldPosition(headWorld);
+            // Smooth lerp to head
+            controls.target.lerp(headWorld, 0.1);
         }
 
         updateGrounding();
 
         if (transitionTimer <= 0) {
             if (currentAction === 'JUMP' || currentAction === 'HAPPY') {
-                torso.position.y = Math.abs(Math.sin(t * 10)) * 0.8;
+                torso.position.y = Math.abs(Math.sin(t * 10)) * 1.5; // High bounce
                 if (currentAction === 'HAPPY') charGroup.rotation.y += 0.2;
             } 
             else if (currentAction === 'SCAN') {
@@ -1134,23 +1188,24 @@ function animate() {
                 isLookingAtCamera = false;
             }
             else if (currentAction === 'SLEEP') { 
+                // Lie down
                 charGroup.rotation.x = lerp(charGroup.rotation.x, -Math.PI / 2, 0.1); 
                 charGroup.position.y = lerp(charGroup.position.y, charGroup.position.y - 0.5, 0.1);
             }
             else if ((!isPaused || currentAction === 'RUN')) {
                  charGroup.rotation.x = 0;
-                 const limbSpeed = currentAction === 'RUN' ? 18 : 12;
-                 const swingAmp = currentAction === 'RUN' ? 1.2 : 0.8;
+                 const limbSpeed = currentAction === 'RUN' ? 22 : 12;
+                 const swingAmp = currentAction === 'RUN' ? 1.4 : 0.8;
                  
                  if (bodyType !== 'FLOATING') {
                     animatedParts.legs.forEach(l => { 
                         let rot = Math.sin(t * limbSpeed + l.phase) * swingAmp;
-                        rot = Math.max(-1.0, Math.min(1.0, rot));
+                        rot = Math.max(-1.2, Math.min(1.2, rot));
                         l.mesh.rotation.x = rot; 
                     });
                     animatedParts.arms.forEach(a => { 
                         let rot = Math.sin(t * limbSpeed + a.phase) * swingAmp;
-                        rot = Math.max(-1.0, Math.min(1.0, rot)); 
+                        rot = Math.max(-1.2, Math.min(1.2, rot)); 
                         a.mesh.rotation.x = rot; 
                         const side = a.side || 1; 
                         a.mesh.rotation.z = (Math.abs(Math.sin(t * limbSpeed)) * 0.2 + 0.1) * side; 
@@ -1158,23 +1213,20 @@ function animate() {
                     });
                 } else charGroup.position.y += Math.sin(t * 5) * 0.05; 
             } else {
-                 // IDLE VITALITY (Swaying limbs gently)
+                 // IDLE VITALITY
                  charGroup.rotation.x = 0;
                  if (bodyType !== 'FLOATING') {
                     animatedParts.legs.forEach(l => { l.mesh.rotation.x = lerp(l.mesh.rotation.x, 0, 0.1); });
                     animatedParts.arms.forEach(a => { 
                         const side = a.side || 1;
-                        a.mesh.rotation.x = Math.sin(t * 2) * 0.05; // Idle sway
+                        a.mesh.rotation.x = Math.sin(t * 2) * 0.05; 
                         a.mesh.rotation.z = 0.1 * side + Math.sin(t * 1.5) * 0.05; 
                     });
                  }
-                 // Whip tail gently in idle
-                 animatedParts.tail.forEach((seg, i) => {
-                    seg.rotation.y = Math.sin(t * 2 + i * 0.3) * 0.1;
-                 });
             }
         }
 
+        // Head Look Logic
         const cameraDir = camera.position.clone().sub(charGroup.position).normalize();
         const forward = new THREE.Vector3(0, 0, 1); 
         const dot = cameraDir.dot(forward);
@@ -1213,7 +1265,6 @@ function animate() {
             charGroup.rotation.y = Math.PI / 3;
             const zBase = charGroup.position.z;
             camera.position.lerp(new THREE.Vector3(targetCamPos.x, targetCamPos.y, zBase + targetCamPos.z), 0.05);
-            // In battle, target the midpoint between fighters roughly, or just above ground
             controls.target.lerp(new THREE.Vector3(0, 1.5, zBase), 0.1);
         } else {
             charGroup.rotation.y = -Math.PI / 3; 

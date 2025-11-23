@@ -462,25 +462,35 @@ export const getLootDrop = (locationId: string): string | null => {
 export const getRandomEventText = (locationId: string): string => {
     const loc = LOCATIONS_DB[locationId];
     // REMOVED LAZY EVENTS - ACTIVE ONLY
-    const generic = ["Scouting perimeter.", "Analyzing terrain.", "Hunting for loot.", "Patrolling area.", "Training combat protocols."];
+    const generic = ["Scouting perimeter.", "Analyzing terrain.", "Hunting for loot.", "Patrolling area.", "Training combat protocols.", "Sprinting through fields.", "Taking a quick nap.", "Scanning for enemies."];
     const specific: Record<string, string[]> = {
-        'loc_starter': ["Chasing butterflies.", "Rolling down hills.", "Practicing jumps.", "Target practice."],
-        'loc_woods': ["Tracking footprints.", "Scanning for bugs.", "Climbing trees.", "Listening to birds."],
-        'loc_coast': ["Splashing in waves.", "Chasing crabs.", "Scanning horizon.", "Training in sand."],
-        'loc_caldera': ["Dodging lava.", "Scanning heat signatures.", "Training heat resistance.", "Analyzing magma flow."],
-        'loc_city': ["Browsing shops.", "Hacking terminals.", "Scanning network.", "Navigating crowds."],
-        'loc_void': ["Fighting the void.", "Analyzing glitches.", "Scanning anomalies.", "Resisting corruption."]
+        'loc_starter': ["Chasing butterflies.", "Rolling down hills.", "Practicing jumps.", "Target practice.", "Dozing in the sun.", "Leaping over logs."],
+        'loc_woods': ["Tracking footprints.", "Scanning for bugs.", "Climbing trees.", "Listening to birds.", "Resting under shade.", "Dodging branches."],
+        'loc_coast': ["Splashing in waves.", "Chasing crabs.", "Scanning horizon.", "Training in sand.", "Napping on beach."],
+        'loc_caldera': ["Dodging lava.", "Scanning heat signatures.", "Training heat resistance.", "Analyzing magma flow.", "Sprinting across obsidian."],
+        'loc_city': ["Browsing shops.", "Hacking terminals.", "Scanning network.", "Navigating crowds.", "Resting in alleyway."],
+        'loc_void': ["Fighting the void.", "Analyzing glitches.", "Scanning anomalies.", "Resisting corruption.", "Dodging reality tears."]
     };
     const pool = specific[locationId] || generic;
     return pool[Math.floor(Math.random() * pool.length)];
 };
 
+// STRICT ACTION MAPPING - NO RNG
 export const getActionFromText = (text: string): 'WALK' | 'SLEEP' | 'JUMP' | 'SCAN' | 'RUN' => {
     const lower = text.toLowerCase();
-    if (lower.includes('rest') && Math.random() > 0.7) return 'SLEEP'; 
-    if (lower.includes('jump') || lower.includes('hop') || lower.includes('dodge') || lower.includes('climb')) return 'JUMP';
-    if (lower.includes('scan') || lower.includes('hack') || lower.includes('look') || lower.includes('analyz')) return 'SCAN';
-    if (lower.includes('chase') || lower.includes('run') || lower.includes('track') || lower.includes('hunt') || lower.includes('fight')) return 'RUN';
+    
+    // SLEEP Triggers
+    if (lower.includes('rest') || lower.includes('nap') || lower.includes('sleep') || lower.includes('doze')) return 'SLEEP'; 
+    
+    // JUMP Triggers
+    if (lower.includes('jump') || lower.includes('hop') || lower.includes('dodge') || lower.includes('climb') || lower.includes('leap') || lower.includes('roll')) return 'JUMP';
+    
+    // SCAN Triggers
+    if (lower.includes('scan') || lower.includes('hack') || lower.includes('look') || lower.includes('analyz') || lower.includes('navigat')) return 'SCAN';
+    
+    // RUN Triggers
+    if (lower.includes('chase') || lower.includes('run') || lower.includes('track') || lower.includes('hunt') || lower.includes('fight') || lower.includes('sprint') || lower.includes('rush')) return 'RUN';
+    
     return 'WALK';
 };
 
