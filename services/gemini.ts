@@ -1317,8 +1317,8 @@ window.addEventListener('resize', () => { camera.aspect = window.innerWidth/wind
 /**
  * Evolves a pet by generating a new visual design description using Gemini and then creating a new Voxel scene.
  */
-export const evolveVoxelScene = async (pet: any): Promise<{nextStage: string, nextName: string, code: string}> => {
-    const nextStages: Record<string, string> = { 'Noob': 'Pro', 'Pro': 'Elite', 'Elite': 'Legend' };
+export const evolveVoxelScene = async (pet: any): Promise<{nextStage: MonsterStage, nextName: string, code: string}> => {
+    const nextStages: Record<string, MonsterStage> = { 'Noob': 'Pro', 'Pro': 'Elite', 'Elite': 'Legend' };
     const nextStage = nextStages[pet.stage] || 'Legend';
 
     try {

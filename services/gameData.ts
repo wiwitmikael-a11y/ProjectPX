@@ -6,6 +6,34 @@
 
 import { getGenericVoxel } from './gemini';
 
+// --- SHARED TYPES ---
+export interface UserProfile {
+  name: string;
+  level: number;
+  exp: number;
+  coins: number; 
+  currentLocation: string; 
+  joinedAt: number;
+  inventory: string[]; 
+  currentRank: string;
+  seen: string[]; 
+  caught: string[]; 
+}
+
+export interface Pixupet extends MonsterStats {
+  voxelCode: string;
+  imageSource?: string;
+  cardArtUrl?: string;
+  currentHp?: number; 
+  maxHp?: number; 
+  level: number;
+  exp: number;
+  maxExp: number;
+  hunger: number; 
+  fatigue: number;
+  happiness?: number; 
+}
+
 export type BodyType = 'BIPED' | 'QUADRUPED' | 'FLOATING' | 'WHEELED' | 'SERPENTINE';
 export type AITactic = 'BALANCED' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SPEEDSTER';
 export type MonsterStage = 'Noob' | 'Pro' | 'Elite' | 'Legend';
@@ -40,7 +68,7 @@ export interface VisualTraits {
     build: 'Chunky' | 'Slender' | 'Round';
     hasEars?: boolean; 
     surfaceFinish?: 'Matte' | 'Glossy' | 'Metallic' | 'Emissive';
-    materialType?: 'Standard' | 'Magma' | 'Jelly' | 'Moss'; // Advanced Material Physics
+    materialType?: 'Standard' | 'Magma' | 'Jelly' | 'Moss'; 
     extractedColors?: {
         primary: string;   
         secondary: string; 
@@ -53,11 +81,11 @@ export interface GameItem {
     id: string; 
     name: string; 
     type: 'Consumable' | 'Material' | 'Key' | 'Food' | 'Gear';
-    slot?: EquipmentSlot; // Only for Gear
+    slot?: EquipmentSlot; 
     statBonus?: { atk?: number, def?: number, spd?: number, hp?: number, int?: number };
     description: string; 
     effect?: (pet: any) => any; 
-    icon?: string; // Kept as fallback type, but mostly unused
+    icon?: string; 
     rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary'; 
     price: number; 
     value?: number; 
@@ -366,11 +394,6 @@ export const determineEvolutionPath = (stats: {atk: number, def: number, spd: nu
 
 /**
  * GENERATES "GEMINI 2.5 HIGH-FIDELITY" SVG ART
- * This function simulates the output of a generative AI model like Imagen or Gemini 2.5 Flash Image
- * by creating complex, layered vector graphics with noise gradients, patterns, and holographic effects.
- * 
- * Note: In a production app with backend, this would call `imagen-3.0-generate-001` or `gemini-2.5-flash-image`
- * via the API using a prompt based on the pet's visual design.
  */
 export const getProceduralMonsterArt = (name: string, element: string): string => {
     const colors: any = { 
@@ -521,7 +544,6 @@ export const getLootDrop = (locationId: string): string | null => {
 
 export const getRandomEventText = (locationId: string): string => {
     const loc = LOCATIONS_DB[locationId];
-    // REMOVED LAZY EVENTS - ACTIVE ONLY
     const generic = ["Scouting perimeter.", "Analyzing terrain.", "Hunting for loot.", "Patrolling area.", "Training combat protocols.", "Sprinting through fields.", "Taking a quick nap.", "Scanning for enemies."];
     const specific: Record<string, string[]> = {
         'loc_starter': ["Chasing butterflies.", "Rolling down hills.", "Practicing jumps.", "Target practice.", "Dozing in the sun.", "Leaping over logs."],
@@ -538,19 +560,10 @@ export const getRandomEventText = (locationId: string): string => {
 // STRICT ACTION MAPPING - NO RNG
 export const getActionFromText = (text: string): 'WALK' | 'SLEEP' | 'JUMP' | 'SCAN' | 'RUN' => {
     const lower = text.toLowerCase();
-    
-    // SLEEP Triggers
     if (lower.includes('rest') || lower.includes('nap') || lower.includes('sleep') || lower.includes('doze')) return 'SLEEP'; 
-    
-    // JUMP Triggers
     if (lower.includes('jump') || lower.includes('hop') || lower.includes('dodge') || lower.includes('climb') || lower.includes('leap') || lower.includes('roll')) return 'JUMP';
-    
-    // SCAN Triggers
     if (lower.includes('scan') || lower.includes('hack') || lower.includes('look') || lower.includes('analyz') || lower.includes('navigat')) return 'SCAN';
-    
-    // RUN Triggers
     if (lower.includes('chase') || lower.includes('run') || lower.includes('track') || lower.includes('hunt') || lower.includes('fight') || lower.includes('sprint') || lower.includes('rush')) return 'RUN';
-    
     return 'WALK';
 };
 
