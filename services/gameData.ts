@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -66,7 +65,10 @@ export interface VisualTraits {
     wingStyle?: 'Feather' | 'Bat' | 'Mech' | 'None';
     accessory?: 'Goggles' | 'Scarf' | 'Helmet' | 'Backpack' | 'None';
     build: 'Chunky' | 'Slender' | 'Round';
-    hasEars?: boolean; 
+    hasEars?: boolean;
+    earType?: 'Pointy' | 'Round' | 'Floppy';
+    hasSnout?: boolean;
+    tailStyle?: 'Segmented' | 'Smooth' | 'None'; 
     surfaceFinish?: 'Matte' | 'Glossy' | 'Metallic' | 'Emissive';
     materialType?: 'Standard' | 'Magma' | 'Jelly' | 'Moss'; 
     extractedColors?: {

@@ -12,7 +12,7 @@ import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, Monste
 // --- TYPES ---
 type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP' | 'ITEMS' | 'EXPLORE' | 'CODEX';
 
-const SAVE_VERSION = 'v14.0_CODEX_EXPANSION'; 
+const SAVE_VERSION = 'v15.0_WEB3_UPDATE'; 
 
 interface UserProfile {
   name: string;
@@ -39,6 +39,7 @@ interface Pixupet extends MonsterStats {
   hunger: number; 
   fatigue: number;
   happiness?: number; 
+  isMinted?: boolean;
 }
 
 interface FloatingText { id: number; text: string; x: number; y: number; color: string; }
@@ -120,6 +121,14 @@ const IconTreasure = () => (
         <path d="M2 8l10-6 10 6H2z" fill="#FCD34D" stroke="black" strokeWidth="2"/>
         <rect x="11" y="10" width="2" height="4" fill="black" opacity="0.3"/>
         <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="1" fill="none" opacity="0.5"/>
+    </svg>
+);
+
+const IconWallet = () => (
+    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" fill="#9945FF" stroke="black" strokeWidth="2"/>
+        <path d="M22 12h-4c-1.1 0-2 .9-2 2v4h6v-6z" fill="#14F195" stroke="black" strokeWidth="2"/>
+        <circle cx="20" cy="15" r="1.5" fill="black"/>
     </svg>
 );
 
@@ -400,8 +409,13 @@ export default function App() {
   const [shopOpen, setShopOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [exploreOpen, setExploreOpen] = useState(false);
-  const [codexOpen, setCodexOpen] = useState(false); // CODEX STATE
+  const [codexOpen, setCodexOpen] = useState(false); 
   const [selectedCodexEntry, setSelectedCodexEntry] = useState<MonsterEntry | null>(null);
+  const [walletOpen, setWalletOpen] = useState(false);
+
+  // Web3 State
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [solBalance, setSolBalance] = useState<number>(0);
 
   // Interactive State
   const [isPetIdle, setIsPetIdle] = useState(false);
@@ -695,7 +709,7 @@ export default function App() {
               id: `pet_${Date.now()}`, dateCreated: Date.now(), ...traits,
               voxelCode, level: 1, exp: 0, maxExp: 100, hunger: 80, fatigue: 0, happiness: 80,
               stage: 'Noob', rank: 'Common', potential: 50, currentHp: traits.hp, maxHp: traits.hp,
-              ability: "Glitch Soul", moves: [], imageSource: scanPreview
+              ability: "Glitch Soul", moves: [], imageSource: scanPreview, isMinted: false
           };
           setInventory([...inventory, newPet]);
           setActivePetIndex(inventory.length); 
@@ -720,7 +734,7 @@ export default function App() {
           hp: starter.stats.hp, maxHp: starter.stats.hp, currentHp: starter.stats.hp,
           atk: starter.stats.atk, def: starter.stats.def, spd: starter.stats.spd, int: 10,
           voxelCode, level: 1, exp: 0, maxExp: 100, hunger: 100, fatigue: 0, happiness: 100,
-          stage: 'Noob', rank: 'Starter', potential: 80, ability: 'Starter Will', moves: []
+          stage: 'Noob', rank: 'Starter', potential: 80, ability: 'Starter Will', moves: [], isMinted: false
       };
       setInventory([newPet]);
       setActivePetIndex(0);
@@ -805,6 +819,44 @@ export default function App() {
               iframe.contentWindow.postMessage({ type: 'HIDE_EMOTES' }, '*');
           }
       }, 2000); 
+  };
+
+  // --- WEB3 MOCK SIMULATION ---
+  const connectWallet = async () => {
+      try {
+          const { solana } = window as any;
+          if (solana && solana.isPhantom) {
+              const response = await solana.connect();
+              const key = response.publicKey.toString();
+              setWalletAddress(key);
+              // Mock balance 
+              setSolBalance(Math.floor(Math.random() * 50) + 2.5); 
+              showFloatingText("WALLET CONNECTED!", "text-purple-400");
+          } else {
+              // Simulating connection for demo purposes if no extension
+              if(confirm("Solana Wallet (Phantom) not detected. Simulate connection?")) {
+                  setWalletAddress("7xKQ...j9sT");
+                  setSolBalance(12.45);
+                  showFloatingText("DEV WALLET CONNECTED", "text-purple-400");
+              }
+          }
+      } catch (err) { console.error(err); }
+  };
+
+  const mintNft = () => {
+      if(!walletAddress) { alert("Connect Wallet first!"); return; }
+      if(activePet.isMinted) { alert("This pet is already on-chain!"); return; }
+      
+      const cost = 0.5;
+      if(solBalance < cost) { alert("Insufficient SOL!"); return; }
+
+      if(confirm(`Mint ${activePet.name} for ${cost} SOL?`)) {
+          setSolBalance(prev => prev - cost);
+          const updated = [...inventory];
+          updated[activePetIndex].isMinted = true;
+          setInventory(updated);
+          showFloatingText("MINT SUCCESSFUL!", "text-green-400");
+      }
   };
 
   // --- RENDER ---
@@ -948,37 +1000,90 @@ export default function App() {
 
       <div className="absolute bottom-4 left-4 right-4 bg-white border-4 border-black rounded-2xl p-2 flex justify-between items-end z-20 shadow-[0_10px_20px_rgba(0,0,0,0.4)] h-20 safe-bottom">
           
-          <button onClick={()=>{ setGameState('COLLECTION') }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
+          <button onClick={()=>{ setGameState('COLLECTION') }} className="flex-1 flex flex-col items-center justify-center h-full group active:scale-95 transition-transform">
               <IconCards />
               <span className="text-[9px] font-black uppercase mt-1">Cards</span>
           </button>
 
-          <button onClick={()=>{ setCodexOpen(true) }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
+          <button onClick={()=>{ setCodexOpen(true) }} className="flex-1 flex flex-col items-center justify-center h-full group active:scale-95 transition-transform">
               <IconBook />
               <span className="text-[9px] font-black uppercase mt-1">Dex</span>
           </button>
 
-          <div className="relative w-1/6 flex justify-center z-30">
+           <button onClick={()=>{ setItemsOpen(true) }} className="flex-1 flex flex-col items-center justify-center h-full group active:scale-95 transition-transform">
+              <IconBag />
+              <span className="text-[9px] font-black uppercase mt-1">Bag</span>
+          </button>
+
+          <div className="relative w-1/5 flex justify-center z-30">
               <button onClick={()=>setShowScan(true)} className="absolute -top-12 bg-yellow-400 w-24 h-24 rounded-full border-4 border-black flex items-center justify-center shadow-[0px_6px_0px_0px_#000] hover:-translate-y-2 hover:shadow-[0px_10px_0px_0px_#000] active:translate-y-1 active:shadow-[0px_2px_0px_0px_#000] transition-all overflow-hidden">
                   <div className="text-white drop-shadow-md relative z-10"><IconScan /></div>
               </button>
           </div>
 
-          <button onClick={()=>{ setItemsOpen(true) }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
-              <IconBag />
-              <span className="text-[9px] font-black uppercase mt-1">Bag</span>
-          </button>
-
-          <button onClick={()=>{ setShopOpen(true) }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
+          <button onClick={()=>{ setShopOpen(true) }} className="flex-1 flex flex-col items-center justify-center h-full group active:scale-95 transition-transform">
               <IconCart />
               <span className="text-[9px] font-black uppercase mt-1">Shop</span>
           </button>
 
-          <button onClick={()=>{ setExploreOpen(true) }} className="flex flex-col items-center justify-center w-1/6 h-full group active:scale-95 transition-transform">
+          <button onClick={()=>{ setExploreOpen(true) }} className="flex-1 flex flex-col items-center justify-center h-full group active:scale-95 transition-transform">
               <IconMap />
               <span className="text-[9px] font-black uppercase mt-1">Map</span>
           </button>
+          
+          <button onClick={()=>{ setWalletOpen(true) }} className="flex-1 flex flex-col items-center justify-center h-full group active:scale-95 transition-transform">
+              <IconWallet />
+              <span className="text-[9px] font-black uppercase mt-1">Wallet</span>
+          </button>
       </div>
+
+      {/* WALLET MODAL */}
+      {walletOpen && (
+          <div className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
+              <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden border-4 border-black shadow-[12px_12px_0_#000] pop-in">
+                  <div className="bg-[#9945FF] p-4 flex justify-between items-center border-b-4 border-black">
+                       <h2 className="font-black text-white text-xl flex items-center gap-2"><IconWallet /> SOLANA LINK</h2>
+                       <button onClick={()=>setWalletOpen(false)} className="bg-black text-white w-8 h-8 rounded flex items-center justify-center font-bold">✕</button>
+                  </div>
+                  <div className="p-6 flex flex-col gap-6">
+                      {!walletAddress ? (
+                          <div className="text-center">
+                              <p className="font-bold text-gray-600 mb-6">Connect your Phantom or Solflare wallet to mint your pets as NFTs!</p>
+                              <button onClick={connectWallet} className="w-full bg-[#AB9FF2] text-white py-4 rounded-xl border-4 border-black shadow-[4px_4px_0_black] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-black text-lg">
+                                  CONNECT WALLET
+                              </button>
+                          </div>
+                      ) : (
+                          <>
+                            <div className="bg-gray-100 p-4 rounded-xl border-2 border-black">
+                                <div className="text-xs font-bold text-gray-500 uppercase">Status</div>
+                                <div className="text-green-500 font-black flex items-center gap-2">● CONNECTED</div>
+                                <div className="text-xs font-mono bg-white p-1 border border-gray-300 rounded mt-1 truncate">{walletAddress}</div>
+                            </div>
+                            
+                            <div className="flex justify-between items-center bg-gray-100 p-4 rounded-xl border-2 border-black">
+                                <span className="font-bold text-gray-600">Balance</span>
+                                <span className="font-black text-xl">{solBalance.toFixed(2)} SOL</span>
+                            </div>
+
+                            <div className="border-t-2 border-gray-300 pt-4">
+                                <h3 className="font-black text-lg mb-2">Active Pet: {activePet.name}</h3>
+                                {activePet.isMinted ? (
+                                    <div className="bg-green-100 text-green-700 p-3 rounded-lg border-2 border-green-500 font-black text-center">
+                                        ✅ NFT MINTED
+                                    </div>
+                                ) : (
+                                    <button onClick={mintNft} className="w-full bg-black text-white py-3 rounded-xl font-black hover:bg-gray-800 border-2 border-gray-600">
+                                        MINT AS NFT (0.5 SOL)
+                                    </button>
+                                )}
+                            </div>
+                          </>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
 
       {codexOpen && (
           <div className="absolute inset-0 z-50 bg-slate-900 flex flex-col overflow-hidden">
