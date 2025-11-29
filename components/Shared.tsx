@@ -3,7 +3,7 @@ import React, { useRef, useEffect, memo } from 'react';
 import { Pixupet, getProceduralMonsterArt, ELEMENT_THEMES } from '../services/gameData';
 import { makeBackgroundTransparent } from '../utils/html';
 
-export const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', theme = 'Grass', equipment, onInteract, onStateChange, preEvent, eventActive }: { code: string, mode?: string, action?: string, theme?: string, equipment?: any, onInteract?: ()=>void, onStateChange?: (s:string)=>void, preEvent?: string, eventActive?: boolean }) => {
+export const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', envData, equipment, onInteract, onStateChange, preEvent, eventActive }: { code: string, mode?: string, action?: string, envData?: { envType: string, isNight: boolean }, equipment?: any, onInteract?: ()=>void, onStateChange?: (s:string)=>void, preEvent?: string, eventActive?: boolean }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -27,11 +27,12 @@ export const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', them
       }
   }, [action]);
 
+  // Pass Environment Data
   useEffect(() => {
-      if (iframeRef.current && iframeRef.current.contentWindow) {
-          iframeRef.current.contentWindow.postMessage({ type: 'SET_THEME', value: theme }, '*');
+      if (iframeRef.current && iframeRef.current.contentWindow && envData) {
+          iframeRef.current.contentWindow.postMessage({ type: 'SET_ENV_DATA', payload: envData }, '*');
       }
-  }, [theme]);
+  }, [envData]);
 
   useEffect(() => {
     if (iframeRef.current && iframeRef.current.contentWindow) {
@@ -67,9 +68,12 @@ export const VoxelViewer = memo(({ code, mode = 'HABITAT', action = 'WALK', them
   );
 });
 
-export const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void }> = ({ pet, onClick }) => {
+export const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void, mode?: 'GRID' | 'DETAIL' }> = ({ pet, onClick, mode = 'GRID' }) => {
     const theme = ELEMENT_THEMES[pet.element] || ELEMENT_THEMES.Metal;
     
+    // PRIORITIZE 3D SNAPSHOT -> ORIGINAL PHOTO -> PROCEDURAL ART
+    const displayImage = pet.cardArtUrl || pet.imageSource || getProceduralMonsterArt(pet.name, pet.element);
+
     return (
         <div onClick={onClick} className="tcg-card w-full aspect-[3/4.5] flex flex-col cursor-pointer group relative bg-gray-900">
              {/* HEADER */}
@@ -84,8 +88,8 @@ export const PixuCard: React.FC<{ pet: Pixupet, onClick?: () => void }> = ({ pet
              {/* IMAGE AREA */}
              <div className="flex-1 relative overflow-hidden border-b-4 border-black bg-gradient-to-br from-gray-700 to-black group-hover:bg-gradient-to-br group-hover:from-gray-600 group-hover:to-gray-900 transition-colors">
                  <div className="absolute inset-0 flex items-center justify-center p-4">
-                    <div className="w-full h-full flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity">
-                        <img src={getProceduralMonsterArt(pet.name, pet.element)} className="w-full h-full object-contain drop-shadow-[0_8px_0_rgba(0,0,0,0.5)]" alt={pet.name} />
+                    <div className="w-full h-full flex items-center justify-center opacity-100 group-hover:scale-105 transition-transform">
+                        <img src={displayImage} className="w-full h-full object-contain drop-shadow-[0_8px_0_rgba(0,0,0,0.5)]" alt={pet.name} />
                     </div>
                  </div>
                  <div className="absolute bottom-1 right-1 bg-black/80 px-2 py-0.5 rounded text-[9px] text-white backdrop-blur-md border border-white/30 font-bold uppercase tracking-wide">

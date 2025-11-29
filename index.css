@@ -125,6 +125,22 @@ body {
     background-size: 4px 4px;
 }
 
+/* HOLOGRAPHIC SHINE (New for Rare items) */
+.holographic {
+    position: relative;
+    overflow: hidden;
+}
+.holographic::before {
+    content: "";
+    position: absolute;
+    top: 0; left: -100%; width: 200%; height: 100%;
+    background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.4) 50%, transparent 60%);
+    animation: shine-sweep 3s infinite;
+}
+@keyframes shine-sweep {
+    to { transform: translateX(100%); }
+}
+
 /* --- MAP STYLES --- */
 .map-grid {
     background-color: #1e293b;
@@ -149,6 +165,9 @@ body {
 .fade-in { animation: fadeIn 0.3s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
+.zoom-in { animation: zoomIn 0.3s ease-out forwards; }
+@keyframes zoomIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
 .shop-pop { animation: shopPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 @keyframes shopPop {
     0% { transform: scale(0) rotate(-180deg); opacity: 0; }
@@ -163,23 +182,35 @@ body {
     100% { opacity: 0.2; transform: translateX(30px); }
 }
 
-/* SCAN-LINE FOR CODEX */
+/* BATTLE SLIDE ANIMATIONS */
+@keyframes slideInLeft {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* SCAN-LINE FOR CAMERA/CODEX */
 .scan-line {
     width: 100%;
-    height: 2px;
-    background: rgba(255, 255, 255, 0.5);
-    animation: scan 2s linear infinite;
+    height: 4px;
+    background: rgba(59, 130, 246, 0.8); /* Blue scan */
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+    animation: scan 2.5s linear infinite;
     position: absolute;
     top: 0;
     left: 0;
     pointer-events: none;
     z-index: 60;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
 @keyframes scan {
-    0% { top: 0%; }
-    100% { top: 100%; }
+    0% { top: 0%; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
 }
 
 /* SAFE AREA PADDING */

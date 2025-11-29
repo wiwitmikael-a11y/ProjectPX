@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -6,6 +7,18 @@
 import { getGenericVoxel } from './gemini';
 
 // --- SHARED TYPES ---
+export interface ActiveMission {
+    id: string;
+    title: string;
+    description: string;
+    targetName: string;
+    difficulty: string;
+    rewards: string;
+    progress: number;
+    goal: number;
+    isActive: boolean;
+}
+
 export interface UserProfile {
   name: string;
   level: number;
@@ -17,589 +30,355 @@ export interface UserProfile {
   currentRank: string;
   seen: string[]; 
   caught: string[]; 
+  lastSaveTime?: number;
+  lastDailyBonus?: number;
+  kills?: number;
+  activeMission?: ActiveMission; // NEW
 }
 
-export interface Pixupet extends MonsterStats {
-  voxelCode: string;
-  imageSource?: string;
-  cardArtUrl?: string;
-  currentHp?: number; 
-  maxHp?: number; 
-  level: number;
-  exp: number;
-  maxExp: number;
-  hunger: number; 
-  fatigue: number;
-  happiness?: number; 
+export interface Move {
+    name: string;
+    type: string;
+    power: number;
+    accuracy: number;
+    description: string;
 }
 
-export type BodyType = 'BIPED' | 'QUADRUPED' | 'FLOATING' | 'WHEELED' | 'SERPENTINE';
-export type AITactic = 'BALANCED' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SPEEDSTER';
-export type MonsterStage = 'Noob' | 'Pro' | 'Elite' | 'Legend';
-export type EquipmentSlot = 'HEAD' | 'BODY' | 'ACCESSORY';
+// --- MODULAR PARTS SYSTEM (SPORE-LIKE) ---
+export interface AttachedPart {
+    id: string; // Unique instance ID
+    partId: string; // Ref to PARTS_DB
+    position: { x: number, y: number, z: number };
+    rotation: { x: number, y: number, z: number }; // stored for persistence
+    faceNormal: { x: number, y: number, z: number }; // used for orientation
+    partType: string;
+}
 
-export const ELEMENT_THEMES: Record<string, { bg: string; text: string; icon: string }> = {
-    Fire: { bg: 'bg-red-500', text: 'text-red-500', icon: '🔥' },
-    Water: { bg: 'bg-blue-500', text: 'text-blue-500', icon: '💧' },
-    Grass: { bg: 'bg-green-500', text: 'text-green-500', icon: '🌿' },
-    Electric: { bg: 'bg-yellow-400', text: 'text-yellow-500', icon: '⚡' },
-    Psychic: { bg: 'bg-purple-500', text: 'text-purple-500', icon: '🔮' },
-    Metal: { bg: 'bg-gray-400', text: 'text-gray-500', icon: '🔩' },
-    Dark: { bg: 'bg-gray-800', text: 'text-gray-400', icon: '🌑' },
-    Light: { bg: 'bg-yellow-100', text: 'text-yellow-600', icon: '✨' },
-    Spirit: { bg: 'bg-indigo-400', text: 'text-indigo-400', icon: '👻' },
-    Toxic: { bg: 'bg-lime-500', text: 'text-lime-600', icon: '☠️' },
-    Neutral: { bg: 'bg-gray-300', text: 'text-gray-600', icon: '🥚' }
+export interface PartDefinition {
+    id: string;
+    name: string;
+    category: 'LOCOMOTION' | 'OFFENSE' | 'SENSOR' | 'UTILITY' | 'COSMETIC';
+    rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic' | 'God';
+    cost: number; // Resale/Recycle Value
+    stats: { hp?: number, atk?: number, def?: number, spd?: number, int?: number };
+    description: string;
+    voxelShapeType: string;
+    colorTheme: 'Metal' | 'Accent' | 'Primary' | 'Energy' | 'Void' | 'Gold';
+}
+
+export const PARTS_DB: Record<string, PartDefinition> = {
+    // STARTING / BASIC
+    'part_leg_basic': { id: 'part_leg_basic', name: 'Starter Leg', category: 'LOCOMOTION', rarity: 'Common', cost: 10, stats: { spd: 5 }, description: 'Basic mobility unit.', voxelShapeType: 'LEG_BASIC', colorTheme: 'Primary' },
+    'part_sensor_lite': { id: 'part_sensor_lite', name: 'Basic Eye', category: 'SENSOR', rarity: 'Common', cost: 10, stats: { int: 5 }, description: 'Standard visual input.', voxelShapeType: 'SENSOR', colorTheme: 'Accent' },
+    
+    // CUTE / KIRBY STYLE
+    'part_arm_stubby': { id: 'part_arm_stubby', name: 'Stubby Arm', category: 'UTILITY', rarity: 'Common', cost: 20, stats: { atk: 5 }, description: 'Small, round, and ready to hug.', voxelShapeType: 'ARM_STUBBY', colorTheme: 'Primary' },
+    'part_shoe_round': { id: 'part_shoe_round', name: 'Round Shoe', category: 'LOCOMOTION', rarity: 'Common', cost: 20, stats: { spd: 8 }, description: 'Comfy walking gear.', voxelShapeType: 'SHOE_ROUND', colorTheme: 'Accent' },
+    'part_blush': { id: 'part_blush', name: 'Blush Sticker', category: 'COSMETIC', rarity: 'Common', cost: 15, stats: { hp: 10 }, description: 'Increases cuteness by 200%.', voxelShapeType: 'BLUSH', colorTheme: 'Primary' },
+    'part_ears_cat': { id: 'part_ears_cat', name: 'Neko Ears', category: 'COSMETIC', rarity: 'Rare', cost: 120, stats: { spd: 5, int: 5 }, description: 'Hear the digital purrs.', voxelShapeType: 'EARS_CAT', colorTheme: 'Primary' },
+
+    // MECH / HEAVY
+    'part_tracks': { id: 'part_tracks', name: 'Tank Treads', category: 'LOCOMOTION', rarity: 'Rare', cost: 200, stats: { def: 15, spd: -5, hp: 20 }, description: 'Crush terrain with heavy metal.', voxelShapeType: 'TRACKS', colorTheme: 'Metal' },
+    'part_mech_leg': { id: 'part_mech_leg', name: 'Servo Leg', category: 'LOCOMOTION', rarity: 'Rare', cost: 150, stats: { spd: 8, atk: 2 }, description: 'Agile robotic limb.', voxelShapeType: 'LEG_MECH', colorTheme: 'Primary' },
+    'part_cannon': { id: 'part_cannon', name: 'Plasma Cannon', category: 'OFFENSE', rarity: 'Epic', cost: 500, stats: { atk: 25, spd: -2 }, description: 'High caliber energy output.', voxelShapeType: 'CANNON', colorTheme: 'Accent' },
+    'part_spike': { id: 'part_spike', name: 'Titan Spike', category: 'OFFENSE', rarity: 'Common', cost: 50, stats: { atk: 10, def: 5 }, description: 'Sharp and dangerous.', voxelShapeType: 'SPIKE', colorTheme: 'Accent' },
+    'part_dish': { id: 'part_dish', name: 'Radar Dish', category: 'SENSOR', rarity: 'Rare', cost: 300, stats: { int: 20, spd: 5 }, description: 'Scans for weakness.', voxelShapeType: 'DISH', colorTheme: 'Metal' },
+    'part_eye_cyclops': { id: 'part_eye_cyclops', name: 'Cyclops Eye', category: 'SENSOR', rarity: 'Rare', cost: 100, stats: { int: 10 }, description: 'Single optic precision.', voxelShapeType: 'EYE_CYCLOPS', colorTheme: 'Metal' },
+    'part_wing_mech': { id: 'part_wing_mech', name: 'Aero Wing', category: 'LOCOMOTION', rarity: 'Epic', cost: 400, stats: { spd: 20, atk: 5 }, description: 'Aerodynamic plating.', voxelShapeType: 'WING_MECH', colorTheme: 'Primary' },
+
+    // COSMETIC / ENHANCED
+    'part_halo': { id: 'part_halo', name: 'Angel Halo', category: 'COSMETIC', rarity: 'Legendary', cost: 800, stats: { hp: 50, int: 20 }, description: 'Divine energy ring.', voxelShapeType: 'HALO', colorTheme: 'Energy' },
+    'part_jetpack': { id: 'part_jetpack', name: 'Rocket Pack', category: 'UTILITY', rarity: 'Epic', cost: 600, stats: { spd: 25 }, description: 'Boost jump capability.', voxelShapeType: 'JETPACK', colorTheme: 'Metal' },
+    'part_tail_dino': { id: 'part_tail_dino', name: 'Dino Tail', category: 'COSMETIC', rarity: 'Rare', cost: 250, stats: { atk: 10, def: 5 }, description: 'For balance and whacking.', voxelShapeType: 'TAIL_DINO', colorTheme: 'Primary' },
+
+    // GOD TIER / MYTHIC (AAA UPDATE)
+    'part_drill_heavy': { id: 'part_drill_heavy', name: 'Giga Drill', category: 'LOCOMOTION', rarity: 'Mythic', cost: 1500, stats: { atk: 40, spd: 10, def: 10 }, description: 'Pierces the heavens.', voxelShapeType: 'DRILL', colorTheme: 'Metal' },
+    'part_katana_cyber': { id: 'part_katana_cyber', name: 'Neon Katana', category: 'OFFENSE', rarity: 'Mythic', cost: 2000, stats: { atk: 60, spd: 15 }, description: 'Sharp enough to cut glitches.', voxelShapeType: 'KATANA', colorTheme: 'Energy' },
+    'part_wings_god': { id: 'part_wings_god', name: 'Seraphim Wings', category: 'UTILITY', rarity: 'God', cost: 9999, stats: { spd: 50, hp: 100, int: 50 }, description: 'Transcendent flight modules.', voxelShapeType: 'WINGS_GOD', colorTheme: 'Gold' },
+    'part_cannon_void': { id: 'part_cannon_void', name: 'Void Launcher', category: 'OFFENSE', rarity: 'God', cost: 8500, stats: { atk: 80, int: 20 }, description: 'Channels dark matter.', voxelShapeType: 'CANNON_VOID', colorTheme: 'Void' }
 };
 
-export const EVO_THRESHOLDS = {
-    PRO: 10,
-    ELITE: 25,
-    LEGEND: 50
+export const GACHA_POOLS = {
+    STANDARD: { cost: 100, pool: ['part_leg_basic', 'part_sensor_lite', 'part_arm_stubby', 'part_shoe_round', 'part_spike', 'part_blush', 'pixel_burger', 'potion_small', 'part_ears_cat'] },
+    PREMIUM: { cost: 500, pool: ['part_tracks', 'part_mech_leg', 'part_cannon', 'part_dish', 'part_wing_mech', 'part_eye_cyclops', 'part_halo', 'part_jetpack', 'part_tail_dino', 'part_drill_heavy', 'part_katana_cyber'] },
+    GOD_MODE: { cost: 2000, pool: ['part_wings_god', 'part_cannon_void', 'nano_repair_kit', 'part_drill_heavy', 'part_katana_cyber', 'part_halo'] }
 };
-
-export interface VisualTraits {
-    hasHorns: boolean;
-    hornStyle?: 'Uni' | 'Dual' | 'Antenna' | 'None';
-    hasWings: boolean;
-    wingStyle?: 'Feather' | 'Bat' | 'Mech' | 'None';
-    accessory?: 'Goggles' | 'Scarf' | 'Helmet' | 'Backpack' | 'None';
-    build: 'Chunky' | 'Slender' | 'Round';
-    hasEars?: boolean;
-    earType?: 'Pointy' | 'Round' | 'Floppy';
-    hasSnout?: boolean;
-    tailStyle?: 'Segmented' | 'Smooth' | 'None'; 
-    surfaceFinish?: 'Matte' | 'Glossy' | 'Metallic' | 'Emissive';
-    materialType?: 'Standard' | 'Magma' | 'Jelly' | 'Moss'; 
-    extractedColors?: {
-        primary: string;   
-        secondary: string; 
-        accent: string;    
-    };
-    specialFeature?: 'ThrusterFlames' | 'GlowingEyes' | 'None';
-}
 
 export interface GameItem {
-    id: string; 
-    name: string; 
-    type: 'Consumable' | 'Material' | 'Key' | 'Food' | 'Gear';
-    slot?: EquipmentSlot; 
-    statBonus?: { atk?: number, def?: number, spd?: number, hp?: number, int?: number };
-    description: string; 
-    effect?: (pet: any) => any; 
-    icon?: string; 
-    rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary'; 
-    price: number; 
-    value?: number; 
+    id: string;
+    name: string;
+    type: 'Food' | 'Potion' | 'Material' | 'Consumable' | 'Artifact'; 
+    effect?: { stat: string, val: number };
+    price: number;
+    rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic' | 'God';
+    description: string;
 }
 
 export const ITEMS_DB: Record<string, GameItem> = {
-    // FOOD
-    'pixel_pizza': { id: 'pixel_pizza', name: 'Pixel Pizza', type: 'Food', description: '+40 Hunger.', rarity: 'Common', price: 30, effect: (p)=>({ ...p, hunger: Math.min(100, p.hunger+40) }) },
-    'data_burger': { id: 'data_burger', name: 'Data Burger', type: 'Food', description: '+60 Hunger.', rarity: 'Common', price: 60, effect: (p)=>({ ...p, hunger: Math.min(100, p.hunger+60) }) },
-    'neon_soda': { id: 'neon_soda', name: 'Neon Soda', type: 'Food', description: '+20 Hunger.', rarity: 'Common', price: 40, effect: (p)=>({ ...p, hunger: Math.min(100, p.hunger+20) }) },
-    'glitch_steak': { id: 'glitch_steak', name: 'Glitch Steak', type: 'Food', description: '+90 Hunger. Spicy!', rarity: 'Rare', price: 150, effect: (p)=>({ ...p, hunger: Math.min(100, p.hunger+90) }) },
-
-    // CONSUMABLES
-    'potion_small': { id: 'potion_small', name: 'Small Potion', type: 'Consumable', description: '+20 HP.', rarity: 'Common', price: 50, effect: (p)=>({ ...p, currentHp: Math.min(p.maxHp, p.currentHp+20) }) },
-    'potion_super': { id: 'potion_super', name: 'Super Potion', type: 'Consumable', description: '+60 HP.', rarity: 'Rare', price: 150, effect: (p)=>({ ...p, currentHp: Math.min(p.maxHp, p.currentHp+60) }) },
-    'revive_chip': { id: 'revive_chip', name: 'Revive Chip', type: 'Consumable', description: 'Revive 50% HP.', rarity: 'Epic', price: 500, effect: (p)=>({ ...p, currentHp: p.currentHp<=0 ? Math.floor(p.maxHp*0.5) : p.currentHp }) },
-
-    // MATERIALS
-    'chip_fire': { id: 'chip_fire', name: 'Magma Chip', type: 'Material', description: 'Warm to the touch.', rarity: 'Rare', price: 300 },
-    'chip_water': { id: 'chip_water', name: 'Tidal Chip', type: 'Material', description: 'Always damp.', rarity: 'Rare', price: 300 },
-    'chip_grass': { id: 'chip_grass', name: 'Bloom Chip', type: 'Material', description: 'Smells like rain.', rarity: 'Rare', price: 300 },
-    'chip_electric': { id: 'chip_electric', name: 'Volt Chip', type: 'Material', description: 'Zaps your finger.', rarity: 'Rare', price: 300 },
-    'chip_metal': { id: 'chip_metal', name: 'Alloy Chip', type: 'Material', description: 'Heavy and cold.', rarity: 'Rare', price: 300 },
-    'chip_dark': { id: 'chip_dark', name: 'Void Chip', type: 'Material', description: 'Absorbs light.', rarity: 'Epic', price: 600 },
-
-    // VITAMINS
-    'vitamin_hp': { id: 'vitamin_hp', name: 'HP Up', type: 'Consumable', description: 'Perm +5 Max HP.', rarity: 'Epic', price: 1000, effect: (p)=>({ ...p, maxHp: p.maxHp+5, currentHp: p.currentHp+5 }) },
-    'vitamin_atk': { id: 'vitamin_atk', name: 'Protein', type: 'Consumable', description: 'Perm +1 ATK.', rarity: 'Epic', price: 1000, effect: (p)=>({ ...p, atk: p.atk+1 }) },
-
-    // GEAR - HEAD
-    'helm_visor': { id: 'helm_visor', name: 'Tactical Visor', type: 'Gear', slot: 'HEAD', statBonus: { atk: 5, spd: 2 }, description: '+5 ATK. Scanner active.', rarity: 'Rare', price: 800 },
-    'helm_iron': { id: 'helm_iron', name: 'Iron Helmet', type: 'Gear', slot: 'HEAD', statBonus: { def: 8 }, description: '+8 DEF. Solid protection.', rarity: 'Rare', price: 900 },
-    'helm_cyber': { id: 'helm_cyber', name: 'Cyber Casque', type: 'Gear', slot: 'HEAD', statBonus: { def: 12, int: 5 }, description: 'Advanced neural link.', rarity: 'Epic', price: 1800 },
-    'helm_crown': { id: 'helm_crown', name: 'King Crown', type: 'Gear', slot: 'HEAD', statBonus: { atk: 10, def: 5, spd: 5 }, description: 'Fit for a legend.', rarity: 'Legendary', price: 5000 },
-
-    // GEAR - BODY
-    'armor_plate': { id: 'armor_plate', name: 'Steel Plate', type: 'Gear', slot: 'BODY', statBonus: { def: 10 }, description: '+10 DEF. Heavy plating.', rarity: 'Rare', price: 1000 },
-    'armor_vest': { id: 'armor_vest', name: 'Speed Vest', type: 'Gear', slot: 'BODY', statBonus: { spd: 8, def: 2 }, description: '+8 SPD. Light & fast.', rarity: 'Rare', price: 1000 },
-    'armor_void': { id: 'armor_void', name: 'Void Shell', type: 'Gear', slot: 'BODY', statBonus: { def: 20, hp: 50 }, description: 'Absorbs impact.', rarity: 'Legendary', price: 6000 },
-    
-    // GEAR - ACCESSORY (Backpacks, Wings, Rings)
-    'acc_ring': { id: 'acc_ring', name: 'Power Ring', type: 'Gear', slot: 'ACCESSORY', statBonus: { atk: 8 }, description: '+8 ATK. Glowing red.', rarity: 'Rare', price: 1200 },
-    'acc_boots': { id: 'acc_boots', name: 'Turbo Boots', type: 'Gear', slot: 'ACCESSORY', statBonus: { spd: 10 }, description: '+10 SPD. Gotta go fast.', rarity: 'Epic', price: 1500 },
-    'acc_charm': { id: 'acc_charm', name: 'Lucky Charm', type: 'Gear', slot: 'ACCESSORY', statBonus: { hp: 50 }, description: '+50 HP. Feels lucky.', rarity: 'Epic', price: 1500 },
-    'wings_angel': { id: 'wings_angel', name: 'Holo Wings', type: 'Gear', slot: 'ACCESSORY', statBonus: { spd: 15, atk: 5 }, description: 'Flight module enabled.', rarity: 'Legendary', price: 8000 },
-    'pack_jet': { id: 'pack_jet', name: 'Jet Thruster', type: 'Gear', slot: 'ACCESSORY', statBonus: { spd: 12 }, description: 'Boost propulsion.', rarity: 'Epic', price: 4500 },
-    
-    // DRIVERS
-    'driver_crimson': { id: 'driver_crimson', name: 'Crimson Driver', type: 'Consumable', description: 'Temp +5 ATK Boost.', rarity: 'Rare', price: 500, effect: (p)=>({ ...p, atk: p.atk+5 }) },
-    'mystery_box': { id: 'mystery_box', name: 'Mystery Box', type: 'Consumable', description: 'Random Loot.', rarity: 'Epic', price: 500 }
+    'pixel_pizza': { id: 'pixel_pizza', name: 'Glitch Pizza', type: 'Food', effect: { stat: 'hunger', val: 30 }, price: 50, rarity: 'Common', description: 'Restores 30 Hunger.' },
+    'pixel_burger': { id: 'pixel_burger', name: 'Byte Burger', type: 'Food', effect: { stat: 'hunger', val: 50 }, price: 80, rarity: 'Common', description: 'Restores 50 Hunger.' },
+    'potion_small': { id: 'potion_small', name: 'Data Tonic', type: 'Potion', effect: { stat: 'hp', val: 50 }, price: 100, rarity: 'Common', description: 'Restores 50 HP.' },
+    'nano_repair_kit': { id: 'nano_repair_kit', name: 'Nano Repair Kit', type: 'Consumable', effect: { stat: 'hp', val: 999 }, price: 1000, rarity: 'Mythic', description: 'Full Repair + Fatigue Reset.' },
+    'ancient_chip': { id: 'ancient_chip', name: 'Ancient Chip', type: 'Material', price: 500, rarity: 'Legendary', description: 'A relic from the old web.' },
+    'unidentified_artifact': { id: 'unidentified_artifact', name: 'Strange Artifact', type: 'Artifact', price: 5000, rarity: 'God', description: 'Needs AI Analysis.' },
 };
-
-export interface LocationNode {
-    id: string;
-    name: string;
-    description: string;
-    levelReq: number;
-    difficultyMod: number;
-    lootTier: number;
-    coinMod: number;
-    x: number; 
-    y: number; 
-    connections: string[];
-    color: string;
-    enemyTheme: string[]; 
-    exclusiveLoot: string[]; 
-    environmentType?: string; 
-}
-
-export const LOCATIONS_DB: Record<string, LocationNode> = {
-    'loc_starter': {
-        id: 'loc_starter', name: 'Green Hills', description: 'Peaceful plains for beginners.',
-        levelReq: 1, difficultyMod: 1.0, lootTier: 1, coinMod: 1.0,
-        x: 50, y: 90, connections: ['loc_woods', 'loc_coast'], 
-        color: 'bg-green-400', enemyTheme: ['Grass', 'Light'], exclusiveLoot: ['pixel_pizza'], environmentType: 'Grass'
-    },
-    'loc_woods': {
-        id: 'loc_woods', name: 'Whispering Woods', description: 'Dense forest teeming with life.',
-        levelReq: 5, difficultyMod: 1.2, lootTier: 1, coinMod: 1.1,
-        x: 30, y: 80, connections: ['loc_starter', 'loc_swamp'], 
-        color: 'bg-emerald-500', enemyTheme: ['Grass', 'Toxic'], exclusiveLoot: ['chip_grass'], environmentType: 'Grass'
-    },
-    'loc_coast': {
-        id: 'loc_coast', name: 'Sapphire Coast', description: 'The tides bring treasures.',
-        levelReq: 5, difficultyMod: 1.2, lootTier: 1, coinMod: 1.2,
-        x: 70, y: 80, connections: ['loc_starter', 'loc_city'], 
-        color: 'bg-blue-400', enemyTheme: ['Water'], exclusiveLoot: ['chip_water'], environmentType: 'Water'
-    },
-    'loc_caldera': {
-        id: 'loc_caldera', name: 'Crimson Caldera', description: 'Extreme heat. Fire bots only.',
-        levelReq: 15, difficultyMod: 1.8, lootTier: 2, coinMod: 1.5,
-        x: 10, y: 60, connections: ['loc_woods', 'loc_foundry'], 
-        color: 'bg-red-500', enemyTheme: ['Fire', 'Metal'], exclusiveLoot: ['chip_fire', 'driver_crimson'], environmentType: 'Fire'
-    },
-    'loc_peaks': {
-        id: 'loc_peaks', name: 'Thunder Peaks', description: 'Stormy heights.',
-        levelReq: 15, difficultyMod: 1.8, lootTier: 2, coinMod: 1.5,
-        x: 90, y: 60, connections: ['loc_coast', 'loc_sanctum'], 
-        color: 'bg-yellow-400', enemyTheme: ['Electric', 'Light'], exclusiveLoot: ['chip_electric'], environmentType: 'Electric'
-    },
-    'loc_city': {
-        id: 'loc_city', name: 'Neon Metropolis', description: 'The hub of cyber-commerce.',
-        levelReq: 20, difficultyMod: 2.0, lootTier: 2, coinMod: 2.5, 
-        x: 50, y: 50, connections: ['loc_coast', 'loc_foundry', 'loc_sanctum'], 
-        color: 'bg-cyan-500', enemyTheme: ['Electric', 'Metal'], exclusiveLoot: ['neon_soda', 'data_burger', 'helm_cyber'], environmentType: 'Metal'
-    },
-    'loc_foundry': {
-        id: 'loc_foundry', name: 'Iron Foundry', description: 'Heavy industrial zone.',
-        levelReq: 25, difficultyMod: 2.5, lootTier: 3, coinMod: 1.8,
-        x: 30, y: 40, connections: ['loc_city', 'loc_caldera', 'loc_waste'], 
-        color: 'bg-slate-500', enemyTheme: ['Metal', 'Fire'], exclusiveLoot: ['chip_metal', 'helm_iron'], environmentType: 'Metal'
-    },
-    'loc_sanctum': {
-        id: 'loc_sanctum', name: 'Mystic Sanctum', description: 'Reality bends here.',
-        levelReq: 25, difficultyMod: 2.5, lootTier: 3, coinMod: 1.8,
-        x: 70, y: 40, connections: ['loc_city', 'loc_peaks', 'loc_waste'], 
-        color: 'bg-purple-500', enemyTheme: ['Psychic', 'Spirit'], exclusiveLoot: ['potion_super', 'acc_ring'], environmentType: 'Psychic'
-    },
-    'loc_swamp': {
-        id: 'loc_swamp', name: 'Toxic Waste', description: 'Polluted data streams.',
-        levelReq: 30, difficultyMod: 3.0, lootTier: 3, coinMod: 2.0,
-        x: 10, y: 30, connections: ['loc_woods', 'loc_waste'], 
-        color: 'bg-lime-500', enemyTheme: ['Toxic', 'Dark'], exclusiveLoot: ['revive_chip'], environmentType: 'Toxic'
-    },
-    'loc_waste': {
-        id: 'loc_waste', name: 'Glitch Badlands', description: 'Unstable reality.',
-        levelReq: 40, difficultyMod: 3.5, lootTier: 4, coinMod: 2.5,
-        x: 50, y: 30, connections: ['loc_city', 'loc_foundry', 'loc_sanctum', 'loc_void'], 
-        color: 'bg-pink-600', enemyTheme: ['Dark', 'Psychic'], exclusiveLoot: ['glitch_steak', 'vitamin_hp', 'acc_charm'], environmentType: 'Psychic'
-    },
-    'loc_void': {
-        id: 'loc_void', name: 'The Glitch Layer', description: 'Absolute chaos. Legends only.',
-        levelReq: 50, difficultyMod: 5.0, lootTier: 5, coinMod: 5.0,
-        x: 50, y: 10, connections: ['loc_waste'], 
-        color: 'bg-violet-900 border-white', enemyTheme: ['Dark', 'Spirit', 'Metal', 'Fire'], exclusiveLoot: ['chip_dark', 'vitamin_atk', 'mystery_box', 'helm_crown', 'armor_void', 'wings_angel'], environmentType: 'Dark'
-    }
-};
-
-export const GAME_HINTS = [
-    "Equipment adds permanent stats. Find Gear in high-level zones.",
-    "Neon Metropolis is the best place to farm Gold.",
-    "The Glitch Layer drops Legendary Gear.",
-    "Evolution happens at Level 10, 25, and 50.",
-    "Tougher zones give significantly more XP.",
-    "Matchups: Water > Fire > Grass > Water | Electric > Metal.",
-];
-
-export const PET_SPEECH = [
-    "Yo Tamer!", "Where are we going?", "I'm hungry...", "Nice shoes!", "Did you hear that?",
-    "My gear is awesome.", "Am I real?", "Is this the matrix?", "I smell loot.",
-    "Let's battle!", "Need upgrades!", "You're the best.", "Pixels look crisp today.",
-    "Scanning...", "No bugs found.", "System optimal.", "Ready for action.",
-    "Don't leave me!", "Infinite world?", "Look at those graphics.", "Can I have a snack?",
-    "Charging...", "Updates pending...", "Hello world!"
-];
-
-export const getPetSpeech = (): string => {
-    return PET_SPEECH[Math.floor(Math.random() * PET_SPEECH.length)];
-};
-
-export const EMOTE_ICONS: Record<string, string> = {
-    'BATTLE': '❗',
-    'TREASURE': '💎',
-    'HAZARD': '💀',
-    'DISCOVERY': '❓'
-};
-
-export interface Move {
-    name: string; type: string; power: number; accuracy: number; description: string;
-}
 
 export interface MonsterStats {
-    id: string; dateCreated: number; name: string; element: string; rarity: string;
-    stage: MonsterStage; rank: string; nature: string; personality?: string;
-    visual_design: string; bodyType: BodyType; potential: number;
-    visualTraits?: VisualTraits; 
-    hp: number; maxHp?: number; atk: number; def: number; spd: number; int: number;
-    description: string; ability: string; moves: Move[]; tactic?: AITactic; happiness?: number;
-    equipment?: {
-        head?: string;
-        body?: string;
-        accessory?: string;
-    };
+    hp: number; atk: number; def: number; spd: number;
 }
-
-export interface OfflineReport {
-    secondsAway: number; xpGained: number; coinsFound: number;
-    hungerLost: number; hpLost: number; events: string[];
-}
-
-// --- MONSTER CODEX DATABASE (THE PIXU-DEX) ---
 
 export interface MonsterEntry {
-    id: string;
+    speciesId: string;
     name: string;
     element: string;
+    stats: MonsterStats;
+    visualTraits: any; 
     description: string;
-    habitat: string;
-    baseStats: { hp: number; atk: number; def: number; spd: number };
-    visual_design: string;
 }
 
 export const MONSTER_DB: Record<string, MonsterEntry> = {
-    // Starters
-    'PYRO-BIT': { id: 'PYRO-BIT', name: 'PYRO-BIT', element: 'Fire', description: 'A hybrid of a fox and a retro toaster. Its internal heating elements glow with intense heat.', habitat: 'Crimson Caldera (Native)', baseStats: { hp: 100, atk: 25, def: 15, spd: 20 }, visual_design: 'Transparent fox with glowing internal ribs.' },
-    'FIZZ-BOT': { id: 'FIZZ-BOT', name: 'FIZZ-BOT', element: 'Water', description: 'A bubble-tea mech piloted by a tiny axolotl. Hovering on carbonated thrusters.', habitat: 'Sapphire Coast (Native)', baseStats: { hp: 110, atk: 15, def: 18, spd: 15 }, visual_design: 'Floating blue cup with pink thrusters.' },
-    'MOSS-AMP': { id: 'MOSS-AMP', name: 'MOSS-AMP', element: 'Grass', description: 'A groovy frog carrying a massive mossy boombox. Emits heavy bass frequencies.', habitat: 'Whispering Woods (Native)', baseStats: { hp: 150, atk: 20, def: 25, spd: 10 }, visual_design: 'Green frog with speaker box on back.' },
-    
-    // Wild Bots (Procedural Archetypes)
-    'BOT_FIRE': { id: 'BOT_FIRE', name: 'Magma Drone', element: 'Fire', description: 'A standard security bot found in volcanic regions. Powered by a unstable core.', habitat: 'Crimson Caldera', baseStats: { hp: 80, atk: 20, def: 10, spd: 15 }, visual_design: 'Robot with fire core.' },
-    'BOT_WATER': { id: 'BOT_WATER', name: 'Hydro Unit', element: 'Water', description: 'Maintains aquatic ecosystems. Shoots pressurized water.', habitat: 'Sapphire Coast', baseStats: { hp: 90, atk: 15, def: 15, spd: 15 }, visual_design: 'Robot with water tanks.' },
-    'BOT_GRASS': { id: 'BOT_GRASS', name: 'Timber Scout', element: 'Grass', description: 'Camouflaged surveillance unit. Blends into the forest.', habitat: 'Whispering Woods', baseStats: { hp: 100, atk: 15, def: 20, spd: 10 }, visual_design: 'Wooden robot with leaves.' },
-    'BOT_ELECTRIC': { id: 'BOT_ELECTRIC', name: 'Volt Sentry', element: 'Electric', description: 'Fast and dangerous. Patrols the peaks during storms.', habitat: 'Thunder Peaks', baseStats: { hp: 70, atk: 25, def: 10, spd: 25 }, visual_design: 'Spiky yellow robot.' },
-    'BOT_METAL': { id: 'BOT_METAL', name: 'Iron Guard', element: 'Metal', description: 'Heavily armored industrial protector. Very hard to scratch.', habitat: 'Iron Foundry', baseStats: { hp: 120, atk: 20, def: 30, spd: 5 }, visual_design: 'Bulky grey mech.' },
-    'BOT_PSYCHIC': { id: 'BOT_PSYCHIC', name: 'Mind Orb', element: 'Psychic', description: 'Floating construct that affects cognition. Watch your thoughts.', habitat: 'Mystic Sanctum', baseStats: { hp: 80, atk: 30, def: 10, spd: 20 }, visual_design: 'Floating purple eye.' },
-    'BOT_TOXIC': { id: 'BOT_TOXIC', name: 'Hazmat Droid', element: 'Toxic', description: 'Leaking dangerous fluids. Stay clear.', habitat: 'Toxic Waste', baseStats: { hp: 110, atk: 15, def: 20, spd: 10 }, visual_design: 'Green rusted robot.' },
-    'BOT_DARK': { id: 'BOT_DARK', name: 'Shadow Glitch', element: 'Dark', description: 'A tear in the reality code. Extremely hostile.', habitat: 'Glitch Badlands', baseStats: { hp: 90, atk: 25, def: 15, spd: 20 }, visual_design: 'Dark shadowy form.' },
-    'BOT_LIGHT': { id: 'BOT_LIGHT', name: 'Prism Core', element: 'Light', description: 'Refracts light into focused lasers.', habitat: 'Thunder Peaks', baseStats: { hp: 80, atk: 20, def: 20, spd: 20 }, visual_design: 'Glowing crystal geometry.' },
-    'ANOMALY': { id: 'ANOMALY', name: 'Unknown Anomaly', element: 'Neutral', description: 'A creature generated from raw user data. Properties vary wildly.', habitat: 'Everywhere', baseStats: { hp: 100, atk: 15, def: 15, spd: 15 }, visual_design: 'Glitchy voxel shape.' }
+    'slime_v1': { speciesId: 'slime_v1', name: 'Slime.exe', element: 'Toxic', stats: { hp: 40, atk: 10, def: 10, spd: 10 }, visualTraits: { extractedColors: { primary: '#10B981', secondary: '#A7F3D0', accent: '#064E3B' } }, description: 'A basic corrupted file.' },
+    'fire_wolf': { speciesId: 'fire_wolf', name: 'Firewall Wolf', element: 'Fire', stats: { hp: 60, atk: 25, def: 15, spd: 30 }, visualTraits: { extractedColors: { primary: '#EF4444', secondary: '#FCA5A5', accent: '#7F1D1D' } }, description: 'Guardian of the gateway.' },
+    'golem_steel': { speciesId: 'golem_steel', name: 'Server Golem', element: 'Metal', stats: { hp: 100, atk: 20, def: 40, spd: 5 }, visualTraits: { extractedColors: { primary: '#64748B', secondary: '#94A3B8', accent: '#0F172A' } }, description: 'Heavy duty data storage unit.' },
+    'angel_prime': { speciesId: 'angel_prime', name: 'Seraphim X', element: 'Light', stats: { hp: 200, atk: 50, def: 30, spd: 40 }, visualTraits: { extractedColors: { primary: '#FBBF24', secondary: '#FEF3C7', accent: '#FFF' } }, description: 'A high-tier guardian entity.' },
+    // VALHALLA ENEMIES
+    'odin_mech': { speciesId: 'odin_mech', name: 'Odin Prime', element: 'Electric', stats: { hp: 500, atk: 100, def: 80, spd: 60 }, visualTraits: { extractedColors: { primary: '#FCD34D', secondary: '#1E293B', accent: '#3B82F6' } }, description: 'The All-Father of the Network.' },
 };
 
-// --- DISCOVERY LOGIC ---
-export const checkDiscovery = (profile: {seen: string[], caught: string[]}, speciesId: string, mode: 'SEEN' | 'CAUGHT') => {
-    const updates: any = {};
-    let isNew = false;
-    // Ensure valid ID
-    const validId = MONSTER_DB[speciesId] ? speciesId : 'ANOMALY';
+// --- LOCATIONS ---
+export interface LocationNode {
+    id: string;
+    name: string;
+    levelReq: number;
+    connections: string[];
+    x: number; 
+    y: number; 
+    enemyTheme: string[];
+    color: string;
+    environmentType: 'Grass' | 'City' | 'Desert' | 'Snow' | 'Volcano' | 'Space' | 'Cyber' | 'Valhalla';
+}
 
-    if (mode === 'SEEN') {
-        if (!profile.seen.includes(validId)) {
-            updates.seen = [...profile.seen, validId];
-            isNew = true;
-        }
-    } else if (mode === 'CAUGHT') {
-        if (!profile.caught.includes(validId)) {
-            updates.caught = [...profile.caught, validId];
-            // Catching implies seeing
-            if (!profile.seen.includes(validId)) {
-                updates.seen = [...profile.seen, validId];
+export const LOCATIONS_DB: Record<string, LocationNode> = {
+    'loc_starter': { id: 'loc_starter', name: 'Origin Grid', levelReq: 1, connections: ['loc_forest', 'loc_arcade'], x: 50, y: 80, enemyTheme: ['Neutral'], color: 'bg-gray-400', environmentType: 'Grass' },
+    'loc_forest': { id: 'loc_forest', name: 'Cache Jungle', levelReq: 5, connections: ['loc_starter', 'loc_cave', 'loc_ruins'], x: 30, y: 60, enemyTheme: ['Grass', 'Toxic'], color: 'bg-green-500', environmentType: 'Grass' },
+    'loc_arcade': { id: 'loc_arcade', name: 'Neon Arcade', levelReq: 8, connections: ['loc_starter', 'loc_city'], x: 70, y: 70, enemyTheme: ['Electric', 'Psychic'], color: 'bg-pink-500', environmentType: 'City' },
+    'loc_cave': { id: 'loc_cave', name: 'Deep Root', levelReq: 15, connections: ['loc_forest', 'loc_volcano'], x: 20, y: 40, enemyTheme: ['Dark', 'Metal'], color: 'bg-slate-700', environmentType: 'Desert' },
+    'loc_ruins': { id: 'loc_ruins', name: 'Old Net Ruins', levelReq: 20, connections: ['loc_forest', 'loc_city'], x: 40, y: 30, enemyTheme: ['Spirit', 'Psychic'], color: 'bg-purple-500', environmentType: 'Desert' },
+    'loc_city': { id: 'loc_city', name: 'Mainframe City', levelReq: 25, connections: ['loc_arcade', 'loc_ruins', 'loc_volcano'], x: 80, y: 40, enemyTheme: ['Electric', 'Metal'], color: 'bg-blue-600', environmentType: 'City' },
+    'loc_volcano': { id: 'loc_volcano', name: 'Firewall Peak', levelReq: 40, connections: ['loc_cave', 'loc_city', 'loc_valhalla'], x: 50, y: 15, enemyTheme: ['Fire', 'Dark'], color: 'bg-red-600', environmentType: 'Volcano' },
+    // ENDGAME
+    'loc_valhalla': { id: 'loc_valhalla', name: 'Cyber Valhalla', levelReq: 60, connections: ['loc_volcano'], x: 50, y: 5, enemyTheme: ['Light', 'Dragon'], color: 'bg-yellow-400', environmentType: 'Valhalla' },
+};
+
+
+// --- UTILS ---
+
+export type MonsterStage = 'Noob' | 'Pro' | 'Elite' | 'Legend' | 'God';
+
+export interface Pixupet {
+    id: string;
+    speciesId?: string; // Corrected missing property
+    name: string;
+    element: string;
+    level: number;
+    exp: number;
+    maxExp: number;
+    hp: number; maxHp: number; currentHp: number;
+    atk: number; def: number; spd: number;
+    int?: number; // Corrected missing property
+    hunger: number; fatigue: number; happiness: number;
+    stage: MonsterStage; // Corrected type
+    rank: string;
+    ability: string;
+    voxelCode: string;
+    visualTraits: any;
+    bodyType: string;
+    moves: Move[];
+    parts: AttachedPart[];
+    imageSource?: string;
+    cardArtUrl?: string;
+    description?: string;
+    isMinted?: boolean;
+    nature?: string;
+    potential?: number;
+    visual_design?: any;
+    rarity?: string;
+}
+
+export interface VisualTraits {
+    extractedColors: { primary: string, secondary: string, accent: string };
+    silhouetteMatrix?: string[];
+}
+
+export const ELEMENT_THEMES: Record<string, { color: string, bg: string, icon: string }> = {
+    Fire: { color: 'text-red-500', bg: 'bg-red-500', icon: '🔥' },
+    Water: { color: 'text-blue-500', bg: 'bg-blue-500', icon: '💧' },
+    Grass: { color: 'text-green-500', bg: 'bg-green-500', icon: '🌿' },
+    Electric: { color: 'text-yellow-400', bg: 'bg-yellow-400', icon: '⚡' },
+    Psychic: { color: 'text-purple-500', bg: 'bg-purple-500', icon: '🔮' },
+    Metal: { color: 'text-gray-400', bg: 'bg-gray-400', icon: '⚙️' },
+    Dark: { color: 'text-gray-800', bg: 'bg-gray-800', icon: '🌑' },
+    Light: { color: 'text-yellow-200', bg: 'bg-yellow-200', icon: '✨' },
+    Toxic: { color: 'text-purple-800', bg: 'bg-purple-800', icon: '☠️' },
+    Spirit: { color: 'text-indigo-400', bg: 'bg-indigo-400', icon: '👻' },
+    Neutral: { color: 'text-gray-500', bg: 'bg-gray-500', icon: '⚪' },
+};
+
+export const EVO_THRESHOLDS = {
+    'Pro': 10,
+    'Elite': 30,
+    'Legend': 60,
+    'God': 90
+};
+
+export const EMOTE_ICONS = {
+    HAPPY: 'heart',
+    SAD: 'broken_heart',
+    ANGRY: 'fire',
+    SLEEP: 'zzz',
+    HUNGRY: 'meat',
+    BATTLE: 'swords',
+    TREASURE: 'chest',
+    ALERT: 'exclamation'
+};
+
+export const calculateStats = (pet: Pixupet) => {
+    let { maxHp, atk, def, spd, int } = pet;
+    
+    // Apply Part Multipliers
+    if (pet.parts) {
+        pet.parts.forEach(p => {
+            const partDef = PARTS_DB[p.partId]; // Renamed to avoid shadowing 'def'
+            if(partDef && partDef.stats) {
+                if(partDef.stats.hp) maxHp += partDef.stats.hp;
+                if(partDef.stats.atk) atk += partDef.stats.atk;
+                if(partDef.stats.def) def += partDef.stats.def; 
+                if(partDef.stats.spd) spd += partDef.stats.spd;
+                if(partDef.stats.int && int !== undefined) int += partDef.stats.int;
             }
-            isNew = true;
-        }
+        });
     }
-    return { isNew, updates, name: MONSTER_DB[validId].name };
+
+    return { maxHp, currentHp: pet.currentHp, atk, def, spd, int };
 };
 
-// --- ICONIC STARTERS V2 (AAA DESIGN) ---
-export const STARTER_PACKS = [
-    {
-        id: 'starter_fire', name: 'PYRO-BIT', element: 'Fire',
-        description: 'A hybrid of a fox and a retro toaster. Its transparent amber body reveals a glowing heating element skeleton.',
-        stats: { hp: 100, atk: 25, def: 15, spd: 20 },
-        visual_design: 'Transparent fox with glowing internal ribs and sparkplug tail.', bodyType: 'QUADRUPED',
-        visualTraits: { 
-            hasHorns: false, hornStyle: 'None', 
-            hasWings: false, wingStyle: 'None', 
-            build: 'Chunky', accessory: 'None', hasEars: true, 
-            surfaceFinish: 'Glossy', materialType: 'Jelly',
-            extractedColors: { primary: '#F97316', secondary: '#FCD34D', accent: '#292524' } // Orange, Gold, DarkGrey
-        }
-    },
-    {
-        id: 'starter_water', name: 'FIZZ-BOT', element: 'Water',
-        description: 'A bubble-tea mech piloted by a tiny axolotl. It hovers on water jets and shoots pearls.',
-        stats: { hp: 110, atk: 15, def: 18, spd: 15 },
-        visual_design: 'Floating blue cup with pink thrusters and axolotl inside.', bodyType: 'FLOATING',
-        visualTraits: { 
-            hasHorns: false, hornStyle: 'None', 
-            hasWings: false, wingStyle: 'Mech', 
-            build: 'Round', accessory: 'Helmet', hasEars: false, 
-            surfaceFinish: 'Glossy', materialType: 'Jelly',
-            extractedColors: { primary: '#06B6D4', secondary: '#F472B6', accent: '#EC4899' } // Cyan, Pink, HotPink
-        }
-    },
-    {
-        id: 'starter_grass', name: 'MOSS-AMP', element: 'Grass',
-        description: 'A groovy frog carrying a massive mossy boombox on its back. Its vibes are heavy.',
-        stats: { hp: 150, atk: 20, def: 25, spd: 10 },
-        visual_design: 'Green frog with speaker box on back.', bodyType: 'QUADRUPED',
-        visualTraits: { 
-            hasHorns: false, hornStyle: 'None', 
-            hasWings: false, wingStyle: 'None', 
-            build: 'Chunky', accessory: 'Backpack', hasEars: false, 
-            surfaceFinish: 'Matte', materialType: 'Moss',
-            extractedColors: { primary: '#4ADE80', secondary: '#3F6212', accent: '#166534' } // Green, DarkMoss, DkGreen
-        }
+export const getProceduralMonsterArt = (name: string, element: string) => {
+    return `https://placehold.co/400x400/222/FFF?text=${name.substring(0,3)}`;
+};
+
+export const getRandomEventText = (locId: string) => {
+    const texts = [
+        "Scanning environment...",
+        "Analyzing data streams...",
+        "Searching for anomalies...",
+        "Updating local map...",
+        "Ping: 24ms",
+        "Connection stable."
+    ];
+    return texts[Math.floor(Math.random() * texts.length)];
+};
+
+export const getActionFromText = (text: string) => {
+    if (text.includes('Battle') || text.includes('Combat')) return 'ATTACK';
+    if (text.includes('Searching') || text.includes('Scanning')) return 'WALK';
+    return 'IDLE';
+};
+
+export const assignMoves = (element: string, level: number): Move[] => {
+    return [
+        { name: 'Tackle', type: 'Neutral', power: 40, accuracy: 100, description: 'A physical charge.' },
+        { name: 'Glitch Beam', type: element, power: 60, accuracy: 90, description: 'Fires elemental data.' }
+    ];
+};
+
+export const getPetSpeech = () => {
+    const msgs = ["Beep boop!", "Systems nominal.", "I detect loot nearby.", "Hungry...", "Let's grind!"];
+    return msgs[Math.floor(Math.random() * msgs.length)];
+};
+
+export const checkDiscovery = (user: UserProfile, id: string, type: 'SEEN' | 'CAUGHT') => {
+    let updates: any = {};
+    let isNew = false;
+    if (type === 'SEEN' && !user.seen.includes(id)) {
+        updates.seen = [...user.seen, id];
+        isNew = true;
     }
-];
-
-export const determineEvolutionPath = (stats: {atk: number, def: number, spd: number, happiness: number}) => {
-    const { atk, def, spd, happiness } = stats;
-    let dominant = 'BALANCED'; let protocolName = 'Balanced';
-    let color = 'text-gray-500'; let borderColor = 'border-gray-500';
-    let icon = '😐'; let desc = "Keep grinding.";
-    
-    if (atk >= def && atk >= spd) { dominant = 'ATTACK'; protocolName = 'Striker'; color = 'text-red-500'; icon = '⚔️'; desc = "Path: Glass Cannon"; }
-    else if (def > atk && def > spd) { dominant = 'DEFENSE'; protocolName = 'Guardian'; color = 'text-blue-500'; icon = '🛡️'; desc = "Path: Unbreakable"; }
-    else if (spd > atk && spd > def) { dominant = 'SPEED'; protocolName = 'Speedster'; color = 'text-yellow-500'; icon = '👟'; desc = "Path: Mach 10"; }
-    
-    let alignment = 'NEUTRAL';
-    if (happiness >= 85) alignment = 'LUMINOUS'; 
-    if (happiness <= 25) alignment = 'CORRUPTED';
-
-    return { dominant, alignment, protocolName, color, borderColor, icon, desc };
+    if (type === 'CAUGHT' && !user.caught.includes(id)) {
+        updates.caught = [...user.caught, id];
+        isNew = true;
+    }
+    return { isNew, updates };
 };
 
-/**
- * GENERATES "GEMINI 2.5 HIGH-FIDELITY" SVG ART
- */
-export const getProceduralMonsterArt = (name: string, element: string): string => {
-    const colors: any = { 
-        Fire: { a: '#EF4444', b: '#7F1D1D', light: '#FCA5A5' }, 
-        Water: { a: '#3B82F6', b: '#1E3A8A', light: '#93C5FD' }, 
-        Grass: { a: '#10B981', b: '#064E3B', light: '#6EE7B7' }, 
-        Electric: { a: '#F59E0B', b: '#78350F', light: '#FDE047' }, 
-        Psychic: { a: '#8B5CF6', b: '#4C1D95', light: '#C4B5FD' }, 
-        Metal: { a: '#94A3B8', b: '#475569', light: '#CBD5E1' }, 
-        Dark: { a: '#374151', b: '#111827', light: '#9CA3AF' }, 
-        Light: { a: '#FCD34D', b: '#B45309', light: '#FEF08A' }, 
-        Toxic: { a: '#84CC16', b: '#365314', light: '#BEF264' }
+export const getRandomEnemy = (locId: string, playerLevel: number, voxelGen: any): Pixupet => {
+    const loc = LOCATIONS_DB[locId];
+    // Simple logic: pick random from MONSTER_DB or generate
+    const keys = Object.keys(MONSTER_DB);
+    const randKey = keys[Math.floor(Math.random() * keys.length)];
+    const template = MONSTER_DB[randKey];
+    
+    // Scale enemies much higher in Valhalla
+    let level = Math.max(1, playerLevel + Math.floor(Math.random() * 5) - 2);
+    if(locId === 'loc_valhalla') level += 20;
+
+    // Auto-scale stats
+    const stats = {
+        hp: template.stats.hp + (level * 5),
+        atk: template.stats.atk + (level * 2),
+        def: template.stats.def + (level * 2),
+        spd: template.stats.spd + (level * 2),
     };
-    const c = colors[element] || { a: '#CBD5E1', b: '#64748B', light: '#F1F5F9' };
-    const initial = name.charAt(0).toUpperCase();
-
-    // Complex SVG imitating "Gemini 2.5" Generative Vector Art
-    const svg = `
-    <svg width="300" height="450" viewBox="0 0 300 450" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-            <!-- Dynamic Gradient Background -->
-            <radialGradient id="gradMain" cx="50%" cy="50%" r="70%" fx="50%" fy="30%">
-                <stop offset="0%" style="stop-color:${c.light};stop-opacity:1" />
-                <stop offset="50%" style="stop-color:${c.a};stop-opacity:1" />
-                <stop offset="100%" style="stop-color:${c.b};stop-opacity:1" />
-            </radialGradient>
-            
-            <!-- Noise Filter for Texture -->
-            <filter id="noiseTexture" x="0" y="0" width="100%" height="100%">
-                <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch" result="noise"/>
-                <feColorMatrix type="saturate" values="0" in="noise" result="desaturatedNoise"/>
-                <feComponentTransfer in="desaturatedNoise" result="fadedNoise">
-                    <feFuncA type="linear" slope="0.3"/> 
-                </feComponentTransfer>
-                <feComposite operator="in" in="fadedNoise" in2="SourceGraphic" result="texturedGraphic"/>
-                <feBlend mode="overlay" in="texturedGraphic" in2="SourceGraphic"/>
-            </filter>
-
-            <!-- Holographic Glow -->
-            <filter id="holographicGlow">
-                <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-                <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-            </filter>
-
-            <!-- Tech Pattern -->
-            <pattern id="techPattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-                <rect x="0" y="0" width="40" height="40" fill="none"/>
-                <path d="M10 10h20v20h-20z" fill="none" stroke="${c.light}" stroke-opacity="0.1" stroke-width="2"/>
-                <circle cx="20" cy="20" r="2" fill="${c.light}" fill-opacity="0.2"/>
-                <path d="M0 0l10 10M40 0l-10 10M0 40l10-10M40 40l-10-10" stroke="${c.light}" stroke-opacity="0.1" stroke-width="1"/>
-            </pattern>
-        </defs>
-        
-        <!-- Card Body -->
-        <rect x="0" y="0" width="300" height="450" fill="url(#gradMain)" />
-        
-        <!-- Texture Overlay -->
-        <rect x="0" y="0" width="300" height="450" filter="url(#noiseTexture)" opacity="0.6" />
-        
-        <!-- Tech Pattern Overlay -->
-        <rect x="0" y="0" width="300" height="450" fill="url(#techPattern)" />
-        
-        <!-- Center Art (Abstract Representation) -->
-        <g transform="translate(150, 200)">
-            <circle cx="0" cy="0" r="90" fill="none" stroke="white" stroke-width="4" stroke-opacity="0.5" />
-            <circle cx="0" cy="0" r="80" fill="${c.b}" fill-opacity="0.8" />
-            <circle cx="0" cy="0" r="70" fill="none" stroke="${c.light}" stroke-width="2" stroke-dasharray="10,5" />
-            
-            <!-- Elemental Glyph -->
-            <text x="0" y="35" font-family="monospace" font-size="120" font-weight="900" fill="white" text-anchor="middle" filter="url(#holographicGlow)" opacity="0.9">${initial}</text>
-        </g>
-        
-        <!-- Holographic Sheen Lines -->
-        <path d="M0 0 L300 450 L300 0 Z" fill="url(#gradMain)" opacity="0.1" style="mix-blend-mode: screen;" />
-        <line x1="0" y1="450" x2="300" y2="0" stroke="white" stroke-width="2" opacity="0.2" />
-        
-        <!-- Card Frame -->
-        <rect x="10" y="10" width="280" height="430" rx="20" fill="none" stroke="white" stroke-width="8" stroke-opacity="0.8" />
-        <rect x="18" y="18" width="264" height="414" rx="15" fill="none" stroke="${c.b}" stroke-width="2" />
-
-        <!-- Element Badge Bottom -->
-        <g transform="translate(150, 380)">
-            <rect x="-60" y="-15" width="120" height="30" rx="15" fill="black" fill-opacity="0.6" stroke="white" stroke-width="2" />
-            <text x="0" y="5" font-family="sans-serif" font-size="14" font-weight="bold" fill="${c.light}" text-anchor="middle" letter-spacing="2" style="text-transform: uppercase;">${element}</text>
-        </g>
-
-    </svg>`;
-
-    return `data:image/svg+xml;base64,${btoa(svg)}`;
-};
-
-export const getRandomEnemy = (locationId: string, playerLevel: number, genVoxelFunc: any): any => {
-    const loc = LOCATIONS_DB[locationId] || LOCATIONS_DB['loc_starter'];
-    const themes = loc.enemyTheme || Object.keys(ELEMENT_THEMES);
-    const element = themes[Math.floor(Math.random() * themes.length)];
-    const bodyType: BodyType = ['BIPED', 'QUADRUPED', 'FLOATING'][Math.floor(Math.random()*3)] as BodyType;
-    
-    const name = `Wild ${element} Bot`;
-    const level = Math.max(1, Math.floor(playerLevel * loc.difficultyMod)); 
-    const enemyStage = level > 40 ? 'Legend' : level > 25 ? 'Elite' : level > 10 ? 'Pro' : 'Noob';
-    
-    // DETERMINE SPECIES ID FOR CODEX
-    const speciesId = `BOT_${element.toUpperCase()}`;
-    
-    const wildTraits: VisualTraits = {
-        hasHorns: Math.random() > 0.5,
-        hornStyle: ['Uni', 'Dual', 'Antenna'][Math.floor(Math.random()*3)] as any,
-        hasWings: element === 'Electric' || element === 'Psychic' || Math.random() > 0.8,
-        wingStyle: 'Mech',
-        build: Math.random() > 0.5 ? 'Chunky' : 'Slender',
-        accessory: Math.random() > 0.8 ? 'Helmet' : 'None',
-        hasEars: Math.random() > 0.7,
-        surfaceFinish: 'Matte',
-        extractedColors: { primary: '#555555', secondary: '#aaaaaa', accent: '#ff0000' }
-    };
-
-    const maxHp = Math.floor(60 * loc.difficultyMod + level*10);
 
     return {
-        id: `wild_${Date.now()}`, speciesId, name, element, stage: enemyStage,
-        hp: maxHp,
-        currentHp: maxHp,
-        maxHp: maxHp,
-        atk: Math.floor(10 * loc.difficultyMod + level*2),
-        def: Math.floor(10 * loc.difficultyMod + level*2),
-        level,
-        visualTraits: wildTraits,
-        voxelCode: genVoxelFunc(element, bodyType, enemyStage, wildTraits)
-    };
+        id: `enemy_${Date.now()}`,
+        speciesId: template.speciesId, // Include speciesId for discovery check
+        name: template.name,
+        element: template.element,
+        level: level,
+        exp: 0, maxExp: 100,
+        hp: stats.hp, maxHp: stats.hp, currentHp: stats.hp,
+        atk: stats.atk, def: stats.def, spd: stats.spd,
+        hunger: 100, fatigue: 0, happiness: 100,
+        stage: 'Noob', rank: 'Wild', ability: 'Wild Data',
+        moves: [], parts: [],
+        voxelCode: voxelGen(template.element, 'BIPED', 'Noob', template.visualTraits, template.name),
+        visualTraits: template.visualTraits,
+        bodyType: 'BIPED',
+        isMinted: false
+    } as any;
 };
 
-export const getLootDrop = (locationId: string): string | null => {
-    const loc = LOCATIONS_DB[locationId] || LOCATIONS_DB['loc_starter'];
-    const rand = Math.random();
-    if (loc.exclusiveLoot && loc.exclusiveLoot.length > 0 && rand > 0.85) {
-        return loc.exclusiveLoot[Math.floor(Math.random() * loc.exclusiveLoot.length)];
+export const getLootDrop = (locId: string) => {
+    const roll = Math.random();
+    // High level locations drop better loot
+    if (locId === 'loc_valhalla') {
+        if(roll > 0.95) return 'unidentified_artifact'; // NEW
+        if(roll > 0.9) return 'nano_repair_kit';
+        if(roll > 0.7) return 'part_wings_god'; // Extremely rare direct drop
+        if(roll > 0.5) return 'ancient_chip';
     }
-    if (loc.lootTier >= 3 && rand > 0.9) return 'acc_boots'; 
-    if (loc.lootTier >= 3 && rand > 0.95) return 'helm_iron';
-    if (loc.lootTier >= 2 && rand > 0.8) return 'potion_super';
-    if (rand > 0.6) return 'neon_soda';
-    if (rand > 0.4) return 'data_burger';
+    
+    if (roll > 0.8) return 'potion_small';
+    if (roll > 0.5) return 'pixel_burger';
     return 'pixel_pizza';
 };
 
-export const getRandomEventText = (locationId: string): string => {
-    const loc = LOCATIONS_DB[locationId];
-    const generic = ["Scouting perimeter.", "Analyzing terrain.", "Hunting for loot.", "Patrolling area.", "Training combat protocols.", "Sprinting through fields.", "Taking a quick nap.", "Scanning for enemies."];
-    const specific: Record<string, string[]> = {
-        'loc_starter': ["Chasing butterflies.", "Rolling down hills.", "Practicing jumps.", "Target practice.", "Dozing in the sun.", "Leaping over logs."],
-        'loc_woods': ["Tracking footprints.", "Scanning for bugs.", "Climbing trees.", "Listening to birds.", "Resting under shade.", "Dodging branches."],
-        'loc_coast': ["Splashing in waves.", "Chasing crabs.", "Scanning horizon.", "Training in sand.", "Napping on beach."],
-        'loc_caldera': ["Dodging lava.", "Scanning heat signatures.", "Training heat resistance.", "Analyzing magma flow.", "Sprinting across obsidian."],
-        'loc_city': ["Browsing shops.", "Hacking terminals.", "Scanning network.", "Navigating crowds.", "Resting in alleyway."],
-        'loc_void': ["Fighting the void.", "Analyzing glitches.", "Scanning anomalies.", "Resisting corruption.", "Dodging reality tears."]
-    };
-    const pool = specific[locationId] || generic;
-    return pool[Math.floor(Math.random() * pool.length)];
-};
-
-// STRICT ACTION MAPPING - NO RNG
-export const getActionFromText = (text: string): 'WALK' | 'SLEEP' | 'JUMP' | 'SCAN' | 'RUN' => {
-    const lower = text.toLowerCase();
-    if (lower.includes('rest') || lower.includes('nap') || lower.includes('sleep') || lower.includes('doze')) return 'SLEEP'; 
-    if (lower.includes('jump') || lower.includes('hop') || lower.includes('dodge') || lower.includes('climb') || lower.includes('leap') || lower.includes('roll')) return 'JUMP';
-    if (lower.includes('scan') || lower.includes('hack') || lower.includes('look') || lower.includes('analyz') || lower.includes('navigat')) return 'SCAN';
-    if (lower.includes('chase') || lower.includes('run') || lower.includes('track') || lower.includes('hunt') || lower.includes('fight') || lower.includes('sprint') || lower.includes('rush')) return 'RUN';
-    return 'WALK';
-};
-
-export interface SpecialEvent {
-    type: 'BATTLE' | 'TREASURE' | 'HAZARD' | 'DISCOVERY';
-    title: string;
-    description: string;
-    effectValue: number; 
-    logs: string[];
-    resultText: string;
-}
-
-export const getRandomSpecialEvent = (locationId: string): SpecialEvent => {
-    const loc = LOCATIONS_DB[locationId];
-    const roll = Math.random();
-
-    if (loc.difficultyMod > 1.5 && roll < 0.15) {
-        const hazards = [
-            { title: "MAGMA SURGE", desc: "A lava geyser erupted!", logs: ["Ground is shaking...", "Heat rising fast!", "Took burn damage."], res: "ESCAPED" },
-            { title: "GLITCH TRAP", desc: "Stepped on a corrupted tile.", logs: ["Data corruption detected.", "Movement slowed.", "HP drained."], res: "RECOVERED" },
-            { title: "ACID RAIN", desc: "Toxic downpour.", logs: ["Sky turning green...", "Armor corroding.", "Shields down."], res: "SURVIVED" }
-        ];
-        const h = hazards[Math.floor(Math.random() * hazards.length)];
-        return { type: 'HAZARD', title: h.title, description: h.desc, effectValue: 20, logs: h.logs, resultText: h.res };
-    }
-
-    if (roll > 0.85) {
-        const discoveries = [
-            { title: "ANCIENT RUIN", desc: "Found old data archives.", logs: ["Deciphering glyphs...", "Downloading history.", "Knowledge gained."], res: "KNOWLEDGE" },
-            { title: "MANA SPRING", desc: "A glowing pool of energy.", logs: ["Resting by the pool...", "Energy restoring.", "Feeling stronger."], res: "REFRESHED" }
-        ];
-        const d = discoveries[Math.floor(Math.random() * discoveries.length)];
-        return { type: 'DISCOVERY', title: d.title, description: d.desc, effectValue: 50, logs: d.logs, resultText: d.res };
-    }
-
-    return { type: 'DISCOVERY', title: "QUIET MOMENT", description: "Nothing happened.", effectValue: 0, logs: ["Looking around...", "All quiet."], resultText: "PEACEFUL" };
+export const generateStarterOptions = () => {
+    return [
+        {
+            name: 'Ignis', element: 'Fire', bodyType: 'BIPED', description: 'A fiery spirit with high attack potential.',
+            stats: { hp: 50, atk: 18, def: 12, spd: 14 },
+            visualTraits: { extractedColors: { primary: '#EF4444', secondary: '#FCA5A5', accent: '#7F1D1D' } }
+        },
+        {
+            name: 'Aqua', element: 'Water', bodyType: 'FLOATING', description: 'Fluid movement and balanced defenses.',
+            stats: { hp: 60, atk: 14, def: 16, spd: 12 },
+            visualTraits: { extractedColors: { primary: '#3B82F6', secondary: '#93C5FD', accent: '#1E3A8A' } }
+        },
+        {
+            name: 'Terra', element: 'Grass', bodyType: 'QUADRUPED', description: 'Sturdy frame with regenerative capabilities.',
+            stats: { hp: 70, atk: 15, def: 15, spd: 10 },
+            visualTraits: { extractedColors: { primary: '#10B981', secondary: '#6EE7B7', accent: '#064E3B' } }
+        }
+    ];
 };

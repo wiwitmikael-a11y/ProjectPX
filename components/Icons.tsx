@@ -82,6 +82,21 @@ export const IconTreasure = () => (
     </svg>
 );
 
+export const IconCapsule = () => (
+    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+        <path d="M12 2a10 10 0 0 0-10 10v2a10 10 0 0 0 20 0v-2a10 10 0 0 0-10-10z" fill="#F472B6" stroke="black" strokeWidth="2"/>
+        <path d="M2 12h20" stroke="black" strokeWidth="2"/>
+        <circle cx="12" cy="12" r="3" fill="white" stroke="black" strokeWidth="2"/>
+        <path d="M12 12v10" stroke="black" strokeWidth="2"/>
+    </svg>
+);
+
+export const IconTrash = () => (
+    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="white" strokeWidth="2" fill="none"/>
+    </svg>
+);
+
 // COMPREHENSIVE ITEM ICON LIBRARY WITH RARITY COLORS
 const RARITY_COLORS = {
     Common: '#E5E7EB', // Gray
@@ -120,7 +135,7 @@ export const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
         );
     }
     // BOOTS
-    if (id.includes('boots')) {
+    if (id.includes('boots') || id.includes('shoe')) {
          return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
                  <path d="M6 8h8v12H6z" fill={baseColor} stroke={strokeColor} strokeWidth="2"/>
@@ -188,7 +203,7 @@ export const ItemIcon: React.FC<{ item: GameItem }> = ({ item }) => {
         );
     }
     // ACCESSORY (Rings, Charms, Wings)
-    if (id.includes('wings') || id.includes('ring') || id.includes('pack') || id.includes('charm')) {
+    if (id.includes('wings') || id.includes('ring') || id.includes('pack') || id.includes('charm') || id.includes('blush')) {
         return (
             <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-md">
                  <circle cx="12" cy="12" r="8" fill="none" stroke={baseColor} strokeWidth="3"/>
