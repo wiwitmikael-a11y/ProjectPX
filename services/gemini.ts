@@ -22,17 +22,25 @@ export const analyzeObject = async (imageBase64: string): Promise<any> => {
                 anatomy: {
                     type: Type.OBJECT,
                     properties: {
-                        headShape: { type: Type.STRING, description: "ROUND, CAT, FOX, DRAGON, MECH, SQUARE" },
-                        bodyShape: { type: Type.STRING, description: "CHIBI_ROUND, TALL_HUMANOID, QUAD_BEAST, FLOATING_ORB, SERPENT" },
+                        headShape: { type: Type.STRING, description: "ROW1: ROUND, OVAL, SQUARE. ROW2: CAT, FOX, WOLF. ROW3: DRAGON, LIZARD, TV. ROW4: SKULL, FLOWER, GHOST" },
+                        bodyShape: { type: Type.STRING, description: "ROW1: ORB, PEAR, BOX. ROW2: HUMANOID, MUSCLE, SLIM. ROW3: QUAD, SERPENT, FLOATING" },
+                        limbStyle: { type: Type.STRING, description: "ROW1: NUBS, PAWS, HOOVES. ROW2: BOOTS, CLAWS, TALONS. ROW3: MECH, WHEELS, NONE" },
+                        tailStyle: { type: Type.STRING, description: "ROW1: NONE, CAT, FOX. ROW2: LIZARD, DEVIL, FISH. ROW3: MECH_PLUG, STINGER, GHOST" },
+                        wingStyle: { type: Type.STRING, description: "ROW1: NONE, FEATHER, BAT. ROW2: BUTTERFLY, MECH, CRYSTAL. ROW3: CAPE, SCARF, SPIKES" },
                         eyeStyle: { type: Type.STRING, description: "ANIME_LARGE, CYCLOPS, VISOR, DOTS, GLOW_SLIT" },
                         primaryColor: { type: Type.STRING, description: "Hex Code" },
                         secondaryColor: { type: Type.STRING, description: "Hex Code" },
                         accentColor: { type: Type.STRING, description: "Hex Code" },
-                        hasWings: { type: Type.BOOLEAN },
-                        hasTail: { type: Type.BOOLEAN },
-                        hasHorns: { type: Type.BOOLEAN }
                     },
-                    required: ["headShape", "bodyShape", "eyeStyle", "primaryColor", "secondaryColor", "accentColor"]
+                    required: ["headShape", "bodyShape", "limbStyle", "tailStyle", "wingStyle", "primaryColor", "secondaryColor", "accentColor"]
+                },
+                sculptParams: {
+                    type: Type.OBJECT,
+                    properties: {
+                        roughness: { type: Type.NUMBER, description: "0 to 1. 0=Smooth, 1=Hairy/Scaly" },
+                        sharpness: { type: Type.NUMBER, description: "0 to 1. 0=Round, 1=Angular/Mechanical" },
+                        distortion: { type: Type.NUMBER, description: "0 to 1. Organic variability" }
+                    }
                 }
             },
             required: ["name", "element", "hp", "atk", "def", "spd", "description", "anatomy"]
@@ -43,9 +51,7 @@ export const analyzeObject = async (imageBase64: string): Promise<any> => {
             contents: {
                 parts: [
                     { inlineData: { mimeType: 'image/jpeg', data: imageBase64.split(',')[1] } },
-                    { text: `Analyze this image and design a 3D Anime/RPG Monster.
-                    Focus on Shapes and Colors.
-                    Return strict JSON anatomy.` }
+                    { text: `Analyze this image as a High-End Anime 3D Character. Map anatomy for a procedural rigger.` }
                 ]
             },
             config: { responseMimeType: "application/json", responseSchema: responseSchema }
@@ -61,7 +67,7 @@ export const analyzeObject = async (imageBase64: string): Promise<any> => {
     }
 };
 
-// --- V2: INFINITE BOSS GENERATOR (ANIME STYLE) ---
+// --- V2: INFINITE BOSS GENERATOR ---
 export const generateProceduralBoss = async (biome: string, playerLevel: number): Promise<any> => {
     try {
         const responseSchema: Schema = {
@@ -77,27 +83,24 @@ export const generateProceduralBoss = async (biome: string, playerLevel: number)
                 anatomy: {
                     type: Type.OBJECT,
                     properties: {
-                        headShape: { type: Type.STRING, description: "DRAGON, MECH, SKULL, CROWNED" },
-                        bodyShape: { type: Type.STRING, description: "TITAN_HUMANOID, QUAD_BEAST, SERPENT_LORD, FLOATING_CORE" },
-                        eyeStyle: { type: Type.STRING, description: "GLOW_SLIT, CYCLOPS, MULTI_EYE" },
+                        headShape: { type: Type.STRING, description: "DRAGON, SKULL, TV, WOLF, MECH" },
+                        bodyShape: { type: Type.STRING, description: "MUSCLE, SERPENT, FLOATING, QUAD, HUMANOID" },
+                        limbStyle: { type: Type.STRING }, tailStyle: { type: Type.STRING }, wingStyle: { type: Type.STRING },
+                        eyeStyle: { type: Type.STRING },
                         primaryColor: { type: Type.STRING },
                         secondaryColor: { type: Type.STRING },
-                        accentColor: { type: Type.STRING },
-                        hasWings: { type: Type.BOOLEAN },
-                        hasTail: { type: Type.BOOLEAN },
-                        hasHorns: { type: Type.BOOLEAN }
+                        accentColor: { type: Type.STRING }
                     },
                     required: ["headShape", "bodyShape", "primaryColor"]
-                }
+                },
+                sculptParams: { type: Type.OBJECT, properties: { roughness: { type: Type.NUMBER }, sharpness: { type: Type.NUMBER }, distortion: { type: Type.NUMBER } } }
             }
         };
 
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: {
-                parts: [{ text: `Generate a LEGENDARY BOSS MONSTER (Level ${playerLevel + 5}) for biome: ${biome}.
-                Style: Anime Boss, detailed, scary but cool colors.
-                ` }]
+                parts: [{ text: `Generate a GOD-TIER ANIME BOSS (Level ${playerLevel + 5}) for biome: ${biome}. Visuals should be Digimon/Pokemon Mega Evolution level.` }]
             },
             config: { responseMimeType: "application/json", responseSchema: responseSchema }
         });
@@ -107,25 +110,21 @@ export const generateProceduralBoss = async (biome: string, playerLevel: number)
         return JSON.parse(text);
 
     } catch (e) {
-        console.error("Boss Gen Error", e);
         return null;
     }
 };
 
-// --- V3: NARRATIVE COMBAT LOG ---
+// --- UTILS ---
 export const generateBattleCommentary = async (winner: string, loser: string, biome: string): Promise<string> => {
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: {
-                parts: [{ text: `Write a 1-sentence epic anime victory line. Winner: ${winner}, Loser: ${loser}.` }]
-            }
+            contents: { parts: [{ text: `Write a 1-sentence epic anime victory line. Winner: ${winner}, Loser: ${loser}.` }] }
         });
         return response.text || `${winner} defeated ${loser}!`;
     } catch (e) { return `${winner} defeated ${loser}!`; }
 };
 
-// --- V4: SINGULARITY UTILS ---
 export const generatePetReaction = async (pet: Pixupet, context: string): Promise<string> => {
     try {
         const response = await ai.models.generateContent({
@@ -140,14 +139,7 @@ export const generateMission = async (playerLevel: number, locationName: string)
     try {
         const responseSchema: Schema = {
             type: Type.OBJECT,
-            properties: {
-                title: { type: Type.STRING },
-                description: { type: Type.STRING },
-                targetName: { type: Type.STRING },
-                difficulty: { type: Type.STRING },
-                rewards: { type: Type.STRING },
-                goal: { type: Type.INTEGER }
-            }
+            properties: { title: { type: Type.STRING }, description: { type: Type.STRING }, targetName: { type: Type.STRING }, difficulty: { type: Type.STRING }, rewards: { type: Type.STRING }, goal: { type: Type.INTEGER } }
         };
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
@@ -160,10 +152,7 @@ export const generateMission = async (playerLevel: number, locationName: string)
 
 export const analyzeArtifact = async (playerLevel: number): Promise<any> => {
     try {
-        const responseSchema: Schema = {
-            type: Type.OBJECT,
-            properties: { name: { type: Type.STRING }, lore: { type: Type.STRING } }
-        };
+        const responseSchema: Schema = { type: Type.OBJECT, properties: { name: { type: Type.STRING }, lore: { type: Type.STRING } } };
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: { parts: [{ text: `Generate rare artifact item name and lore.` }] },
@@ -174,22 +163,16 @@ export const analyzeArtifact = async (playerLevel: number): Promise<any> => {
 };
 
 /**
- * ANIME CONSTRUCTOR ENGINE - NO MORE FLAT VOXELS
+ * THE TITAN ENGINE (Physics-Based Rigging & Anime Sculpting)
  */
 export const getGenericVoxel = (element: string, bodyType: string, stage: string, visualTraits: any, name: string): string => {
     
-    // Fallback data if anatomy is missing (for legacy saves)
     const anatomy = (visualTraits as any)?.anatomy || {
-        headShape: 'ROUND',
-        bodyShape: bodyType === 'QUADRUPED' ? 'QUAD_BEAST' : 'CHIBI_ROUND',
-        eyeStyle: 'ANIME_LARGE',
-        primaryColor: visualTraits?.extractedColors?.primary || '#F472B6',
-        secondaryColor: visualTraits?.extractedColors?.secondary || '#FFFFFF',
-        accentColor: visualTraits?.extractedColors?.accent || '#333333',
-        hasWings: false,
-        hasTail: true,
-        hasHorns: false
+        headShape: 'ROUND', bodyShape: 'ORB', limbStyle: 'NUBS', tailStyle: 'NONE', wingStyle: 'NONE',
+        eyeStyle: 'ANIME_LARGE', primaryColor: '#F472B6', secondaryColor: '#FFFFFF', accentColor: '#333333'
     };
+
+    const sculpt = (visualTraits as any)?.sculptParams || { roughness: 0.1, sharpness: 0.1, distortion: 0.0 };
 
     let scale = 1.0;
     if (stage === 'Pro') scale = 1.3;
@@ -201,7 +184,7 @@ export const getGenericVoxel = (element: string, bodyType: string, stage: string
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<style>html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; } canvas { display: block; outline: none; }</style>
+<style>html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; } canvas { display: block; outline: none; }</style>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -209,17 +192,15 @@ export const getGenericVoxel = (element: string, bodyType: string, stage: string
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-let MODE = 'HABITAT'; 
-let EDITOR_ACTIVE = false;
-let SELECTED_PART_ID = null;
 const DATA = ${JSON.stringify(anatomy)};
+const SCULPT = ${JSON.stringify(sculpt)};
 
 // --- SCENE SETUP ---
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 300);
-camera.position.set(0, 3, 10);
+const camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 300);
+camera.position.set(0, 3, 16);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
@@ -228,185 +209,318 @@ document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.minDistance = 4; controls.maxDistance = 18;
-controls.maxPolarAngle = Math.PI / 2 - 0.05; 
-controls.target.set(0, 1.5, 0);
+controls.minDistance = 6; controls.maxDistance = 30;
+controls.maxPolarAngle = Math.PI / 2 - 0.1; // Ground collision check
+controls.target.set(0, 1.8, 0);
 
-// --- LIGHTING (ANIME STUDIO STYLE) ---
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
+// --- MATERIALS (Anime Shader V2) ---
+// Emulating a "Toon" look with sharp terminators using basic MeshToonMaterial config
+const toonMat = (color, emit = 0.0) => {
+    return new THREE.MeshToonMaterial({ 
+        color: color,
+        side: THREE.DoubleSide,
+        emissive: color,
+        emissiveIntensity: emit
+    });
+};
+const matPrimary = toonMat(DATA.primaryColor, 0.1);
+const matSecondary = toonMat(DATA.secondaryColor);
+const matAccent = toonMat(DATA.accentColor, 0.3);
+const matBlack = new THREE.MeshBasicMaterial({ color: 0x111111 });
+const matWhite = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+
+// --- UTILS: OUTLINE ---
+function createOutline(geometry, thickness = 0.02, color = 0x000000) {
+    const outlineMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.BackSide });
+    const outlineMesh = new THREE.Mesh(geometry, outlineMat);
+    outlineMesh.scale.multiplyScalar(1 + thickness);
+    return outlineMesh;
+}
+
+// --- LIGHTING (Studio Setup) ---
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
 scene.add(ambientLight);
 const mainLight = new THREE.DirectionalLight(0xffffff, 1.2); 
-mainLight.position.set(5, 10, 8); mainLight.castShadow = true;
-mainLight.shadow.mapSize.set(2048,2048);
+mainLight.position.set(5, 12, 8); mainLight.castShadow = true;
+// Soften shadows
+mainLight.shadow.mapSize.width = 1024;
+mainLight.shadow.mapSize.height = 1024;
+mainLight.shadow.bias = -0.001;
 scene.add(mainLight);
-const rimLight = new THREE.SpotLight(parseInt(DATA.primaryColor.replace('#','0x')), 5);
-rimLight.position.set(-5, 5, -5);
+
+// Rim Light for Anime Edge
+const rimLight = new THREE.SpotLight(DATA.accentColor, 5.0);
+rimLight.position.set(-8, 6, -5); rimLight.lookAt(0,0,0);
 scene.add(rimLight);
 
-// --- MATERIALS (TOON SHADER) ---
-const toonMat = (color) => new THREE.MeshToonMaterial({ 
-    color: color, 
-    gradientMap: null // default smooth
-});
-const glowMat = (color) => new THREE.MeshBasicMaterial({ color: color });
-
-const matPrimary = toonMat(DATA.primaryColor);
-const matSecondary = toonMat(DATA.secondaryColor);
-const matAccent = toonMat(DATA.accentColor);
-const matBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
-const matEye = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
-
-// --- CONSTRUCTOR ENGINE ---
 const charGroup = new THREE.Group();
 scene.add(charGroup);
 charGroup.scale.setScalar(${scale});
 
-const bodyGroup = new THREE.Group();
-const partsGroup = new THREE.Group();
-charGroup.add(bodyGroup);
-charGroup.add(partsGroup);
+// ==========================================================
+//    TITAN ENGINE: VERTEX DEFORMATION & SCULPTING
+// ==========================================================
 
-const collisionMeshes = []; // For attaching parts
+function deformGeometry(geometry, callback) {
+    const posAttribute = geometry.attributes.position;
+    const vertex = new THREE.Vector3();
+    const normal = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    geometry.computeBoundingBox();
+    geometry.boundingBox.getCenter(center);
 
-function buildAnimeCharacter() {
-    // 1. BODY
-    let bodyMesh;
-    if (DATA.bodyShape === 'CHIBI_ROUND' || DATA.bodyShape === 'FLOATING_ORB') {
-        bodyMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), matPrimary);
-        bodyMesh.position.y = 1.0;
-        bodyMesh.scale.set(1, 0.9, 1);
-    } else if (DATA.bodyShape === 'QUAD_BEAST') {
-        bodyMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.8, 1.5, 4, 16), matPrimary);
-        bodyMesh.rotation.z = Math.PI / 2;
-        bodyMesh.position.y = 1.0;
-    } else if (DATA.bodyShape === 'TALL_HUMANOID') {
-        bodyMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.7, 1.2, 4, 16), matPrimary);
-        bodyMesh.position.y = 1.5;
-    } else if (DATA.bodyShape === 'SERPENT_LORD') {
-        bodyMesh = new THREE.Mesh(new THREE.TorusKnotGeometry(0.8, 0.3, 100, 16), matPrimary);
-        bodyMesh.position.y = 1.5;
-        bodyMesh.scale.set(1, 0.5, 1);
-    } else { // Default
-        bodyMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.8, 1.0, 4, 16), matPrimary);
-        bodyMesh.position.y = 1.2;
+    for (let i = 0; i < posAttribute.count; i++) {
+        vertex.fromBufferAttribute(posAttribute, i);
+        // Normalize relative to center for symmetrical sculpting
+        const localX = vertex.x - center.x;
+        const localY = vertex.y - center.y;
+        const localZ = vertex.z - center.z;
+        
+        callback(vertex, localX, localY, localZ);
+        posAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
     }
-    bodyMesh.castShadow = true; bodyMesh.receiveShadow = true;
-    bodyGroup.add(bodyMesh);
-    collisionMeshes.push(bodyMesh);
+    geometry.computeVertexNormals();
+}
 
-    // 2. HEAD
-    let headMesh;
-    const headGroup = new THREE.Group();
-    if (DATA.headShape === 'ROUND' || DATA.headShape === 'CAT' || DATA.headShape === 'FOX') {
-        headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.9, 32, 32), matPrimary);
-    } else if (DATA.headShape === 'SQUARE' || DATA.headShape === 'MECH') {
-        headMesh = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1.4), matPrimary);
-    } else if (DATA.headShape === 'DRAGON') {
-        headMesh = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2, 32), matPrimary);
-        headMesh.rotation.x = -Math.PI/2;
-    } else {
-         headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), matPrimary);
-    }
-    
-    // Position Head relative to Body
-    if(DATA.bodyShape === 'QUAD_BEAST') headGroup.position.set(1.2, 1.5, 0);
-    else if (DATA.bodyShape === 'TALL_HUMANOID') headGroup.position.set(0, 2.8, 0);
-    else headGroup.position.set(0, 1.8, 0); // Chibi Standard
+// --- ANATOMY BUILDERS ---
 
-    headMesh.castShadow = true; headMesh.receiveShadow = true;
-    headGroup.add(headMesh);
-    collisionMeshes.push(headMesh);
-    bodyGroup.add(headGroup);
+function createHead() {
+    const g = new THREE.Group();
+    const type = DATA.headShape;
+    let geo = new THREE.SphereGeometry(1, 48, 48); // High poly for sculpting
 
-    // 3. EYES (Anime Style)
-    const eyeGeo = new THREE.SphereGeometry(0.25, 16, 16);
-    const leftEye = new THREE.Mesh(eyeGeo, matEye);
-    const rightEye = new THREE.Mesh(eyeGeo, matEye);
-    
-    // Pupils
-    const pupilGeo = new THREE.SphereGeometry(0.12, 16, 16);
-    const lp = new THREE.Mesh(pupilGeo, matBlack);
-    const rp = new THREE.Mesh(pupilGeo, matBlack);
-    lp.position.z = 0.2; rp.position.z = 0.2;
-    leftEye.add(lp); rightEye.add(rp);
-
-    if (DATA.eyeStyle === 'CYCLOPS') {
-        leftEye.scale.set(2,2,2); leftEye.position.set(0, 0, 0.8);
-        headGroup.add(leftEye);
-    } else if (DATA.eyeStyle === 'VISOR') {
-        const visor = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 0.5), matAccent);
-        visor.position.set(0, 0, 0.8);
-        headGroup.add(visor);
-    } else {
-        leftEye.position.set(-0.35, 0.1, 0.75);
-        rightEye.position.set(0.35, 0.1, 0.75);
-        if(DATA.headShape === 'DRAGON') {
-            leftEye.position.set(-0.3, 0.3, 0.5); rightEye.position.set(0.3, 0.3, 0.5);
+    // ADVANCED SCULPTING
+    deformGeometry(geo, (v, x, y, z) => {
+        // Global Taper (Anime Chin)
+        if (y < -0.2) {
+             const factor = 1 - Math.abs(y+0.2)*0.5;
+             v.x *= factor; v.z *= factor; 
         }
-        headGroup.add(leftEye); headGroup.add(rightEye);
-    }
-
-    // 4. FEATURES (Ears, Horns)
-    if (DATA.headShape === 'CAT' || DATA.headShape === 'FOX') {
-        const earGeo = new THREE.ConeGeometry(0.3, 0.6, 16);
-        const lEar = new THREE.Mesh(earGeo, matSecondary);
-        const rEar = new THREE.Mesh(earGeo, matSecondary);
-        lEar.position.set(-0.6, 0.7, 0); lEar.rotation.z = 0.5;
-        rEar.position.set(0.6, 0.7, 0); rEar.rotation.z = -0.5;
-        headGroup.add(lEar); headGroup.add(rEar);
-    }
-    if (DATA.hasHorns) {
-        const hornGeo = new THREE.ConeGeometry(0.15, 0.8, 16);
-        const lHorn = new THREE.Mesh(hornGeo, matAccent); lHorn.position.set(-0.4, 0.8, -0.2);
-        const rHorn = new THREE.Mesh(hornGeo, matAccent); rHorn.position.set(0.4, 0.8, -0.2);
-        headGroup.add(lHorn); headGroup.add(rHorn);
-    }
-
-    // 5. LIMBS
-    const limbGeo = new THREE.CapsuleGeometry(0.2, 0.6, 4, 8);
-    if (DATA.bodyShape !== 'FLOATING_ORB' && DATA.bodyShape !== 'SERPENT_LORD') {
-        const lArm = new THREE.Mesh(limbGeo, matSecondary); lArm.position.set(-0.9, 1.2, 0); lArm.rotation.z = 0.5;
-        const rArm = new THREE.Mesh(limbGeo, matSecondary); rArm.position.set(0.9, 1.2, 0); rArm.rotation.z = -0.5;
-        bodyGroup.add(lArm); bodyGroup.add(rArm);
-
-        const legGeo = new THREE.CapsuleGeometry(0.25, 0.7, 4, 8);
-        if (DATA.bodyShape === 'QUAD_BEAST') {
-            const fl = new THREE.Mesh(legGeo, matSecondary); fl.position.set(-0.6, 0.4, 0.8);
-            const fr = new THREE.Mesh(legGeo, matSecondary); fr.position.set(0.6, 0.4, 0.8);
-            const bl = new THREE.Mesh(legGeo, matSecondary); bl.position.set(-0.6, 0.4, -0.8);
-            const br = new THREE.Mesh(legGeo, matSecondary); br.position.set(0.6, 0.4, -0.8);
-            bodyGroup.add(fl); bodyGroup.add(fr); bodyGroup.add(bl); bodyGroup.add(br);
-        } else {
-            const lLeg = new THREE.Mesh(legGeo, matSecondary); lLeg.position.set(-0.4, 0.4, 0);
-            const rLeg = new THREE.Mesh(legGeo, matSecondary); rLeg.position.set(0.4, 0.4, 0);
-            bodyGroup.add(lLeg); bodyGroup.add(rLeg);
+        
+        if (type === 'FOX' || type === 'WOLF') {
+            if (z > 0.4 && Math.abs(x) < 0.5 && y < 0.2) { v.z += 0.4; v.y -= 0.1; } // Snout
+            if (Math.abs(x) > 0.6 && y > 0.3) { v.y += 0.3; v.x *= 1.1; } // Ears base hint
         }
+        else if (type === 'DRAGON' || type === 'LIZARD') {
+             if (z > 0.3) { v.z += 0.5; v.y *= 0.6; } // Long snout
+             if (y > 0.5) { v.x *= 0.8; } // Narrow crest
+        }
+        else if (type === 'CAT') {
+             if (y < -0.4) { v.y += 0.2; } // Flat chin
+             if (Math.abs(x) > 0.7) v.x *= 1.2; // Wide cheeks
+        }
+        else if (type === 'MECH' || type === 'TV') {
+             // Cube-ify
+             v.x = Math.sign(x) * Math.pow(Math.abs(x), 0.3) * 0.9;
+             v.y = Math.sign(y) * Math.pow(Math.abs(y), 0.3) * 0.9;
+             v.z = Math.sign(z) * Math.pow(Math.abs(z), 0.3) * 0.9;
+        }
+    });
+
+    const headMesh = new THREE.Mesh(geo, matPrimary);
+    g.add(headMesh);
+    g.add(createOutline(geo));
+
+    // EYES (Anime Style)
+    const eyeGroup = new THREE.Group();
+    const eyeGeo = (DATA.eyeStyle === 'DOTS') 
+        ? new THREE.SphereGeometry(0.15, 16, 16) 
+        : new THREE.CapsuleGeometry(0.22, 0.2, 4, 8);
+    
+    if (DATA.eyeStyle === 'VISOR') {
+        const visorGeo = new THREE.BoxGeometry(1.6, 0.4, 0.5);
+        deformGeometry(visorGeo, (v) => { v.z += Math.cos(v.x)*0.2; }); // Curve
+        const visor = new THREE.Mesh(visorGeo, new THREE.MeshBasicMaterial({color: 0x00ff00}));
+        visor.position.set(0, 0.1, 0.8);
+        g.add(visor);
+    } else {
+        const leftEye = new THREE.Mesh(eyeGeo, matBlack);
+        leftEye.rotation.z = Math.PI/2;
+        leftEye.position.set(-0.4, 0.1, 0.85);
+        if(type==='DRAGON') leftEye.position.z = 1.1;
+        
+        // Pupil/Shine
+        const shine = new THREE.Mesh(new THREE.CircleGeometry(0.08, 8), matWhite);
+        shine.position.set(0.05, 0.05, 0.15); // Slightly forward
+        leftEye.add(shine);
+        
+        const rightEye = leftEye.clone();
+        rightEye.position.x = -leftEye.position.x;
+        
+        eyeGroup.add(leftEye); eyeGroup.add(rightEye);
+        g.add(eyeGroup);
     }
 
-    // 6. EXTRAS (Wings, Tail)
-    if (DATA.hasWings) {
-        const wingGeo = new THREE.BoxGeometry(0.1, 1.5, 0.8);
-        const lWing = new THREE.Mesh(wingGeo, matAccent); lWing.position.set(-0.8, 1.5, -0.5); lWing.rotation.z = 0.5; lWing.rotation.y = -0.5;
-        const rWing = new THREE.Mesh(wingGeo, matAccent); rWing.position.set(0.8, 1.5, -0.5); rWing.rotation.z = -0.5; rWing.rotation.y = 0.5;
-        bodyGroup.add(lWing); bodyGroup.add(rWing);
+    // EARS/HORNS (Attachments)
+    if(type === 'CAT' || type === 'FOX' || type === 'WOLF') {
+        const earGeo = new THREE.ConeGeometry(0.35, 0.7, 4);
+        const lEar = new THREE.Mesh(earGeo, matPrimary);
+        lEar.position.set(-0.6, 0.8, 0.2); lEar.rotation.set(-0.2, 0, 0.5);
+        const rEar = lEar.clone(); rEar.position.set(0.6, 0.8, 0.2); rEar.rotation.set(-0.2, 0, -0.5);
+        g.add(lEar); g.add(rEar);
     }
-    if (DATA.hasTail) {
-        const tailGeo = new THREE.ConeGeometry(0.2, 1.5, 16);
+
+    return g;
+}
+
+// --- SOCKET-BASED LIMB SYSTEM ---
+
+function createLimb(width, length, style) {
+    const group = new THREE.Group();
+    
+    // Joint pivot (Shoulder/Hip)
+    const joint = new THREE.Group();
+    group.add(joint);
+
+    // Upper Limb
+    const upGeo = new THREE.CapsuleGeometry(width, length/2, 4, 8);
+    upGeo.translate(0, -length/4, 0); // Pivot at top
+    const upper = new THREE.Mesh(upGeo, matSecondary);
+    joint.add(upper);
+
+    // Lower Limb (Forearm/Shin)
+    const lowGeo = new THREE.CapsuleGeometry(width*0.8, length/2, 4, 8);
+    lowGeo.translate(0, -length/4, 0);
+    const lower = new THREE.Mesh(lowGeo, matSecondary);
+    lower.position.y = -length/2; // Attach to bottom of upper
+    upper.add(lower);
+
+    // Hand/Foot
+    let footGeo;
+    if (style === 'HOOVES') footGeo = new THREE.BoxGeometry(width*1.2, width, width*1.2);
+    else if (style === 'CLAWS') footGeo = new THREE.ConeGeometry(width, width*2, 4);
+    else footGeo = new THREE.SphereGeometry(width*1.2, 8, 8); // Paws/Nubs
+
+    const foot = new THREE.Mesh(footGeo, matAccent);
+    foot.position.y = -length/2;
+    if(style === 'CLAWS') foot.rotation.x = -Math.PI/2;
+    lower.add(foot);
+
+    return { root: group, joint: joint, lower: lower, foot: foot };
+}
+
+// --- ASSEMBLY ---
+
+const rig = { root: null, spine: null, head: null, legs: [], arms: [], tail: null };
+
+function assemble() {
+    const type = DATA.bodyShape;
+    const limbStyle = DATA.limbStyle;
+
+    // 1. CHASSIS
+    let bodyGeo;
+    if(type === 'HUMANOID' || type === 'MUSCLE') bodyGeo = new THREE.CapsuleGeometry(0.7, 1.2, 8, 16);
+    else if(type === 'QUAD') bodyGeo = new THREE.CapsuleGeometry(0.7, 1.5, 8, 16);
+    else if(type === 'BOX') bodyGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+    else bodyGeo = new THREE.SphereGeometry(1.0, 32, 32); // Orb/Pear
+
+    if(type === 'PEAR') deformGeometry(bodyGeo, (v,x,y,z) => { if(y<0) v.x *= 1.5; v.z *= 1.2; });
+    if(type === 'QUAD') { 
+        // Horizontal capsule
+        bodyGeo = new THREE.CapsuleGeometry(0.7, 1.4, 8, 16);
+        const qMesh = new THREE.Mesh(bodyGeo, matPrimary);
+        qMesh.rotation.x = Math.PI/2;
+        charGroup.add(qMesh);
+        rig.root = qMesh;
+        rig.root.position.y = 1.5;
+    } else {
+        const bMesh = new THREE.Mesh(bodyGeo, matPrimary);
+        charGroup.add(bMesh);
+        rig.root = bMesh;
+        rig.root.position.y = (type==='HUMANOID') ? 2.0 : 1.5;
+    }
+
+    rig.root.add(createOutline(bodyGeo));
+
+    // 2. HEAD ATTACHMENT
+    rig.head = createHead();
+    if(type === 'QUAD') {
+        rig.head.position.set(0, 0.4, 1.0); // Front of quad
+    } else if(type === 'SERPENT') {
+        rig.head.position.set(0, 0, 0); // Serpent handles logic separately
+    } else {
+        rig.head.position.set(0, (type==='HUMANOID'?0.8:0.8), 0);
+    }
+    rig.root.add(rig.head);
+
+    // 3. LIMBS (Socket Logic)
+    if(type === 'HUMANOID' || type === 'MUSCLE' || type === 'BOX') {
+        // Legs
+        const lLeg = createLimb(0.25, 1.6, limbStyle);
+        lLeg.root.position.set(-0.4, -0.5, 0);
+        rig.root.add(lLeg.root); rig.legs.push(lLeg);
+        
+        const rLeg = createLimb(0.25, 1.6, limbStyle);
+        rLeg.root.position.set(0.4, -0.5, 0);
+        rig.root.add(rLeg.root); rig.legs.push(rLeg);
+
+        // Arms
+        const lArm = createLimb(0.2, 1.3, limbStyle);
+        lArm.root.position.set(-0.8, 0.4, 0);
+        lArm.joint.rotation.z = 0.5; // Natural A-pose
+        rig.root.add(lArm.root); rig.arms.push(lArm);
+
+        const rArm = createLimb(0.2, 1.3, limbStyle);
+        rArm.root.position.set(0.8, 0.4, 0);
+        rArm.joint.rotation.z = -0.5;
+        rig.root.add(rArm.root); rig.arms.push(rArm);
+    }
+    else if(type === 'QUAD') {
+        // 4 Legs
+        const legPos = [
+            {x:-0.5, y:0, z:0.6}, {x:0.5, y:0, z:0.6}, // Front
+            {x:-0.5, y:0, z:-0.6}, {x:0.5, y:0, z:-0.6} // Back
+        ];
+        legPos.forEach(p => {
+            const l = createLimb(0.22, 1.2, limbStyle);
+            l.root.position.set(p.x, p.y, p.z);
+            rig.root.add(l.root); rig.legs.push(l);
+        });
+    }
+
+    // 4. TAIL
+    if(DATA.tailStyle !== 'NONE' && type !== 'SERPENT') {
+        const tailGeo = new THREE.ConeGeometry(0.2, 1.5, 8);
+        deformGeometry(tailGeo, (v,x,y,z) => { v.x += Math.sin(y*2)*0.2; }); // Curve
         const tail = new THREE.Mesh(tailGeo, matSecondary);
-        tail.position.set(0, 0.6, -1.0); tail.rotation.x = -2;
-        bodyGroup.add(tail);
+        tail.position.set(0, -0.2, -0.7);
+        tail.rotation.x = -1.2;
+        rig.root.add(tail);
+        rig.tail = tail;
     }
 }
-buildAnimeCharacter();
+assemble();
 
-// --- ENVIRONMENT ---
+// --- ENVIRONMENT (Procedural Terrain) ---
 const envGroup = new THREE.Group();
 scene.add(envGroup);
-const ground = new THREE.Mesh(new THREE.CylinderGeometry(50,50,1,64), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-ground.position.y = -0.5; ground.receiveShadow = true;
-envGroup.add(ground);
 
-// --- ANIMATION ---
+function updateEnvironment(type) {
+    while(envGroup.children.length > 0) envGroup.remove(envGroup.children[0]);
+    
+    // Floor
+    const floorGeo = new THREE.PlaneGeometry(60, 60, 32, 32);
+    // Vertex displacement for hills
+    const pos = floorGeo.attributes.position;
+    for(let i=0; i<pos.count; i++) {
+        const x = pos.getX(i); const y = pos.getY(i);
+        const z = pos.getZ(i);
+        // Safe center area
+        const dist = Math.sqrt(x*x + y*y);
+        if(dist > 5) {
+            pos.setZ(i, Math.random() * 1.5); // Jagged hills
+        }
+    }
+    floorGeo.computeVertexNormals();
+
+    const color = (type==='Grass')?0x4ade80 : (type==='City')?0x1e293b : 0x7f1d1d;
+    const floor = new THREE.Mesh(floorGeo, new THREE.MeshToonMaterial({color: color}));
+    floor.rotation.x = -Math.PI/2; 
+    floor.receiveShadow = true;
+    envGroup.add(floor);
+}
+
+// --- ANIMATION LOOP ---
 const clock = new THREE.Clock();
 let currentAction = 'IDLE';
 
@@ -415,64 +529,69 @@ function animate() {
     const t = clock.getElapsedTime();
     controls.update();
 
-    if(currentAction === 'WALK') {
-        bodyGroup.position.y = Math.sin(t * 10) * 0.1;
-        bodyGroup.rotation.z = Math.sin(t * 5) * 0.05;
-    } else if (currentAction === 'ATTACK') {
-        bodyGroup.position.z = Math.sin(t * 20) * 0.5;
-    } else {
-        bodyGroup.position.y = Math.sin(t * 2) * 0.05; // Idle breath
+    if(rig.root) {
+        // 1. BREATHING (Vertical Bob)
+        // Physics: When breathing in (up), body expands.
+        const breath = Math.sin(t * 2);
+        rig.root.position.y += breath * 0.002;
+        
+        // 2. IDLE STANCE (Phase Offset)
+        // Arms sway slightly delayed from body
+        rig.arms.forEach((arm, i) => {
+             arm.joint.rotation.z = (i%2===0 ? 0.5 : -0.5) + Math.sin(t*2 + 1) * 0.05;
+             arm.lower.rotation.z = Math.sin(t*2 + 2) * 0.1; // Forearm sway
+        });
+
+        // 3. IK SIMULATION (Fake Grounding)
+        // When body goes down, bend knees to keep feet at y=0
+        if(DATA.bodyShape === 'HUMANOID' || DATA.bodyShape === 'QUAD') {
+            const bodyH = rig.root.position.y;
+            // Simple logic: lower legs rotate opposite to upper legs to simulate compression
+            const bend = Math.max(0, (2.0 - bodyH) * 1.5); 
+            rig.legs.forEach(leg => {
+                leg.lower.rotation.x = bend; 
+            });
+        }
     }
-    
-    if (DATA.bodyShape === 'FLOATING_ORB') bodyGroup.position.y += 0.5 + Math.sin(t * 3) * 0.2;
+
+    // 4. ACTION STATES
+    if (currentAction === 'RUN') {
+        const speed = 12;
+        rig.root.position.y += Math.sin(t * speed * 2) * 0.02; // Bouncy run
+        
+        rig.legs.forEach((leg, i) => {
+            const offset = (i%2===0) ? 0 : Math.PI;
+            leg.joint.rotation.x = Math.sin(t * speed + offset) * 0.8;
+            leg.lower.rotation.x = Math.abs(Math.sin(t * speed + offset)) * 1.5; // Knee snap
+        });
+        
+        rig.arms.forEach((arm, i) => {
+            const offset = (i%2===0) ? Math.PI : 0;
+            arm.joint.rotation.x = Math.sin(t * speed + offset) * 0.8;
+        });
+    }
+
+    if (currentAction === 'ATTACK') {
+        const impact = Math.sin(t * 15);
+        if(rig.root) rig.root.rotation.y = impact * 0.2; // Shake
+        rig.arms.forEach(arm => {
+             arm.joint.rotation.x = -1.5; // Arms up
+        });
+    }
 
     renderer.render(scene, camera);
 }
 animate();
 
-window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
-
-// --- PART SYSTEM ---
-function createPartGeometry(type) {
-    const g = new THREE.Group();
-    const addMesh = (geo, mat, pos={x:0,y:0,z:0}, rot={x:0,y:0,z:0}) => {
-        const m = new THREE.Mesh(geo, mat); m.position.set(pos.x,pos.y,pos.z); m.rotation.set(rot.x,rot.y,rot.z); m.castShadow=true; g.add(m); return m;
-    };
-    // Re-implement simplified parts for Anime Style
-    if(type.includes('WING')) addMesh(new THREE.CylinderGeometry(0.05, 0.05, 1.8, 8), matGold, {x:0,y:0.5,z:0}, {x:0,y:0,z:-Math.PI/4});
-    else if(type.includes('KATANA')) addMesh(new THREE.BoxGeometry(0.05, 1.2, 0.02), matAccent, {x:0,y:0.6,z:0});
-    else addMesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), matAccent);
-    return g;
-}
-
 window.addEventListener('message', (e) => {
-    const d = e.data;
-    if(d.type === 'SET_ACTION') currentAction = d.value;
-    if(d.type === 'SET_EQUIPMENT' && d.value?.parts) {
-        while(partsGroup.children.length > 0) partsGroup.remove(partsGroup.children[0]);
-        d.value.parts.forEach(p => {
-             const m = createPartGeometry(p.partType);
-             m.position.copy(p.position); m.lookAt(new THREE.Vector3().copy(p.position).add(p.faceNormal));
-             partsGroup.add(m);
-        });
-    }
-    // Raycaster for Parts
-    if(d.type === 'SET_MODE' && d.value === 'ENGINEER') { EDITOR_ACTIVE = true; SELECTED_PART_ID = d.partId; } 
-    else EDITOR_ACTIVE = false;
+    if(e.data.type === 'SET_ENV_DATA') updateEnvironment(e.data.payload.envType);
+    if(e.data.type === 'SET_ACTION') currentAction = e.data.value;
 });
 
-// Simple Engineer Raycast (Simplified for Capsule geometry)
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-window.addEventListener('pointerdown', (e) => {
-    if(!EDITOR_ACTIVE) return;
-    mouse.x = (e.clientX/window.innerWidth)*2-1; mouse.y = -(e.clientY/window.innerHeight)*2+1;
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(collisionMeshes, true);
-    if(intersects.length > 0) {
-        const hit = intersects[0];
-        window.parent.postMessage({ type: 'PART_PLACED', partId: SELECTED_PART_ID, position: hit.point, normal: hit.face.normal }, '*');
-    }
+window.addEventListener('resize', () => { 
+    camera.aspect = window.innerWidth/window.innerHeight; 
+    camera.updateProjectionMatrix(); 
+    renderer.setSize(window.innerWidth, window.innerHeight); 
 });
 
 </script>

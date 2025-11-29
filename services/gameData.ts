@@ -23,26 +23,52 @@ export interface PartDefinition {
     id: string; name: string; category: string; rarity: string; cost: number; stats: any; description: string; voxelShapeType: string; colorTheme: string;
 }
 
-// UPDATE: Expanded Anatomy Schema for Modular Assembly
+// UPDATE: Expanded Anatomy Schema for Modular Assembly (Based on User Grid Refs)
+// Head: 4x3 Grid (12 types) | Others: 3x3 Grid (9 types)
 export interface VisualTraits {
     anatomy: {
-        // MODULE 1: HEAD
-        headShape: 'ROUND' | 'BEAST' | 'DRAGON' | 'MECH' | 'INSECT' | 'SQUARE';
-        // MODULE 2: BODY
-        bodyShape: 'ORB' | 'PEAR' | 'QUADRUPED' | 'HUMANOID' | 'SERPENT';
-        // MODULE 3: LIMBS
-        limbStyle: 'NUBS' | 'PAWS' | 'CLAWS' | 'MECH' | 'HOOVES' | 'NONE';
-        // MODULE 4: TAIL/REAR
-        tailStyle: 'NONE' | 'FLUFFY' | 'REPTILE' | 'DEVIL' | 'THRUSTER' | 'BULB';
-        // MODULE 5: WINGS/BACK
-        wingStyle: 'NONE' | 'FEATHER' | 'BAT' | 'SHELL' | 'FLOATING';
+        // 4x3 GRID (12 VARIANTS)
+        headShape: 
+            'ROUND' | 'OVAL' | 'SQUARE' | // ROW 1 (Basic)
+            'CAT' | 'FOX' | 'WOLF' |      // ROW 2 (Beast)
+            'DRAGON' | 'LIZARD' | 'TV' |  // ROW 3 (Exotic/Mech)
+            'SKULL' | 'FLOWER' | 'GHOST'; // ROW 4 (Special)
         
-        // COLORS & EXTRAS
-        eyeStyle: 'ANIME_LARGE' | 'CYCLOPS' | 'VISOR' | 'DOTS' | 'GLOW_SLIT';
+        // 3x3 GRID (9 VARIANTS)
+        bodyShape: 
+            'ORB' | 'PEAR' | 'BOX' |          // ROW 1
+            'HUMANOID' | 'MUSCLE' | 'SLIM' |  // ROW 2
+            'QUAD' | 'SERPENT' | 'FLOATING';  // ROW 3
+        
+        // 3x3 GRID
+        limbStyle: 
+            'NUBS' | 'PAWS' | 'HOOVES' |       // ROW 1
+            'BOOTS' | 'CLAWS' | 'TALONS' |     // ROW 2
+            'MECH' | 'WHEELS' | 'NONE';        // ROW 3
+        
+        // 3x3 GRID
+        tailStyle: 
+            'NONE' | 'CAT' | 'FOX' |           // ROW 1
+            'LIZARD' | 'DEVIL' | 'FISH' |      // ROW 2
+            'MECH_PLUG' | 'STINGER' | 'GHOST'; // ROW 3
+        
+        // 3x3 GRID
+        wingStyle: 
+            'NONE' | 'FEATHER' | 'BAT' |       // ROW 1
+            'BUTTERFLY' | 'MECH' | 'CRYSTAL' | // ROW 2
+            'CAPE' | 'SCARF' | 'SPIKES';       // ROW 3
+        
+        // EXTRAS
+        eyeStyle: 'ANIME_LARGE' | 'DOTS' | 'VISOR' | 'CYCLOPS' | 'GLOW_SLIT';
         primaryColor: string;
         secondaryColor: string;
         accentColor: string;
-        hasHorns?: boolean;
+    };
+    // NEW: Sculpting Parameters for Vertex Deformation Engine
+    sculptParams?: {
+        roughness?: number; // 0-1 (Smooth -> Furry/Scaly)
+        sharpness?: number; // 0-1 (Round -> Angular)
+        distortion?: number; // 0-1 (Symmetrical -> Alien)
     };
     extractedColors?: {
         primary: string;
@@ -124,10 +150,12 @@ export const ITEMS_DB: Record<string, any> = {
 
 export const MONSTER_DB: Record<string, any> = {
     'slime_v1': { speciesId: 'slime_v1', name: 'Slime', element: 'Toxic', stats: { hp: 40, atk: 10, def: 10, spd: 10 }, visualTraits: { 
-        anatomy: { headShape: 'ROUND', bodyShape: 'ORB', limbStyle: 'NUBS', tailStyle: 'NONE', wingStyle: 'NONE', eyeStyle: 'ANIME_LARGE', primaryColor: '#10B981', secondaryColor: '#A7F3D0', accentColor: '#064E3B' }
+        anatomy: { headShape: 'ROUND', bodyShape: 'ORB', limbStyle: 'NUBS', tailStyle: 'NONE', wingStyle: 'NONE', eyeStyle: 'ANIME_LARGE', primaryColor: '#10B981', secondaryColor: '#A7F3D0', accentColor: '#064E3B' },
+        sculptParams: { roughness: 0.1, sharpness: 0.0 }
     }},
     'fire_wolf': { speciesId: 'fire_wolf', name: 'Fire Wolf', element: 'Fire', stats: { hp: 60, atk: 25, def: 15, spd: 30 }, visualTraits: { 
-        anatomy: { headShape: 'BEAST', bodyShape: 'QUADRUPED', limbStyle: 'PAWS', tailStyle: 'FLUFFY', wingStyle: 'NONE', eyeStyle: 'GLOW_SLIT', primaryColor: '#EF4444', secondaryColor: '#FCA5A5', accentColor: '#7F1D1D', hasTail: true }
+        anatomy: { headShape: 'WOLF', bodyShape: 'QUAD', limbStyle: 'PAWS', tailStyle: 'FOX', wingStyle: 'NONE', eyeStyle: 'GLOW_SLIT', primaryColor: '#EF4444', secondaryColor: '#FCA5A5', accentColor: '#7F1D1D', hasTail: true },
+        sculptParams: { roughness: 0.8, sharpness: 0.5 }
     }},
 };
 
@@ -186,16 +214,25 @@ export const getLootDrop = (locId: string) => {
 
 export const generateStarterOptions = () => [
     { 
-        name: 'Ignis', element: 'Fire', bodyType: 'BIPED', description: 'Fiery fighter.', stats: { hp: 50, atk: 18, def: 12, spd: 14 }, 
-        visualTraits: { anatomy: { headShape: 'BEAST', bodyShape: 'PEAR', limbStyle: 'PAWS', tailStyle: 'FLUFFY', wingStyle: 'NONE', eyeStyle: 'ANIME_LARGE', primaryColor: '#EF4444', secondaryColor: '#FCA5A5', accentColor: '#7F1D1D', hasTail: true } } 
+        name: 'Ignis', element: 'Fire', bodyType: 'HUMANOID', description: 'Fiery fighter.', stats: { hp: 50, atk: 18, def: 12, spd: 14 }, 
+        visualTraits: { 
+            anatomy: { headShape: 'WOLF', bodyShape: 'HUMANOID', limbStyle: 'PAWS', tailStyle: 'FOX', wingStyle: 'NONE', eyeStyle: 'ANIME_LARGE', primaryColor: '#EF4444', secondaryColor: '#FCA5A5', accentColor: '#7F1D1D', hasTail: true },
+            sculptParams: { roughness: 0.6, sharpness: 0.3 }
+        } 
     },
     { 
         name: 'Aqua', element: 'Water', bodyType: 'FLOATING', description: 'Fluid defender.', stats: { hp: 60, atk: 14, def: 16, spd: 12 }, 
-        visualTraits: { anatomy: { headShape: 'ROUND', bodyShape: 'ORB', limbStyle: 'NUBS', tailStyle: 'NONE', wingStyle: 'FLOATING', eyeStyle: 'ANIME_LARGE', primaryColor: '#3B82F6', secondaryColor: '#93C5FD', accentColor: '#1E3A8A' } } 
+        visualTraits: { 
+            anatomy: { headShape: 'ROUND', bodyShape: 'FLOATING', limbStyle: 'NUBS', tailStyle: 'FISH', wingStyle: 'NONE', eyeStyle: 'ANIME_LARGE', primaryColor: '#3B82F6', secondaryColor: '#93C5FD', accentColor: '#1E3A8A' },
+            sculptParams: { roughness: 0.0, sharpness: 0.0 }
+        } 
     },
     { 
-        name: 'Terra', element: 'Grass', bodyType: 'QUADRUPED', description: 'Sturdy tank.', stats: { hp: 70, atk: 15, def: 15, spd: 10 }, 
-        visualTraits: { anatomy: { headShape: 'BEAST', bodyShape: 'QUADRUPED', limbStyle: 'PAWS', tailStyle: 'BULB', wingStyle: 'NONE', eyeStyle: 'DOTS', primaryColor: '#10B981', secondaryColor: '#6EE7B7', accentColor: '#064E3B' } } 
+        name: 'Terra', element: 'Grass', bodyType: 'QUAD', description: 'Sturdy tank.', stats: { hp: 70, atk: 15, def: 15, spd: 10 }, 
+        visualTraits: { 
+            anatomy: { headShape: 'SQUARE', bodyShape: 'QUAD', limbStyle: 'HOOVES', tailStyle: 'LIZARD', wingStyle: 'NONE', eyeStyle: 'DOTS', primaryColor: '#10B981', secondaryColor: '#6EE7B7', accentColor: '#064E3B' },
+            sculptParams: { roughness: 0.2, sharpness: 0.8 }
+        } 
     }
 ];
 
