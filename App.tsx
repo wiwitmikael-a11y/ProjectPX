@@ -4,383 +4,193 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useEffect, memo, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { analyzeObject, getGenericVoxel, generateProceduralBoss, generateBattleCommentary, generatePetReaction, generateMission, analyzeArtifact } from './services/gemini';
-import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, MonsterStats, LOCATIONS_DB, LocationNode, generateStarterOptions, EVO_THRESHOLDS, getProceduralMonsterArt, getRandomEventText, getActionFromText, getPetSpeech, EMOTE_ICONS, MONSTER_DB, MonsterEntry, checkDiscovery, assignMoves, Move, PARTS_DB, PartDefinition, AttachedPart, calculateStats, GACHA_POOLS, ActiveMission } from './services/gameData';
-import { IconBag, IconBook, IconCards, IconCart, IconCoin, IconMap, IconScan, IconSkull, IconTreasure, ItemIcon, IconCapsule, IconTrash } from './components/Icons';
+import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, LOCATIONS_DB, generateStarterOptions, getActionFromText, MONSTER_DB, PARTS_DB, calculateStats, GACHA_POOLS, ActiveMission } from './services/gameData';
+import { IconBag, IconCards, IconCart, IconCoin, IconMap, IconScan, IconTreasure, ItemIcon, IconCapsule, IconWrench } from './components/Icons';
 import { VoxelViewer, PixuCard } from './components/Shared';
 
 // --- TYPES ---
-type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP' | 'ITEMS' | 'EXPLORE' | 'CODEX' | 'ENGINEER' | 'GACHA' | 'MISSION';
+type GameState = 'SPLASH' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'ENGINEER';
+// Sub-modals are handled via separate state to prevent losing the 3D context
+type ActiveModal = 'NONE' | 'SHOP' | 'COLLECTION' | 'ITEMS' | 'EXPLORE' | 'GACHA' | 'STATS';
 
-const SAVE_VERSION = 'v31.0_AFK_FIXED'; 
-
-const IconWallet = () => (
-    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
-        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" fill="#9945FF" stroke="black" strokeWidth="2"/>
-        <path d="M22 12h-4c-1.1 0-2 .9-2 2v4h6v-6z" fill="#14F195" stroke="black" strokeWidth="2"/>
-        <circle cx="20" cy="15" r="1.5" fill="black"/>
-    </svg>
-);
-
-const IconWrench = () => (
-    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
-        <path d="M14.7 3.3c-1.3-1.3-3.4-1.3-4.7 0l-1.3 1.3 6 6 1.3-1.3c1.3-1.3 1.3-3.4 0-4.7l-1.3-1.3zM7.3 10.7l-4.6 4.6c-.4.4-.4 1 0 1.4l2.6 2.6c.4.4 1 .4 1.4 0l4.6-4.6-4-4z" fill="#60A5FA" stroke="black" strokeWidth="2"/>
-    </svg>
-);
-
-interface UserProfile {
-  name: string;
-  level: number;
-  exp: number;
-  coins: number; 
-  currentLocation: string; 
-  joinedAt: number;
-  inventory: string[]; 
-  currentRank: string;
-  seen: string[]; 
-  caught: string[];
-  lastSaveTime?: number;
-  lastDailyBonus?: number; 
-  kills?: number; 
-  activeMission?: ActiveMission; 
-}
-
-interface FloatingText { id: number; text: string; x: number; y: number; color: string; }
+const SAVE_VERSION = 'v32.0_STABLE'; 
 
 // --- MAIN APP ---
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState>('SPLASH');
-  const [user, setUser] = useState<UserProfile>({ 
+  const [activeModal, setActiveModal] = useState<ActiveModal>('NONE');
+  
+  const [user, setUser] = useState<any>({ 
       name: 'Tamer', level: 1, exp: 0, coins: 200, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: [], currentRank: 'Noob', seen: [], caught: [], kills: 0 
   });
   const [inventory, setInventory] = useState<any[]>([]);
   const [activePetIndex, setActivePetIndex] = useState<number>(0);
   const [starterOptions, setStarterOptions] = useState<any[]>([]);
   
-  // Modals & Overlays
+  // Systems
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isMaterializing, setIsMaterializing] = useState(false); 
-  const [activeBattle, setActiveBattle] = useState<any>(null);
-  const [showLevelUp, setShowLevelUp] = useState<any>(null);
-  const [notifs, setNotifs] = useState<FloatingText[]>([]);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
-  const [activeEvent, setActiveEvent] = useState<any>(null);
   const [statusText, setStatusText] = useState("System Online");
-  const [preEventEmote, setPreEventEmote] = useState<string | null>(null);
-  const [expeditionReport, setExpeditionReport] = useState<{coins: number, exp: number, timeAway: number} | null>(null);
-
-  // ENHANCED VISUALS
-  const [showBattleOverlay, setShowBattleOverlay] = useState<any>(null); 
-  const [isAutoMode, setIsAutoMode] = useState(false); 
+  const [notifs, setNotifs] = useState<{id:number, text:string, color:string}[]>([]);
   const [systemLogs, setSystemLogs] = useState<string[]>([]);
+  
+  // AFK & Combat
+  const [isAutoMode, setIsAutoMode] = useState(false); 
   const [isSummoningBoss, setIsSummoningBoss] = useState(false); 
   const [missionLoading, setMissionLoading] = useState(false);
 
-  // GACHA STATE
+  // Gacha
   const [gachaState, setGachaState] = useState<'IDLE' | 'DROPPING' | 'REVEAL'>('IDLE');
   const [gachaResult, setGachaResult] = useState<any>(null);
 
-  // Engineer Mode State
+  // Engineer
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
 
-  // Reality Sync (Time Detection)
-  const [isNight, setIsNight] = useState(false);
-
-  // Interactive State
-  const [isPetIdle, setIsPetIdle] = useState(false);
+  // Interaction
   const [speechBubble, setSpeechBubble] = useState<string | null>(null);
   const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  // FX
-  const [purchaseAnim, setPurchaseAnim] = useState<string | null>(null);
-
-  // UI States
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [itemsOpen, setItemsOpen] = useState(false);
-  const [exploreOpen, setExploreOpen] = useState(false);
 
   const activePet = inventory[activePetIndex];
-  const battleStats = activePet ? calculateStats(activePet) : null;
   const location = LOCATIONS_DB[user.currentLocation];
-  const logScrollRef = useRef<HTMLDivElement>(null);
-  
-  // --- MEMOIZED ENV DATA ---
-  const envData = useMemo(() => ({ 
-      envType: location.environmentType || 'Grass', 
-      isNight: isNight 
-  }), [location.environmentType, isNight]);
 
-  // --- TIME DETECTION ---
-  useEffect(() => {
-    const checkTime = () => {
-        const hour = new Date().getHours();
-        setIsNight(hour < 6 || hour >= 18); 
-    };
-    checkTime();
-    const interval = setInterval(checkTime, 60000); 
-    return () => clearInterval(interval);
-  }, []);
-
+  // --- INIT & SAVE ---
   useEffect(() => {
       setStarterOptions(generateStarterOptions());
-  }, []);
-
-  // --- LOAD / SAVE ---
-  useEffect(() => {
       const saved = localStorage.getItem(`pixupet_save_${SAVE_VERSION}`);
       if (saved) {
           const data = JSON.parse(saved);
           setUser(data.user);
           setInventory(data.inventory);
-          if (data.user.lastSaveTime && data.inventory.length > 0) {
-              const diffMinutes = Math.floor((Date.now() - data.user.lastSaveTime) / 60000);
-              if (diffMinutes > 10) setExpeditionReport({ timeAway: diffMinutes, exp: Math.min(diffMinutes * 5, 2000), coins: Math.min(diffMinutes * 2, 1000) });
-          }
           setGameState('NEXUS');
       }
   }, []);
 
   useEffect(() => {
-      const interval = setInterval(() => {
-          if (inventory.length > 0) {
-              setInventory(prev => prev.map(p => ({ 
-                  ...p, hunger: Math.max(0, p.hunger - 2), happiness: Math.max(0, (p.happiness || 100) - 1), fatigue: Math.max(0, (p.fatigue || 0) - 1) 
-              })));
-          }
-      }, 60000); 
-      return () => clearInterval(interval);
-  }, [inventory.length]);
-
-  useEffect(() => {
       if (user.level > 0 && inventory.length > 0) {
-        localStorage.setItem(`pixupet_save_${SAVE_VERSION}`, JSON.stringify({ user: { ...user, lastSaveTime: Date.now() }, inventory }));
+        localStorage.setItem(`pixupet_save_${SAVE_VERSION}`, JSON.stringify({ user, inventory }));
       }
   }, [user, inventory]);
 
-  // --- SINGULARITY: SENTIENT PET CHAT ---
-  useEffect(() => {
-      if (gameState !== 'NEXUS' || isAutoMode || !activePet || isPetIdle) return;
-      
-      const chatInterval = setInterval(async () => {
-          if(Math.random() > 0.7) {
-              const context = `Location: ${location.name}. Time: ${isNight?'Night':'Day'}. Hunger: ${activePet.hunger}.`;
-              const speech = await generatePetReaction(activePet, context);
-              triggerSpeech(speech);
-          }
-      }, 15000); // Every 15s chance to talk
-
-      return () => clearInterval(chatInterval);
-  }, [gameState, isAutoMode, activePet, isPetIdle, location, isNight]);
-
-  const triggerSpeech = (text: string) => {
-      if(speechBubble) return;
-      setSpeechBubble(text);
-      if(speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
-      speechTimeoutRef.current = setTimeout(() => setSpeechBubble(null), 4000);
-  };
-
-  // --- SINGULARITY: MISSION SYSTEM ---
-  const requestMission = async () => {
-      if(user.activeMission?.isActive) {
-          showFloatingText("FINISH CURRENT MISSION!", "text-red-500");
-          return;
-      }
-      setMissionLoading(true);
-      const missionData = await generateMission(user.level, location.name);
-      if(missionData) {
-          const newMission: ActiveMission = {
-              id: `mission_${Date.now()}`,
-              title: missionData.title || "Unknown Signal",
-              description: missionData.description || "Investigate the area.",
-              targetName: missionData.targetName || "Anomalies",
-              difficulty: missionData.difficulty || "Medium",
-              rewards: missionData.rewards || "Credits",
-              progress: 0,
-              goal: 5, // Simple "Kill 5 things" goal for now
-              isActive: true
-          };
-          setUser(u => ({ ...u, activeMission: newMission }));
-          addLog(`MISSION RECEIVED: ${newMission.title}`);
-      } else {
-          showFloatingText("COMMUNICATION ERROR", "text-red-500");
-      }
-      setMissionLoading(false);
-  };
-
-  // --- IFRAME HANDLER ---
-  useEffect(() => {
-      const handler = (e: MessageEvent) => {
-          if (e.data.type === 'PART_PLACED') {
-              const { partId, position, normal } = e.data;
-              const def = PARTS_DB[partId];
-              const partIdx = user.inventory.indexOf(partId);
-              if (partIdx > -1) {
-                  const newInv = [...user.inventory]; newInv.splice(partIdx, 1);
-                  setUser(u => ({ ...u, inventory: newInv }));
-                  const updated = [...inventory];
-                  if (!updated[activePetIndex].parts) updated[activePetIndex].parts = [];
-                  updated[activePetIndex].parts.push({
-                      id: `${partId}_${Date.now()}`, partId: partId, partType: def.voxelShapeType, 
-                      position: position, faceNormal: normal, rotation: { x: 0, y: 0, z: 0 }
-                  });
-                  setInventory(updated);
-                  showFloatingText("PART ATTACHED!", "text-blue-400");
-              }
-          }
-      };
-      window.addEventListener('message', handler);
-      return () => window.removeEventListener('message', handler);
-  }, [user.inventory, inventory, activePetIndex]);
-
-  const handleNewGame = () => {
-      localStorage.removeItem(`pixupet_save_${SAVE_VERSION}`);
-      setUser({ name: 'Tamer', level: 1, exp: 0, coins: 500, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: ['part_leg_basic', 'part_sensor_lite', 'part_arm_stubby'], currentRank: 'Noob', seen: [], caught: [], kills: 0 });
-      setInventory([]);
-      setStarterOptions(generateStarterOptions());
-      setGameState('STARTER_SELECT'); // Fixed: Switch to Starter Select to prevent blank screen
-  };
-
-  // --- AUTO-MODE LOGIC (THE INFINITY ENGINE) ---
+  // --- AUTO LOOP (AFK ENGINE) ---
   useEffect(() => {
       if (!isAutoMode || gameState !== 'NEXUS' || !activePet || isSummoningBoss) return;
 
       const autoLoop = setInterval(async () => {
           const currentPet = inventory[activePetIndex];
           
-          // AUTO SUSTAIN
+          // 1. Auto Sustain
           if (currentPet.hunger < 40) {
-              const foodId = user.inventory.find(id => ITEMS_DB[id]?.type === 'Food');
-              if (foodId) { consumeItem(foodId); addLog(`AUTO: Consumed ${ITEMS_DB[foodId].name}`); return; }
+              const foodId = user.inventory.find((id: string) => ITEMS_DB[id]?.type === 'Food');
+              if (foodId) { consumeItem(foodId); addLog(`AUTO: Ate ${ITEMS_DB[foodId].name}`); return; }
           }
           if (currentPet.currentHp < (currentPet.maxHp * 0.4)) {
-               const potId = user.inventory.find(id => ITEMS_DB[id]?.type === 'Potion' || ITEMS_DB[id]?.type === 'Consumable');
-               if (potId) { consumeItem(potId); addLog(`AUTO: Used ${ITEMS_DB[potId].name}`); return; }
+               const potId = user.inventory.find((id: string) => ITEMS_DB[id]?.type === 'Potion' || ITEMS_DB[id]?.type === 'Consumable');
+               if (potId) { consumeItem(potId); addLog(`AUTO: Healed`); return; }
           }
 
-          // INFINITY ENGINE: BOSS SPAWN CHECK
-          const killCount = user.kills || 0;
-          if (killCount > 0 && killCount % 10 === 0) {
+          // 2. Boss Check
+          if ((user.kills || 0) > 0 && (user.kills || 0) % 15 === 0) {
               clearInterval(autoLoop);
-              setIsSummoningBoss(true);
-              setStatusText("ANOMALY DETECTED...");
-              addLog("WARNING: DIMENSIONAL RIFT OPENING");
-              
-              const bossData = await generateProceduralBoss(LOCATIONS_DB[user.currentLocation].name, user.level);
-              
-              if (bossData) {
-                  const bossEnemy = {
-                      id: `boss_${Date.now()}`, name: bossData.name, element: bossData.element || 'Dark',
-                      level: user.level + 5, stats: bossData.stats || { hp: 500, atk: 50, def: 50, spd: 20 },
-                      voxelCode: getGenericVoxel(bossData.element, bossData.bodyType || 'BIPED', 'God', bossData.visualTraits, bossData.name),
-                      description: bossData.description
-                  };
-                  
-                  const narrative = await generateBattleCommentary(activePet.name, bossEnemy.name, location.name);
-                  
-                  addExp(bossEnemy.level * 100, true);
-                  addCoins(bossEnemy.level * 50, true);
-                  addItem('part_halo', true);
-                  addLog(`BOSS DEFEATED: ${bossEnemy.name}`);
-                  addLog(`> "${narrative}"`);
-                  setUser(u => ({ ...u, kills: (u.kills || 0) + 1 }));
-
-                  const iframe = document.querySelector('iframe');
-                  if(iframe && iframe.contentWindow) iframe.contentWindow.postMessage({ type: 'SET_ACTION', value: 'ATTACK' }, '*');
-                  
-              } else {
-                  addLog("Boss Summon Failed (Signal Lost)");
-              }
-              setIsSummoningBoss(false);
+              triggerBossEvent();
               return; 
           }
 
-          // STANDARD MOB BATTLE
-          setStatusText("AUTO_ENGAGED");
+          // 3. Grinding
+          setStatusText("AUTO_COMBAT");
           const enemy = getRandomEnemy(user.currentLocation, currentPet.level, getGenericVoxel);
           
-          addExp(enemy.level * 40, true);
-          addCoins(enemy.level * 20, true);
-          setUser(u => {
-              let nextU = { ...u, kills: (u.kills || 0) + 1 };
-              // Mission Progress
-              if (u.activeMission && u.activeMission.isActive) {
-                   const prog = u.activeMission.progress + 1;
-                   if (prog >= u.activeMission.goal) {
-                       addLog(`MISSION COMPLETE: ${u.activeMission.title}`);
-                       showFloatingText("MISSION COMPLETE", "text-green-500");
-                       addCoins(500, true);
-                       nextU.activeMission = { ...u.activeMission, isActive: false, progress: prog };
-                   } else {
-                       nextU.activeMission = { ...u.activeMission, progress: prog };
-                   }
-              }
-              return nextU;
-          });
+          addExp(enemy.level * 50, true);
+          addCoins(enemy.level * 25, true);
+          setUser((u: any) => ({ ...u, kills: (u.kills || 0) + 1 }));
           
-          if(Math.random() > 0.5) {
+          // Loot
+          if(Math.random() > 0.6) {
                const loot = getLootDrop(user.currentLocation);
                addItem(loot, true);
-               addLog(`DEFEATED ${enemy.name} [+${loot}]`);
+               addLog(`Killed ${enemy.name} [+${ITEMS_DB[loot]?.name || 'Item'}]`);
           } else {
-               addLog(`DEFEATED ${enemy.name}`);
+               addLog(`Killed ${enemy.name}`);
           }
           
+          // 3D Visual Trigger
           const iframe = document.querySelector('iframe');
           if(iframe && iframe.contentWindow) iframe.contentWindow.postMessage({ type: 'SET_ACTION', value: 'ATTACK' }, '*');
 
-      }, 3000);
+      }, 3000); // 3 Second Tick
 
       return () => clearInterval(autoLoop);
-  }, [isAutoMode, gameState, user.inventory, inventory, activePetIndex, user.kills, isSummoningBoss, user.activeMission]);
+  }, [isAutoMode, gameState, inventory, activePetIndex, user.kills, isSummoningBoss]);
 
-  const addLog = (msg: string) => {
-      setSystemLogs(prev => [`[${new Date().toLocaleTimeString().slice(0,5)}] ${msg}`, ...prev].slice(0, 10));
+  const triggerBossEvent = async () => {
+      setIsSummoningBoss(true);
+      setStatusText("BOSS ALERT");
+      addLog("WARNING: BOSS DETECTED");
+      
+      const bossData = await generateProceduralBoss(LOCATIONS_DB[user.currentLocation].name, user.level);
+      
+      if (bossData) {
+          const bossName = bossData.name || "Unknown Titan";
+          const narrative = await generateBattleCommentary(activePet.name, bossName, location.name);
+          
+          addExp(user.level * 200, true);
+          addCoins(500, true);
+          addItem('part_halo', true);
+          addLog(`BOSS DEFEATED: ${bossName}`);
+          addLog(`"${narrative}"`);
+          setUser((u: any) => ({ ...u, kills: (u.kills || 0) + 1 }));
+          
+          const iframe = document.querySelector('iframe');
+          if(iframe && iframe.contentWindow) iframe.contentWindow.postMessage({ type: 'SET_ACTION', value: 'ATTACK' }, '*');
+      }
+      setTimeout(() => setIsSummoningBoss(false), 4000);
+  };
+
+  // --- ACTIONS ---
+
+  const handleNewGame = () => {
+      localStorage.removeItem(`pixupet_save_${SAVE_VERSION}`);
+      setUser({ name: 'Tamer', level: 1, exp: 0, coins: 500, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: ['part_leg_basic', 'part_arm_stubby'], kills: 0 });
+      setInventory([]);
+      setStarterOptions(generateStarterOptions());
+      setGameState('STARTER_SELECT');
   };
 
   const consumeItem = async (itemId: string) => {
-      // SINGULARITY: ARTIFACT ANALYSIS
       if (itemId === 'unidentified_artifact') {
           showFloatingText("ANALYZING...", "text-blue-500");
-          const artifactData = await analyzeArtifact(user.level);
-          if(artifactData) {
-               showFloatingText(`ARTIFACT DECODED: ${artifactData.name}`, "text-purple-400");
-               addCoins(1000, true);
-               const inv = [...user.inventory];
-               const idx = inv.indexOf(itemId);
-               if(idx > -1) inv.splice(idx, 1);
-               setUser(u => ({ ...u, inventory: inv }));
-          }
+          await analyzeArtifact(user.level); // Mock delay
+          addCoins(1000, true);
+          removeItem(itemId);
+          showFloatingText("ARTIFACT SOLD", "text-purple-400");
           return;
       }
-
       const item = ITEMS_DB[itemId];
       if(!item) return;
-      const inv = [...user.inventory];
-      const idx = inv.indexOf(itemId);
-      if(idx > -1) inv.splice(idx, 1);
-      setUser(u => ({ ...u, inventory: inv }));
+      removeItem(itemId);
+      
       const updated = [...inventory];
       const p = updated[activePetIndex];
       if(item.effect?.stat === 'hp') p.currentHp = Math.min(p.maxHp, p.currentHp + item.effect.val);
       if(item.effect?.stat === 'hunger') p.hunger = Math.min(100, p.hunger + item.effect.val);
       if(itemId === 'nano_repair_kit') { p.currentHp = p.maxHp; p.fatigue = 0; }
       setInventory(updated);
+      showFloatingText("Used " + item.name, "text-green-400");
   };
 
-  // --- STANDARD GAME LOOP ---
-  useEffect(() => {
-      if (gameState !== 'NEXUS' || activeBattle || activeEvent || isAnalyzing || preEventEmote || isMaterializing || isAutoMode) return;
-      const interval = setInterval(() => {
-          if (Math.random() > 0.8 && !isPetIdle && activePet) { 
-              const txt = getRandomEventText(user.currentLocation);
-              setStatusText(txt);
-          }
-      }, 8000); 
-      return () => clearInterval(interval);
-  }, [gameState, activeBattle, activeEvent, user.currentLocation, isAnalyzing, isPetIdle, preEventEmote, isMaterializing, activePet, isAutoMode]);
+  const removeItem = (itemId: string) => {
+      const inv = [...user.inventory];
+      const idx = inv.indexOf(itemId);
+      if(idx > -1) inv.splice(idx, 1);
+      setUser((u:any) => ({ ...u, inventory: inv }));
+  };
 
+  const addItem = (itemId: string, silent: boolean = false) => {
+      setUser((u: any) => ({ ...u, inventory: [...u.inventory, itemId] }));
+      if (!silent) showFloatingText(`Got ${ITEMS_DB[itemId]?.name || PARTS_DB[itemId]?.name}!`, 'text-green-400');
+  };
 
   const addExp = (amount: number, silent: boolean = false) => {
       const updated = [...inventory];
@@ -389,51 +199,26 @@ export default function App() {
       if (!silent) showFloatingText(`+${amount} XP`, 'text-yellow-400');
       if (pet.exp >= pet.maxExp) {
           pet.level++; pet.exp = 0; pet.maxExp = Math.floor(pet.maxExp * 1.4);
-          pet.maxHp = (pet.maxHp || 100) + 20; pet.currentHp = pet.maxHp;
-          pet.atk += 5; pet.def += 5; pet.spd += 5;
-          setShowLevelUp(pet);
+          pet.maxHp += 20; pet.currentHp = pet.maxHp;
+          pet.atk += 5; pet.def += 5;
+          showFloatingText("LEVEL UP!", "text-white");
       }
       setInventory(updated);
-      const newExp = user.exp + amount;
-      if (newExp >= user.level * 150) {
-          setUser({ ...user, exp: 0, level: user.level + 1 });
-          showFloatingText("TAMER LEVEL UP!", "text-white");
-      } else { setUser({ ...user, exp: newExp }); }
   };
 
   const addCoins = (amt: number, silent: boolean = false) => {
-      setUser(u => ({ ...u, coins: u.coins + amt }));
+      setUser((u:any) => ({ ...u, coins: u.coins + amt }));
       if (!silent) showFloatingText(`+${amt} G`, 'text-yellow-300');
   };
 
-  const addItem = (itemId: string, silent: boolean = false) => {
-      setUser(u => ({ ...u, inventory: [...u.inventory, itemId] }));
-      if (!silent) showFloatingText(`+ ${ITEMS_DB[itemId]?.name || PARTS_DB[itemId]?.name}!`, 'text-green-400');
-  };
-
-  const handleRecyclePart = (partId: string) => {
-      const part = PARTS_DB[partId]; if(!part) return;
-      const refund = Math.floor(part.cost * 0.2);
-      const inv = [...user.inventory]; const idx = inv.indexOf(partId);
-      if(idx > -1) { inv.splice(idx, 1); setUser(u => ({ ...u, inventory: inv })); addCoins(refund, true); setSelectedPartId(null); }
-  };
-
-  const handleGachaPull = async (poolType: 'STANDARD' | 'PREMIUM' | 'GOD_MODE') => {
-      const poolData = GACHA_POOLS[poolType];
-      if(user.coins < poolData.cost) { showFloatingText("NEED COINS!", "text-red-500"); return; }
-      addCoins(-poolData.cost, true);
-      setGachaState('DROPPING');
-      await new Promise(r => setTimeout(r, 1500));
-      setGachaState('REVEAL');
-      const itemId = poolData.pool[Math.floor(Math.random() * poolData.pool.length)];
-      setGachaResult(ITEMS_DB[itemId] || PARTS_DB[itemId]);
-      addItem(itemId, true);
+  const addLog = (msg: string) => {
+      setSystemLogs(prev => [`> ${msg}`, ...prev].slice(0, 8));
   };
 
   const showFloatingText = (text: string, color: string) => {
       const id = Date.now() + Math.random();
-      setNotifs(prev => [...prev, { id, text, x: 50, y: 40, color }]);
-      setTimeout(() => setNotifs(prev => prev.filter(n => n.id !== id)), 3000); 
+      setNotifs(prev => [...prev, { id, text, color }]);
+      setTimeout(() => setNotifs(prev => prev.filter(n => n.id !== id)), 2000);
   };
 
   const handleScan = async () => {
@@ -445,424 +230,379 @@ export default function App() {
           
           if(!traits.hp) traits.hp = 100;
           const voxelCode = getGenericVoxel(traits.element, traits.bodyType, 'Noob', traits.visualTraits, traits.name);
-          const initialMoves = assignMoves(traits.element, 1);
 
           const newPet: any = {
               id: `pet_${Date.now()}`, dateCreated: Date.now(), ...traits,
               voxelCode, level: 1, exp: 0, maxExp: 100, hunger: 80, fatigue: 0, happiness: 80,
-              stage: 'Noob', rank: 'Common', potential: 50, currentHp: traits.hp, maxHp: traits.hp,
-              ability: "Matrix Born", moves: initialMoves, parts: [],
-              imageSource: scanPreview, isMinted: false
+              stage: 'Noob', rank: 'Common', currentHp: traits.hp, maxHp: traits.hp,
+              parts: [], imageSource: scanPreview
           };
           setInventory([...inventory, newPet]);
           setActivePetIndex(inventory.length); 
           addItem('part_leg_basic', true);
           
-          setIsAnalyzing(false); setIsMaterializing(true); setScanPreview(null);
-          setTimeout(() => { setIsMaterializing(false); setGameState('NEXUS'); showFloatingText("LIFEFORM GENERATED", "text-green-400"); }, 2000);
+          setIsAnalyzing(false); setScanPreview(null); setGameState('NEXUS');
+          showFloatingText("CREATION SUCCESS", "text-green-400");
 
-      } catch (e) { setIsAnalyzing(false); alert("Scan failed. Try a clearer image."); }
+      } catch (e) { setIsAnalyzing(false); alert("Scan failed. Try again."); }
   };
 
   const handleStarterSelect = (starter: any) => {
       const voxelCode = getGenericVoxel(starter.element, starter.bodyType, 'Noob', starter.visualTraits, starter.name);
-      const initialMoves = assignMoves(starter.element, 1);
       const newPet: any = {
           id: `starter_${Date.now()}`, dateCreated: Date.now(), name: starter.name, element: starter.element,
-          description: starter.description, visual_design: starter.visual_design, bodyType: starter.bodyType,
-          visualTraits: starter.visualTraits, rarity: 'Common', nature: 'Brave',
+          description: starter.description, bodyType: starter.bodyType, visualTraits: starter.visualTraits,
           hp: starter.stats.hp, maxHp: starter.stats.hp, currentHp: starter.stats.hp,
-          atk: starter.stats.atk, def: starter.stats.def, spd: starter.stats.spd, int: 10,
+          atk: starter.stats.atk, def: starter.stats.def, spd: starter.stats.spd,
           voxelCode, level: 1, exp: 0, maxExp: 100, hunger: 100, fatigue: 0, happiness: 100,
-          stage: 'Noob', rank: 'Starter', potential: 80, ability: 'Starter Will', moves: initialMoves, parts: [], isMinted: false
+          stage: 'Noob', rank: 'Starter', parts: []
       };
       setInventory([newPet]); setActivePetIndex(0);
       setGameState('NEXUS');
   };
 
-  // --- SUBMENU RENDERERS ---
+  const handleGachaPull = async (poolType: 'STANDARD' | 'PREMIUM' | 'GOD_MODE') => {
+      const poolData = GACHA_POOLS[poolType];
+      if(user.coins < poolData.cost) { showFloatingText("NOT ENOUGH COINS", "text-red-500"); return; }
+      addCoins(-poolData.cost, true);
+      setGachaState('DROPPING');
+      await new Promise(r => setTimeout(r, 1000));
+      setGachaState('REVEAL');
+      const itemId = poolData.pool[Math.floor(Math.random() * poolData.pool.length)];
+      setGachaResult(ITEMS_DB[itemId] || PARTS_DB[itemId]);
+      addItem(itemId, true);
+  };
 
-  if (gameState === 'SHOP') {
-      return (
-          <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
-               <div className="w-full max-w-md bg-white rounded-3xl h-[80vh] flex flex-col overflow-hidden relative border-4 border-purple-500">
-                   <div className="bg-purple-600 p-4 text-white font-black text-xl flex justify-between items-center">
-                       <span><IconCart/> ITEM SHOP</span>
-                       <button onClick={()=>setGameState('NEXUS')} className="bg-white text-black px-3 py-1 rounded text-xs font-bold">EXIT</button>
-                   </div>
-                   <div className="flex-1 overflow-y-auto p-4 bg-gray-100 grid grid-cols-2 gap-4">
-                       {Object.values(ITEMS_DB).filter(i => i.price > 0).map(item => (
-                           <div key={item.id} className="bg-white p-2 rounded-xl border-2 border-gray-200 flex flex-col items-center shadow-sm">
-                               <div className="w-12 h-12 mb-2"><ItemIcon item={item}/></div>
-                               <div className="font-bold text-sm text-center truncate w-full">{item.name}</div>
-                               <div className="text-[10px] text-gray-500 text-center mb-2 h-8 overflow-hidden">{item.description}</div>
-                               <button onClick={() => {
-                                   if(user.coins >= item.price) { addCoins(-item.price, true); addItem(item.id, true); } else { showFloatingText("NO FUNDS", "text-red-500"); }
-                               }} className="bg-yellow-400 w-full rounded py-1 font-black text-xs hover:bg-yellow-500 border border-black shadow-[2px_2px_0_#000] active:translate-y-1 active:shadow-none">
-                                   BUY {item.price}G
-                               </button>
-                           </div>
-                       ))}
-                   </div>
-               </div>
-          </div>
-      );
-  }
-
-  if (gameState === 'COLLECTION') {
-      return (
-          <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
-               <div className="w-full max-w-md bg-white rounded-3xl h-[80vh] flex flex-col overflow-hidden relative border-4 border-blue-500">
-                   <div className="bg-blue-600 p-4 text-white font-black text-xl flex justify-between items-center">
-                       <span><IconCards/> COLLECTION</span>
-                       <button onClick={()=>setGameState('NEXUS')} className="bg-white text-black px-3 py-1 rounded text-xs font-bold">EXIT</button>
-                   </div>
-                   <div className="flex-1 overflow-y-auto p-4 bg-gray-100 grid grid-cols-2 gap-4">
-                       {inventory.map((pet, idx) => (
-                           <div key={pet.id} onClick={() => { setActivePetIndex(idx); setGameState('NEXUS'); }} className={`border-4 rounded-xl overflow-hidden cursor-pointer ${idx===activePetIndex?'border-green-500 scale-105':'border-transparent'}`}>
-                               <PixuCard pet={pet} />
-                           </div>
-                       ))}
-                   </div>
-               </div>
-          </div>
-      );
-  }
-
-  if (gameState === 'GACHA') {
-      return (
-          <div className="absolute inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4">
-               <button onClick={()=>setGameState('NEXUS')} className="absolute top-4 right-4 bg-red-500 text-white px-6 py-2 rounded-full font-black border-2 border-white">EXIT</button>
-               
-               {gachaState === 'IDLE' && (
-                   <div className="flex flex-col gap-6 w-full max-w-md">
-                       <h2 className="text-white text-4xl font-black text-center mb-8 drop-shadow-[0_4px_0_#F472B6]">GACHA MACHINE</h2>
-                       <button onClick={() => handleGachaPull('STANDARD')} className="bg-white p-4 rounded-2xl border-4 border-gray-300 flex items-center justify-between hover:scale-105 transition-transform">
-                           <div className="text-left">
-                               <div className="font-black text-xl">STANDARD CAPSULE</div>
-                               <div className="text-xs text-gray-500">Common Items & Parts</div>
-                           </div>
-                           <div className="bg-yellow-400 px-4 py-2 rounded-xl font-black border-2 border-black">100 G</div>
-                       </button>
-                       <button onClick={() => handleGachaPull('PREMIUM')} className="bg-purple-100 p-4 rounded-2xl border-4 border-purple-300 flex items-center justify-between hover:scale-105 transition-transform">
-                           <div className="text-left">
-                               <div className="font-black text-xl text-purple-600">PREMIUM CAPSULE</div>
-                               <div className="text-xs text-purple-400">Rare/Epic Gear</div>
-                           </div>
-                           <div className="bg-yellow-400 px-4 py-2 rounded-xl font-black border-2 border-black">500 G</div>
-                       </button>
-                       <button onClick={() => handleGachaPull('GOD_MODE')} className="bg-yellow-100 p-4 rounded-2xl border-4 border-yellow-500 flex items-center justify-between hover:scale-105 transition-transform relative overflow-hidden">
-                           <div className="absolute inset-0 bg-yellow-400 opacity-20 animate-pulse"></div>
-                           <div className="text-left relative z-10">
-                               <div className="font-black text-xl text-yellow-700">GOD CAPSULE</div>
-                               <div className="text-xs text-yellow-600">Mythic/God Tier ONLY</div>
-                           </div>
-                           <div className="bg-black text-white px-4 py-2 rounded-xl font-black border-2 border-yellow-400 relative z-10">2000 G</div>
-                       </button>
-                   </div>
-               )}
-
-               {gachaState === 'DROPPING' && (
-                   <div className="text-6xl animate-bounce">💊</div>
-               )}
-
-               {gachaState === 'REVEAL' && gachaResult && (
-                   <div className="flex flex-col items-center animate-in zoom-in duration-300">
-                       <div className="text-white text-2xl font-bold mb-4">YOU GOT:</div>
-                       <div className="bg-white p-8 rounded-3xl border-8 border-yellow-400 shadow-[0_0_50px_rgba(255,215,0,0.5)] mb-8 transform rotate-3">
-                           <div className="w-32 h-32">
-                               {gachaResult.type ? <ItemIcon item={gachaResult}/> : <span className="text-4xl font-black">{gachaResult.name}</span>}
-                           </div>
-                       </div>
-                       <div className="text-yellow-400 text-3xl font-black mb-2">{gachaResult.name}</div>
-                       <div className="text-white opacity-70 mb-8">{gachaResult.rarity}</div>
-                       <button onClick={() => setGachaState('IDLE')} className="bg-blue-500 text-white px-8 py-3 rounded-full font-black text-xl border-4 border-blue-700 hover:scale-110 transition-transform">AGAIN</button>
-                   </div>
-               )}
-          </div>
-      );
-  }
-
-  // --- STANDARD RENDER ---
+  // --- RENDERERS ---
 
   return (
     <div className="w-full h-screen relative bg-black overflow-hidden font-sans select-none text-black">
-      {/* 3D VIEWER LAYER */}
-      <div className="absolute inset-0 z-0 w-full h-full">
-        {activePet && <VoxelViewer 
-            code={activePet.voxelCode} 
-            mode={gameState === 'ENGINEER' ? 'ENGINEER' : 'HABITAT'}
-            action={isAutoMode ? (statusText.includes('Target') || statusText.includes('BOSS') ? 'ATTACK' : 'RUN') : getActionFromText(statusText)} 
-            envData={envData}
-            equipment={{ ...activePet.equipment, parts: activePet.parts }}
-            onInteract={null}
-            onStateChange={(state) => setIsPetIdle(state === 'ENTER_IDLE')}
-            preEvent={preEventEmote || undefined}
-            eventActive={!!activeBattle || !!activeEvent || !!preEventEmote || !!showBattleOverlay}
-        />}
-      </div>
-
-      {/* --- SENTIENT PET CHAT BUBBLE --- */}
-      {speechBubble && gameState === 'NEXUS' && !isAutoMode && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[150px] z-50 pointer-events-none">
-              <div className="bg-white/90 border-4 border-black px-4 py-2 rounded-xl text-xs font-black relative max-w-[200px] text-center shadow-[4px_4px_0_#000] pop-in">
-                  {speechBubble}
-                  <div className="absolute bottom-[-8px] left-1/2 -translate-x-1/2 w-4 h-4 bg-white/90 border-r-4 border-b-4 border-black rotate-45"></div>
-              </div>
-          </div>
-      )}
-
-      {/* --- MISSION HUD --- */}
-      {user.activeMission?.isActive && gameState === 'NEXUS' && !isSummoningBoss && (
-          <div className="absolute top-24 right-2 z-40">
-               <div className="bg-blue-900/80 border border-blue-400 p-2 rounded text-blue-200 text-xs w-48 font-mono">
-                   <div className="text-yellow-400 font-bold mb-1">active_mission.exe</div>
-                   <div className="truncate font-bold text-white">{user.activeMission.title}</div>
-                   <div className="text-[10px] opacity-70 mb-1">{user.activeMission.targetName}</div>
-                   <div className="w-full bg-blue-950 h-2 rounded-full overflow-hidden">
-                       <div className="bg-blue-400 h-full transition-all" style={{width: `${(user.activeMission.progress/user.activeMission.goal)*100}%`}}></div>
-                   </div>
-                   <div className="text-right text-[9px] mt-1">{user.activeMission.progress} / {user.activeMission.goal}</div>
-               </div>
-          </div>
-      )}
-
-      {/* --- BOSS SUMMONING OVERLAY --- */}
-      {isSummoningBoss && (
-          <div className="absolute inset-0 z-[90] bg-black/90 flex flex-col items-center justify-center pointer-events-none">
-               <div className="text-6xl animate-spin mb-4">🌀</div>
-               <div className="text-red-500 font-black text-4xl animate-pulse text-center tracking-widest font-['Bangers'] drop-shadow-[0_0_20px_red]">
-                   DIMENSIONAL RIFT DETECTED
-               </div>
-               <div className="text-white/70 font-mono mt-4 text-sm typing-effect">Constructing Entity from Void...</div>
-          </div>
-      )}
-
-      {/* --- AUTO HUD --- */}
-      {isAutoMode && !isSummoningBoss && (
-          <div className="absolute top-24 left-2 z-40 pointer-events-none">
-              <div className="bg-black/50 p-2 rounded border border-green-500/30 text-[10px] font-mono text-green-400 w-48 shadow-[0_0_10px_rgba(0,255,0,0.2)]">
-                  <div className="border-b border-green-500/30 mb-1 pb-1 font-bold flex justify-between">
-                      <span>SYSTEM LOG</span>
-                      <span>KILLS: {user.kills}</span>
-                  </div>
-                  <div className="flex flex-col gap-1 opacity-80 h-32 overflow-hidden">
-                      {systemLogs.map((log, i) => (
-                          <div key={i} className="truncate">{log}</div>
-                      ))}
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* --- NOTIFICATIONS --- */}
-      {notifs.map((n, idx) => (
-          <div key={n.id} className={`absolute z-[60] text-lg font-black ${n.color} float-down pointer-events-none w-full text-center drop-shadow-[2px_2px_0_#000] stroke-black text-stroke`} 
-               style={{top: `${100 + idx * 35}px`}}>
-              {n.text}
-          </div>
-      ))}
-
-      {/* --- HUD HEADER --- */}
-      {gameState !== 'SPLASH' && gameState !== 'ONBOARDING' && gameState !== 'STARTER_SELECT' && (
-      <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-50 pointer-events-none safe-top">
-          <div className="bg-white/30 backdrop-blur-md border border-white/20 rounded-2xl p-2 pointer-events-auto cursor-pointer hover:scale-105 transition-transform" onClick={()=>setStatsOpen(true)}>
-              <div className="flex flex-col text-white drop-shadow-md">
-                  <div className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                      <span className="bg-black/50 px-1 rounded">LV.{activePet?.level}</span> {activePet?.name}
-                  </div>
-                  <div className="w-32 h-3 bg-black/50 rounded-full mt-1 overflow-hidden border border-white/30">
-                      <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500" style={{width: `${(activePet?.exp / activePet?.maxExp)*100}%`}}></div>
-                  </div>
-              </div>
-          </div>
-
-          <div className="flex flex-col items-end">
-              <div className="font-black text-yellow-400 flex items-center gap-1 text-lg drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]"><IconCoin /> {user.coins}</div>
-              {gameState === 'NEXUS' && (
-                  <div className="flex flex-col gap-1 items-end">
-                      <button onClick={() => setIsAutoMode(!isAutoMode)} 
-                          className={`mt-2 px-6 py-2 font-black text-sm rounded-full border-2 pointer-events-auto shadow-xl transition-all ${isAutoMode ? 'bg-red-600 border-red-400 text-white animate-pulse ring-4 ring-red-500/30' : 'bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
-                          {isAutoMode ? 'AUTO SYSTEM: ACTIVE' : 'ACTIVATE AUTO'}
-                      </button>
-                      <button onClick={requestMission} disabled={missionLoading || user.activeMission?.isActive}
-                          className={`mt-1 px-3 py-1 font-black text-xs rounded border-2 pointer-events-auto shadow-md transition-all ${missionLoading ? 'bg-yellow-600' : 'bg-yellow-500 border-yellow-300 text-black hover:scale-105'}`}>
-                          {missionLoading ? 'DOWNLOADING...' : (user.activeMission?.isActive ? 'MISSION ACTIVE' : 'NEW MISSION')}
-                      </button>
-                  </div>
-              )}
-          </div>
-      </div>
-      )}
-
-      {/* --- ITEMS UI --- */}
-      {itemsOpen && (
-          <div className="absolute inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center p-4">
-              <div className="w-full max-w-md bg-white rounded-3xl h-[60vh] flex flex-col overflow-hidden relative border-4 border-orange-500">
-                   <div className="bg-orange-500 p-4 text-white font-black flex justify-between items-center">
-                       <span><IconBag /> INVENTORY</span>
-                       <button onClick={() => setItemsOpen(false)} className="bg-white text-orange-600 px-3 py-1 rounded text-xs font-bold shadow-sm">EXIT</button>
-                   </div>
-                   <div className="flex-1 overflow-y-auto p-4 bg-gray-100 grid grid-cols-4 gap-2 pb-16">
-                      {user.inventory.map((itemId, idx) => (
-                          <div key={idx} onClick={() => { if(ITEMS_DB[itemId]?.type==='Food' || ITEMS_DB[itemId]?.type==='Artifact' || ITEMS_DB[itemId]?.type==='Consumable') consumeItem(itemId); }} 
-                               className="aspect-square bg-white border border-gray-300 rounded-xl flex items-center justify-center shadow-sm relative overflow-hidden active:scale-90 transition-transform">
-                              {ITEMS_DB[itemId] ? <div className="w-10 h-10"><ItemIcon item={ITEMS_DB[itemId]}/></div> : <span className="text-[8px]">{PARTS_DB[itemId]?.name}</span>}
-                              {itemId === 'unidentified_artifact' && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-[8px] text-white font-bold animate-pulse">?</div>}
-                          </div>
-                      ))}
-                   </div>
-              </div>
-          </div>
-      )}
       
-      {/* --- WORLD MAP --- */}
-      {exploreOpen && (
-          <div className="absolute inset-0 z-[100] bg-black/90 flex flex-col">
-              <div className="p-4 flex justify-between items-center border-b border-gray-700 bg-gray-900"><h2 className="text-white font-black text-2xl">WORLD MAP</h2><button onClick={()=>setExploreOpen(false)} className="text-white bg-red-500 px-4 py-1 rounded-full font-black text-xs hover:bg-red-600">CLOSE</button></div>
-              <div className="flex-1 overflow-auto relative bg-[#0f172a] p-8">
-                  <div className="relative w-[800px] h-[800px]">
-                      {Object.values(LOCATIONS_DB).map(loc => (
-                          <div key={loc.id} onClick={() => { setUser(u=>({...u, currentLocation: loc.id})); setExploreOpen(false); }}
-                              className={`absolute w-20 h-20 -ml-10 -mt-10 flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-110 ${user.currentLocation===loc.id?'scale-110 z-20':''}`} style={{left:`${loc.x}%`, top:`${loc.y}%`}}>
-                              <div className={`w-12 h-12 rounded-full border-2 border-white flex items-center justify-center ${loc.color} shadow-[0_0_15px_${loc.color}]`}>{ELEMENT_THEMES[loc.enemyTheme[0]]?.icon}</div>
-                              <div className="mt-2 bg-black/80 text-white text-[9px] px-2 py-1 rounded font-bold border border-white/20">{loc.name}</div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
+      {/* LAYER 0: 3D WORLD (Always rendered in Nexus/Engineer to maintain context) */}
+      {(gameState === 'NEXUS' || gameState === 'ENGINEER') && activePet && (
+          <div className="absolute inset-0 z-0">
+             <VoxelViewer 
+                code={activePet.voxelCode} 
+                mode={gameState === 'ENGINEER' ? 'ENGINEER' : 'HABITAT'}
+                action={isAutoMode ? (statusText.includes('COMBAT') || statusText.includes('BOSS') ? 'ATTACK' : 'RUN') : getActionFromText(statusText)} 
+                envData={{ envType: location.environmentType || 'Grass', isNight: false }}
+                equipment={{ parts: activePet.parts }}
+             />
           </div>
       )}
 
-      {/* --- MAIN GAMEPLAY BUTTONS --- */}
-      {gameState === 'NEXUS' && (
-        <>
-          {/* REMOVED HUNT BUTTON - FULL AFK FOCUS */}
-          
-          <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur-xl border border-white/30 rounded-3xl p-2 flex items-end gap-2 z-50 shadow-2xl safe-bottom min-w-[340px] justify-between pointer-events-auto transition-all ${isAutoMode ? 'opacity-30 pointer-events-none' : ''}`}>
-              <button onClick={()=>{ setGameState('COLLECTION') }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
-                  <div className="text-white group-hover:scale-110 transition-transform"><IconCards /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Cards</span>
-              </button>
-              <button onClick={()=>{ setGameState('ENGINEER') }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
-                  <div className="text-blue-300 group-hover:scale-110 transition-transform"><IconWrench /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Build</span>
-              </button>
-               <button onClick={()=>{ setItemsOpen(true) }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
-                  <div className="text-white group-hover:scale-110 transition-transform"><IconBag /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Bag</span>
-              </button>
-              <div className="relative -top-6">
-                  <button onClick={()=>setGameState('SCAN')} className="bg-gradient-to-tr from-yellow-400 to-orange-500 w-16 h-16 rounded-full border-4 border-white/50 flex items-center justify-center shadow-[0_10px_20px_rgba(251,191,36,0.5)] hover:-translate-y-2 active:translate-y-1 transition-all overflow-hidden z-30">
-                      <div className="text-white drop-shadow-md relative z-10 scale-125"><IconScan /></div>
+      {/* LAYER 1: HUD & OVERLAYS */}
+      
+      {/* TOP BAR */}
+      {gameState === 'NEXUS' && activeModal === 'NONE' && (
+          <div className="absolute top-0 left-0 right-0 p-2 z-10 flex justify-between items-start pointer-events-none safe-top">
+              {/* Pet Status */}
+              <div className="bg-white/90 border-2 border-black rounded-xl p-2 pointer-events-auto cursor-pointer shadow-lg" onClick={()=>setActiveModal('STATS')}>
+                  <div className="text-xs font-black uppercase flex items-center gap-1">
+                      <span className="bg-black text-white px-1 rounded">LV.{activePet?.level}</span> {activePet?.name}
+                  </div>
+                  <div className="w-32 h-2 bg-black/20 rounded-full mt-1 overflow-hidden">
+                      <div className="h-full bg-pink-500 transition-all" style={{width: `${(activePet?.currentHp / activePet?.maxHp)*100}%`}}></div>
+                  </div>
+              </div>
+
+              {/* Resources & Auto */}
+              <div className="flex flex-col items-end pointer-events-auto gap-2">
+                  <div className="bg-yellow-400 border-2 border-black px-3 py-1 rounded-full font-black text-sm shadow-md flex items-center gap-1">
+                      <IconCoin /> {user.coins}
+                  </div>
+                  <button onClick={() => setIsAutoMode(!isAutoMode)} 
+                      className={`px-4 py-2 font-black text-xs rounded-lg border-2 shadow-xl transition-all ${isAutoMode ? 'bg-red-600 border-red-800 text-white animate-pulse' : 'bg-gray-800 text-white border-black'}`}>
+                      {isAutoMode ? 'AUTO: ON' : 'AUTO: OFF'}
                   </button>
               </div>
-              <button onClick={()=>{ setGameState('GACHA') }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
-                  <div className="text-pink-300 group-hover:scale-110 transition-transform"><IconCapsule /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Gacha</span>
-              </button>
-              <button onClick={()=>{ setExploreOpen(true) }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
-                  <div className="text-green-300 group-hover:scale-110 transition-transform"><IconMap /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Map</span>
-              </button>
-              <button onClick={()=>{ setGameState('SHOP') }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
-                  <div className="text-purple-300 group-hover:scale-110 transition-transform"><IconCart /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Shop</span>
-              </button>
           </div>
-        </>
       )}
 
-      {/* --- SCAN --- */}
-      {gameState === 'SCAN' && (
-      <div className="w-full h-screen bg-black flex flex-col relative overflow-hidden">
-          <div className="flex-1 relative bg-gray-900 flex items-center justify-center overflow-hidden">
-              {!scanPreview ? (
-                <>
-                  <div className="absolute inset-0 flex items-center justify-center text-white font-black">CAMERA ACTIVE</div>
-                  <div className="absolute bottom-10 left-0 right-0 flex justify-center items-center gap-6 z-50">
-                      <label className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center border border-white/50 pointer-events-auto cursor-pointer backdrop-blur-md">
-                          <IconCards />
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                      const reader = new FileReader();
-                                      reader.onloadend = () => setScanPreview(reader.result as string);
-                                      reader.readAsDataURL(file);
-                                  }
-                          }} />
-                      </label>
-                      <button onClick={() => setGameState('NEXUS')} className="w-12 h-12 bg-red-500/80 rounded-full flex items-center justify-center border border-white/50 pointer-events-auto font-black text-white backdrop-blur-md">✕</button>
+      {/* SYSTEM LOG (AUTO MODE) */}
+      {gameState === 'NEXUS' && isAutoMode && activeModal === 'NONE' && (
+          <div className="absolute top-24 left-2 z-10 pointer-events-none">
+              <div className="bg-black/70 p-2 rounded border-l-4 border-green-500 text-[10px] font-mono text-green-400 w-48 backdrop-blur-sm">
+                  <div className="font-bold mb-1 opacity-50">SYSTEM LOG // KILLS: {user.kills}</div>
+                  <div className="flex flex-col gap-0.5">
+                      {systemLogs.map((log, i) => <div key={i} className="truncate">{log}</div>)}
                   </div>
-                </>
-              ) : (
-                  <img src={scanPreview} className="w-full h-full object-contain" alt="Preview" />
-              )}
-              {isAnalyzing && (
-                  <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-30 backdrop-blur-md">
-                      <div className="text-green-400 font-black text-4xl animate-pulse mb-6 font-['Bangers']">GEMINI AI PROCESSING</div>
-                      <div className="mt-4 font-mono text-green-300 text-xs">Extracting Core Matrix...</div>
-                  </div>
-              )}
-          </div>
-          {scanPreview && !isAnalyzing && (
-              <div className="p-6 bg-black flex gap-4 safe-bottom border-t border-gray-800">
-                  <button onClick={handleScan} className="flex-1 bg-green-500 text-white py-4 rounded-xl font-bold border border-white/20 shadow-[0_0_20px_green]">MATERIALIZE</button>
               </div>
-          )}
-      </div>
+          </div>
       )}
 
-      {/* --- STARTER SELECT (NEW ADDITION) --- */}
+      {/* BOSS WARNING */}
+      {isSummoningBoss && (
+          <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center pointer-events-none">
+               <div className="text-red-500 font-black text-5xl animate-pulse text-center font-['Bangers'] drop-shadow-[0_0_20px_red]">
+                   BOSS DETECTED
+               </div>
+          </div>
+      )}
+
+      {/* BOTTOM NAV BAR */}
+      {gameState === 'NEXUS' && activeModal === 'NONE' && !isAutoMode && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-end gap-3 safe-bottom pointer-events-auto">
+              <NavBtn icon={<IconCards/>} label="Cards" onClick={()=>setActiveModal('COLLECTION')} />
+              <NavBtn icon={<IconWrench/>} label="Build" onClick={()=>setGameState('ENGINEER')} />
+              <NavBtn icon={<IconBag/>} label="Bag" onClick={()=>setActiveModal('ITEMS')} />
+              
+              <div className="relative -top-4">
+                  <button onClick={()=>setGameState('SCAN')} className="bg-yellow-400 w-16 h-16 rounded-full border-4 border-black flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all">
+                      <div className="scale-125"><IconScan /></div>
+                  </button>
+              </div>
+
+              <NavBtn icon={<IconCapsule/>} label="Gacha" onClick={()=>setActiveModal('GACHA')} />
+              <NavBtn icon={<IconMap/>} label="Map" onClick={()=>setActiveModal('EXPLORE')} />
+              <NavBtn icon={<IconCart/>} label="Shop" onClick={()=>setActiveModal('SHOP')} />
+          </div>
+      )}
+
+      {/* --- MODALS (Z-50) --- */}
+
+      {/* SHOP */}
+      {activeModal === 'SHOP' && (
+          <Modal title="ITEM SHOP" color="bg-purple-600" onClose={()=>setActiveModal('NONE')}>
+              <div className="grid grid-cols-2 gap-3 p-4">
+                  {Object.values(ITEMS_DB).filter(i => i.price > 0).map(item => (
+                      <ShopCard key={item.id} item={item} canAfford={user.coins >= item.price} onBuy={() => {
+                          if(user.coins >= item.price) { addCoins(-item.price, true); addItem(item.id, true); }
+                      }} />
+                  ))}
+              </div>
+          </Modal>
+      )}
+
+      {/* COLLECTION */}
+      {activeModal === 'COLLECTION' && (
+          <Modal title="PET CARDS" color="bg-blue-600" onClose={()=>setActiveModal('NONE')}>
+              <div className="grid grid-cols-2 gap-3 p-4">
+                  {inventory.map((pet, idx) => (
+                      <div key={pet.id} onClick={() => { setActivePetIndex(idx); setActiveModal('NONE'); }} 
+                           className={`border-4 rounded-xl overflow-hidden cursor-pointer ${idx===activePetIndex?'border-green-500 ring-2 ring-green-300':'border-transparent'}`}>
+                           <PixuCard pet={pet} />
+                      </div>
+                  ))}
+              </div>
+          </Modal>
+      )}
+
+      {/* INVENTORY */}
+      {activeModal === 'ITEMS' && (
+          <Modal title="INVENTORY" color="bg-orange-500" onClose={()=>setActiveModal('NONE')}>
+              <div className="grid grid-cols-4 gap-2 p-4">
+                  {user.inventory.map((itemId: string, idx: number) => (
+                      <div key={idx} onClick={() => { if(['Food','Potion','Consumable','Artifact'].includes(ITEMS_DB[itemId]?.type)) consumeItem(itemId); }} 
+                           className="aspect-square bg-white border-2 border-black rounded-lg flex items-center justify-center relative active:scale-90 transition-transform">
+                          {ITEMS_DB[itemId] ? <div className="w-8 h-8"><ItemIcon item={ITEMS_DB[itemId]}/></div> : <span className="text-[8px] text-center font-bold leading-none">{PARTS_DB[itemId]?.name}</span>}
+                          {itemId === 'unidentified_artifact' && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-black text-xs">?</div>}
+                      </div>
+                  ))}
+                  {user.inventory.length === 0 && <div className="col-span-4 text-center text-gray-400 py-10 font-bold">Empty Bag</div>}
+              </div>
+          </Modal>
+      )}
+
+      {/* MAP */}
+      {activeModal === 'EXPLORE' && (
+          <div className="absolute inset-0 z-50 bg-black/95 flex flex-col">
+              <div className="p-4 bg-gray-900 border-b border-gray-700 flex justify-between items-center">
+                  <h2 className="text-white font-black text-xl"><IconMap/> WORLD MAP</h2>
+                  <button onClick={()=>setActiveModal('NONE')} className="bg-red-500 text-white px-4 py-1 rounded font-bold border-2 border-white">CLOSE</button>
+              </div>
+              <div className="flex-1 relative overflow-auto bg-[#0f172a] p-8">
+                  <div className="relative w-[600px] h-[600px] mx-auto my-auto border-4 border-blue-900/30 rounded-full bg-blue-950/20">
+                      {Object.values(LOCATIONS_DB).map(loc => (
+                          <div key={loc.id} onClick={() => { setUser((u:any)=>({...u, currentLocation: loc.id})); setActiveModal('NONE'); }}
+                              className={`absolute w-16 h-16 -ml-8 -mt-8 flex flex-col items-center justify-center cursor-pointer hover:scale-110 transition-transform ${user.currentLocation===loc.id?'scale-110 z-20':''}`} 
+                              style={{left:`${loc.x}%`, top:`${loc.y}%`}}>
+                              <div className={`w-10 h-10 rounded-full border-2 border-white flex items-center justify-center ${loc.color} shadow-[0_0_10px_${loc.color}] text-xl`}>
+                                  {ELEMENT_THEMES[loc.enemyTheme[0]]?.icon}
+                              </div>
+                              <div className="mt-1 bg-black/80 text-white text-[8px] px-2 py-0.5 rounded border border-white/20 whitespace-nowrap">{loc.name}</div>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* GACHA */}
+      {activeModal === 'GACHA' && (
+           <div className="absolute inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
+               <button onClick={()=>setActiveModal('NONE')} className="absolute top-4 right-4 bg-red-500 text-white px-6 py-2 rounded-full font-black border-2 border-white">EXIT</button>
+               
+               {gachaState === 'IDLE' && (
+                   <div className="flex flex-col gap-4 w-full max-w-sm">
+                       <h2 className="text-white text-3xl font-black text-center mb-4 text-pink-500">GACHA</h2>
+                       <GachaBtn label="STANDARD" cost={100} desc="Common Items" color="bg-white" onClick={()=>handleGachaPull('STANDARD')} />
+                       <GachaBtn label="PREMIUM" cost={500} desc="Rare Gear" color="bg-purple-200" onClick={()=>handleGachaPull('PREMIUM')} />
+                       <GachaBtn label="GOD MODE" cost={2000} desc="Mythic/God ONLY" color="bg-yellow-200" onClick={()=>handleGachaPull('GOD_MODE')} />
+                   </div>
+               )}
+               {gachaState === 'DROPPING' && <div className="text-8xl animate-bounce">💊</div>}
+               {gachaState === 'REVEAL' && gachaResult && (
+                   <div className="flex flex-col items-center animate-in zoom-in">
+                       <div className="bg-white p-6 rounded-3xl border-4 border-yellow-400 mb-4 transform rotate-3">
+                           <div className="w-24 h-24">{gachaResult.type ? <ItemIcon item={gachaResult}/> : <span className="text-2xl font-black">{gachaResult.name}</span>}</div>
+                       </div>
+                       <div className="text-yellow-400 text-2xl font-black">{gachaResult.name}</div>
+                       <button onClick={() => setGachaState('IDLE')} className="mt-8 bg-blue-500 text-white px-8 py-3 rounded-full font-black border-4 border-blue-700">AGAIN</button>
+                   </div>
+               )}
+           </div>
+      )}
+
+      {/* STATS MODAL */}
+      {activeModal === 'STATS' && (
+          <Modal title="PET STATUS" color="bg-gray-800" onClose={()=>setActiveModal('NONE')}>
+              <div className="p-4 text-white">
+                  <div className="text-2xl font-black mb-2">{activePet.name}</div>
+                  <div className="grid grid-cols-2 gap-4 text-sm font-mono">
+                      <div className="bg-white/10 p-2 rounded">HP: {activePet.currentHp}/{activePet.maxHp}</div>
+                      <div className="bg-white/10 p-2 rounded">ATK: {activePet.atk}</div>
+                      <div className="bg-white/10 p-2 rounded">DEF: {activePet.def}</div>
+                      <div className="bg-white/10 p-2 rounded">SPD: {activePet.spd}</div>
+                      <div className="bg-white/10 p-2 rounded">HUNGER: {activePet.hunger}%</div>
+                  </div>
+              </div>
+          </Modal>
+      )}
+
+      {/* ENGINEER MODE (Special GameState) */}
+      {gameState === 'ENGINEER' && (
+           <div className="absolute inset-0 z-50 pointer-events-none">
+               <div className="absolute top-0 left-0 right-0 p-4 bg-blue-900/90 text-white flex justify-between items-center pointer-events-auto border-b-4 border-blue-500">
+                   <div>
+                       <h2 className="font-black text-xl"><IconWrench/> ENGINEER MODE</h2>
+                       <div className="text-xs text-blue-300">Click pet body to attach part</div>
+                   </div>
+                   <button onClick={() => setGameState('NEXUS')} className="bg-red-500 px-4 py-2 rounded font-bold border-2 border-black">EXIT</button>
+               </div>
+               
+               <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-4 flex gap-2 overflow-x-auto pointer-events-auto border-t-4 border-blue-500">
+                   {user.inventory.filter((id:string) => PARTS_DB[id]).map((partId:string, i:number) => (
+                       <button key={i} onClick={() => {
+                           setSelectedPartId(partId);
+                           const iframe = document.querySelector('iframe');
+                           if(iframe && iframe.contentWindow) iframe.contentWindow.postMessage({ type: 'SET_MODE', value: 'ENGINEER', partId }, '*');
+                       }} 
+                       className={`p-2 rounded border-2 min-w-[80px] text-xs font-bold text-center ${selectedPartId === partId ? 'bg-yellow-400 text-black border-white' : 'bg-gray-700 text-white border-gray-600'}`}>
+                           {PARTS_DB[partId]?.name}
+                       </button>
+                   ))}
+               </div>
+           </div>
+      )}
+
+      {/* SPLASH & START */}
+      {gameState === 'SPLASH' && (
+          <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-yellow-400 bg-[url('https://www.transparenttextures.com/patterns/dot-grid.png')]">
+              <h1 className="text-6xl font-black text-white drop-shadow-[4px_4px_0_#000] mb-8 font-['Bangers']">PIXUPET</h1>
+              <div className="flex flex-col gap-4 w-64">
+                  <button onClick={handleNewGame} className="pop-btn btn-primary text-xl">NEW GAME</button>
+                  {inventory.length > 0 && <button onClick={()=>setGameState('NEXUS')} className="pop-btn btn-success text-xl">RESUME</button>}
+              </div>
+          </div>
+      )}
+
+      {/* STARTER SELECT */}
       {gameState === 'STARTER_SELECT' && (
-          <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center p-4">
-              <div className="text-white text-4xl font-black mb-8 animate-bounce font-['Bangers'] tracking-widest drop-shadow-[0_4px_0_#F59E0B]">
-                  INITIALIZE SYSTEM
-              </div>
-              <div className="flex flex-wrap justify-center gap-6 w-full max-w-5xl">
-                  {starterOptions.map((starter, i) => (
-                      <div key={i} onClick={() => handleStarterSelect(starter)}
-                           className="w-64 h-80 bg-gray-900 border-4 border-white/20 hover:border-white rounded-2xl p-4 flex flex-col items-center cursor-pointer transition-all hover:-translate-y-4 hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] group relative overflow-hidden">
-                           
-                           {/* BG GLOW */}
-                           <div className={`absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity ${starter.element==='Fire'?'bg-red-500':starter.element==='Water'?'bg-blue-500':'bg-green-500'}`}></div>
-
-                           <div className="text-6xl mb-4 mt-4 relative z-10 group-hover:scale-125 transition-transform">{ELEMENT_THEMES[starter.element]?.icon || '❓'}</div>
-                           <h2 className="text-2xl font-black text-white uppercase relative z-10">{starter.name}</h2>
-                           <div className={`text-[10px] font-bold px-2 py-1 rounded mt-2 relative z-10 text-white ${starter.element==='Fire'?'bg-red-600':starter.element==='Water'?'bg-blue-600':'bg-green-600'}`}>
-                               {starter.element} CLASS
-                           </div>
-                           
-                           <p className="text-gray-300 text-center text-xs mt-6 font-mono leading-tight relative z-10 opacity-80">
-                               {starter.description}
-                           </p>
-
-                           {/* STATS */}
-                           <div className="mt-auto w-full grid grid-cols-3 gap-1 relative z-10">
-                                <div className="bg-black/60 p-1 rounded text-center">
-                                    <div className="text-[8px] text-gray-400">HP</div>
-                                    <div className="text-xs font-bold text-green-400">{starter.stats.hp}</div>
-                                </div>
-                                <div className="bg-black/60 p-1 rounded text-center">
-                                    <div className="text-[8px] text-gray-400">ATK</div>
-                                    <div className="text-xs font-bold text-red-400">{starter.stats.atk}</div>
-                                </div>
-                                <div className="bg-black/60 p-1 rounded text-center">
-                                    <div className="text-[8px] text-gray-400">SPD</div>
-                                    <div className="text-xs font-bold text-yellow-400">{starter.stats.spd}</div>
-                                </div>
-                           </div>
+          <div className="absolute inset-0 z-[100] bg-gray-900 flex flex-col items-center justify-center p-4">
+              <h2 className="text-3xl text-white font-black mb-8">CHOOSE YOUR PARTNER</h2>
+              <div className="flex flex-wrap justify-center gap-4">
+                  {starterOptions.map((opt, i) => (
+                      <div key={i} onClick={()=>handleStarterSelect(opt)} className="bg-gray-800 p-4 rounded-xl border-4 border-gray-700 hover:border-yellow-400 cursor-pointer w-48 transition-all hover:-translate-y-2">
+                          <div className="text-4xl text-center mb-2">{ELEMENT_THEMES[opt.element].icon}</div>
+                          <div className="text-white font-black text-center text-xl">{opt.name}</div>
+                          <div className="text-gray-400 text-xs text-center mt-2">{opt.description}</div>
                       </div>
                   ))}
               </div>
           </div>
       )}
 
-      {/* --- START --- */}
-      {gameState === 'SPLASH' && (
-      <div className="w-full h-screen flex flex-col items-center justify-center relative bg-gradient-to-br from-yellow-300 to-orange-400 p-4">
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dot-grid.png')] opacity-20"></div>
-          <div className="text-6xl font-['Bangers'] mb-8 text-white drop-shadow-[4px_4px_0_#000]">PIXUPET</div>
-          <div className="flex flex-col gap-4 z-20 w-full max-w-xs">
-              {inventory.length > 0 && <button onClick={() => setGameState('NEXUS')} className="bg-green-500 text-white text-xl py-4 rounded-2xl font-black shadow-lg border-b-4 border-green-700 hover:scale-105 transition-transform">RESUME</button>}
-              <button onClick={handleNewGame} className="bg-blue-500 text-white py-4 rounded-2xl font-black shadow-lg border-b-4 border-blue-700 hover:scale-105 transition-transform">{inventory.length > 0 ? "RESET DATA" : "NEW GAME"}</button>
-          </div>
-      </div>
+      {/* SCAN SCREEN */}
+      {gameState === 'SCAN' && (
+           <div className="absolute inset-0 z-[100] bg-black flex flex-col">
+               <div className="flex-1 relative flex items-center justify-center">
+                   {!scanPreview ? (
+                       <label className="bg-gray-800 text-white px-8 py-4 rounded-xl border-2 border-gray-600 cursor-pointer hover:bg-gray-700 flex flex-col items-center gap-2">
+                           <IconScan/>
+                           <span className="font-bold">UPLOAD IMAGE</span>
+                           <input type="file" accept="image/*" className="hidden" onChange={(e)=>{
+                               if(e.target.files?.[0]) {
+                                   const r = new FileReader();
+                                   r.onload = () => setScanPreview(r.result as string);
+                                   r.readAsDataURL(e.target.files[0]);
+                               }
+                           }}/>
+                       </label>
+                   ) : (
+                       <img src={scanPreview} className="max-h-full max-w-full object-contain" />
+                   )}
+                   {isAnalyzing && <div className="absolute inset-0 bg-black/80 flex items-center justify-center text-green-500 font-mono animate-pulse">ANALYZING MATRIX...</div>}
+               </div>
+               <div className="p-4 flex gap-4 bg-gray-900">
+                   <button onClick={()=>setGameState('NEXUS')} className="flex-1 bg-gray-700 text-white py-3 rounded-lg font-bold">CANCEL</button>
+                   {scanPreview && !isAnalyzing && <button onClick={handleScan} className="flex-1 bg-green-500 text-black py-3 rounded-lg font-bold">MATERIALIZE</button>}
+               </div>
+           </div>
       )}
+
+      {/* FLOATING TEXT NOTIFICATIONS */}
+      {notifs.map(n => (
+          <div key={n.id} className={`absolute top-1/4 w-full text-center text-2xl font-black ${n.color} pointer-events-none float-down z-[200] drop-shadow-[2px_2px_0_#000]`}>
+              {n.text}
+          </div>
+      ))}
+
     </div>
   );
 }
+
+// --- SUB COMPONENTS ---
+
+const NavBtn = ({icon, label, onClick}: any) => (
+    <button onClick={onClick} className="flex flex-col items-center justify-center bg-white border-2 border-black rounded-xl w-14 h-14 shadow-[4px_4px_0_#000] active:translate-y-1 active:shadow-none transition-all group">
+        <div className="scale-75 group-hover:scale-90 transition-transform">{icon}</div>
+        <span className="text-[9px] font-black uppercase mt-[-2px]">{label}</span>
+    </button>
+);
+
+const Modal = ({title, color, onClose, children}: any) => (
+    <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-4 animate-in zoom-in duration-200">
+        <div className={`w-full max-w-md bg-white rounded-2xl overflow-hidden border-4 border-black shadow-[8px_8px_0_rgba(0,0,0,0.5)] flex flex-col max-h-[80vh]`}>
+            <div className={`${color} p-3 flex justify-between items-center border-b-4 border-black`}>
+                <h2 className="text-white font-black text-xl italic tracking-wider">{title}</h2>
+                <button onClick={onClose} className="bg-white text-black px-3 py-1 rounded font-bold text-xs border-2 border-black hover:bg-gray-200">CLOSE</button>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-gray-100">
+                {children}
+            </div>
+        </div>
+    </div>
+);
+
+const ShopCard = ({item, canAfford, onBuy}: any) => (
+    <div className="bg-white p-2 rounded-lg border-2 border-gray-200 flex flex-col items-center shadow-sm">
+        <div className="w-10 h-10 mb-1"><ItemIcon item={item}/></div>
+        <div className="font-bold text-xs text-center truncate w-full">{item.name}</div>
+        <div className="text-[10px] text-gray-500 text-center mb-1">{item.effect ? `+${item.effect.val} ${item.effect.stat}` : item.description.slice(0,20)}</div>
+        <button onClick={onBuy} disabled={!canAfford} 
+            className={`w-full rounded py-1 font-black text-[10px] border border-black ${canAfford ? 'bg-yellow-400 hover:bg-yellow-500' : 'bg-gray-300 text-gray-500'}`}>
+            {item.price} G
+        </button>
+    </div>
+);
+
+const GachaBtn = ({label, cost, desc, color, onClick}: any) => (
+    <button onClick={onClick} className={`${color} p-4 rounded-xl border-4 border-black flex justify-between items-center hover:scale-105 transition-transform shadow-[4px_4px_0_#000]`}>
+        <div className="text-left">
+            <div className="font-black text-lg">{label}</div>
+            <div className="text-xs opacity-70 font-bold">{desc}</div>
+        </div>
+        <div className="bg-black text-white px-3 py-1 rounded font-black text-sm">{cost} G</div>
+    </button>
+);

@@ -97,8 +97,16 @@ export const IconTrash = () => (
     </svg>
 );
 
+export const IconWrench = () => (
+    <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.7-3.7a1 1 0 0 0 0-1.4l-1.6-1.6a1 1 0 0 0-1.4 0l-3.7 3.7Z" fill="#9CA3AF" stroke="black" strokeWidth="2"/>
+        <path d="M19.5 3.5L20.5 4.5" stroke="black" strokeWidth="2"/>
+        <path d="M13 9l-9 9a2 2 0 0 0 2 2l9-9" fill="#4B5563" stroke="black" strokeWidth="2"/>
+    </svg>
+);
+
 // COMPREHENSIVE ITEM ICON LIBRARY WITH RARITY COLORS
-const RARITY_COLORS = {
+const RARITY_COLORS: Record<string, string> = {
     Common: '#E5E7EB', // Gray
     Rare: '#60A5FA',   // Neon Blue
     Epic: '#A78BFA',   // Purple
