@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -7,6 +6,9 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { VisualTraits, MonsterStage, Pixupet, AttachedPart } from "./gameData";
 
+// --- API KEY SAFEGUARD ---
+// Use process.env.API_KEY directly as per @google/genai coding guidelines.
+// Assume this variable is pre-configured, valid, and accessible.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- V1: ANIME-STYLE ANALYSIS ---

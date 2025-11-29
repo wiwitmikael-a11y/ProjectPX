@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -55,6 +54,12 @@ export default function App() {
 
   const activePet = inventory[activePetIndex];
   const location = LOCATIONS_DB[user.currentLocation];
+
+  // Fix Flicker: Memoize environment data so it doesn't re-trigger renderer on every state update
+  const envData = useMemo(() => ({ 
+      envType: location?.environmentType || 'Grass', 
+      isNight: false 
+  }), [location?.environmentType]);
 
   // --- INIT & SAVE ---
   useEffect(() => {
@@ -285,7 +290,7 @@ export default function App() {
                 code={activePet.voxelCode} 
                 mode={gameState === 'ENGINEER' ? 'ENGINEER' : 'HABITAT'}
                 action={isAutoMode ? (statusText.includes('COMBAT') || statusText.includes('BOSS') ? 'ATTACK' : 'RUN') : getActionFromText(statusText)} 
-                envData={{ envType: location.environmentType || 'Grass', isNight: false }}
+                envData={envData}
                 equipment={{ parts: activePet.parts }}
              />
           </div>
