@@ -33,7 +33,7 @@ export interface UserProfile {
   lastSaveTime?: number;
   lastDailyBonus?: number;
   kills?: number;
-  activeMission?: ActiveMission; // NEW
+  activeMission?: ActiveMission; 
 }
 
 export interface Move {
@@ -44,13 +44,13 @@ export interface Move {
     description: string;
 }
 
-// --- MODULAR PARTS SYSTEM (SPORE-LIKE) ---
+// --- MODULAR PARTS SYSTEM ---
 export interface AttachedPart {
-    id: string; // Unique instance ID
-    partId: string; // Ref to PARTS_DB
+    id: string; 
+    partId: string; 
     position: { x: number, y: number, z: number };
-    rotation: { x: number, y: number, z: number }; // stored for persistence
-    faceNormal: { x: number, y: number, z: number }; // used for orientation
+    rotation: { x: number, y: number, z: number }; 
+    faceNormal: { x: number, y: number, z: number }; 
     partType: string;
 }
 
@@ -59,7 +59,7 @@ export interface PartDefinition {
     name: string;
     category: 'LOCOMOTION' | 'OFFENSE' | 'SENSOR' | 'UTILITY' | 'COSMETIC';
     rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic' | 'God';
-    cost: number; // Resale/Recycle Value
+    cost: number; 
     stats: { hp?: number, atk?: number, def?: number, spd?: number, int?: number };
     description: string;
     voxelShapeType: string;
@@ -70,8 +70,6 @@ export const PARTS_DB: Record<string, PartDefinition> = {
     // STARTING / BASIC
     'part_leg_basic': { id: 'part_leg_basic', name: 'Starter Leg', category: 'LOCOMOTION', rarity: 'Common', cost: 10, stats: { spd: 5 }, description: 'Basic mobility unit.', voxelShapeType: 'LEG_BASIC', colorTheme: 'Primary' },
     'part_sensor_lite': { id: 'part_sensor_lite', name: 'Basic Eye', category: 'SENSOR', rarity: 'Common', cost: 10, stats: { int: 5 }, description: 'Standard visual input.', voxelShapeType: 'SENSOR', colorTheme: 'Accent' },
-    
-    // CUTE / KIRBY STYLE
     'part_arm_stubby': { id: 'part_arm_stubby', name: 'Stubby Arm', category: 'UTILITY', rarity: 'Common', cost: 20, stats: { atk: 5 }, description: 'Small, round, and ready to hug.', voxelShapeType: 'ARM_STUBBY', colorTheme: 'Primary' },
     'part_shoe_round': { id: 'part_shoe_round', name: 'Round Shoe', category: 'LOCOMOTION', rarity: 'Common', cost: 20, stats: { spd: 8 }, description: 'Comfy walking gear.', voxelShapeType: 'SHOE_ROUND', colorTheme: 'Accent' },
     'part_blush': { id: 'part_blush', name: 'Blush Sticker', category: 'COSMETIC', rarity: 'Common', cost: 15, stats: { hp: 10 }, description: 'Increases cuteness by 200%.', voxelShapeType: 'BLUSH', colorTheme: 'Primary' },
@@ -137,12 +135,21 @@ export interface MonsterEntry {
 }
 
 export const MONSTER_DB: Record<string, MonsterEntry> = {
-    'slime_v1': { speciesId: 'slime_v1', name: 'Slime.exe', element: 'Toxic', stats: { hp: 40, atk: 10, def: 10, spd: 10 }, visualTraits: { extractedColors: { primary: '#10B981', secondary: '#A7F3D0', accent: '#064E3B' } }, description: 'A basic corrupted file.' },
-    'fire_wolf': { speciesId: 'fire_wolf', name: 'Firewall Wolf', element: 'Fire', stats: { hp: 60, atk: 25, def: 15, spd: 30 }, visualTraits: { extractedColors: { primary: '#EF4444', secondary: '#FCA5A5', accent: '#7F1D1D' } }, description: 'Guardian of the gateway.' },
-    'golem_steel': { speciesId: 'golem_steel', name: 'Server Golem', element: 'Metal', stats: { hp: 100, atk: 20, def: 40, spd: 5 }, visualTraits: { extractedColors: { primary: '#64748B', secondary: '#94A3B8', accent: '#0F172A' } }, description: 'Heavy duty data storage unit.' },
-    'angel_prime': { speciesId: 'angel_prime', name: 'Seraphim X', element: 'Light', stats: { hp: 200, atk: 50, def: 30, spd: 40 }, visualTraits: { extractedColors: { primary: '#FBBF24', secondary: '#FEF3C7', accent: '#FFF' } }, description: 'A high-tier guardian entity.' },
-    // VALHALLA ENEMIES
-    'odin_mech': { speciesId: 'odin_mech', name: 'Odin Prime', element: 'Electric', stats: { hp: 500, atk: 100, def: 80, spd: 60 }, visualTraits: { extractedColors: { primary: '#FCD34D', secondary: '#1E293B', accent: '#3B82F6' } }, description: 'The All-Father of the Network.' },
+    'slime_v1': { speciesId: 'slime_v1', name: 'Slime.exe', element: 'Toxic', stats: { hp: 40, atk: 10, def: 10, spd: 10 }, visualTraits: { 
+        anatomy: { headShape: 'ROUND', bodyShape: 'CHIBI_ROUND', eyeStyle: 'ANIME_LARGE', primaryColor: '#10B981', secondaryColor: '#A7F3D0', accentColor: '#064E3B' }
+    }, description: 'A basic corrupted file.' },
+    'fire_wolf': { speciesId: 'fire_wolf', name: 'Firewall Wolf', element: 'Fire', stats: { hp: 60, atk: 25, def: 15, spd: 30 }, visualTraits: { 
+        anatomy: { headShape: 'FOX', bodyShape: 'QUAD_BEAST', eyeStyle: 'GLOW_SLIT', primaryColor: '#EF4444', secondaryColor: '#FCA5A5', accentColor: '#7F1D1D', hasTail: true }
+    }, description: 'Guardian of the gateway.' },
+    'golem_steel': { speciesId: 'golem_steel', name: 'Server Golem', element: 'Metal', stats: { hp: 100, atk: 20, def: 40, spd: 5 }, visualTraits: { 
+        anatomy: { headShape: 'SQUARE', bodyShape: 'TALL_HUMANOID', eyeStyle: 'VISOR', primaryColor: '#64748B', secondaryColor: '#94A3B8', accentColor: '#0F172A' }
+    }, description: 'Heavy duty data storage unit.' },
+    'angel_prime': { speciesId: 'angel_prime', name: 'Seraphim X', element: 'Light', stats: { hp: 200, atk: 50, def: 30, spd: 40 }, visualTraits: { 
+        anatomy: { headShape: 'ROUND', bodyShape: 'TALL_HUMANOID', eyeStyle: 'ANIME_LARGE', primaryColor: '#FBBF24', secondaryColor: '#FEF3C7', accentColor: '#FFF', hasWings: true, hasHalo: true }
+    }, description: 'A high-tier guardian entity.' },
+    'odin_mech': { speciesId: 'odin_mech', name: 'Odin Prime', element: 'Electric', stats: { hp: 500, atk: 100, def: 80, spd: 60 }, visualTraits: { 
+        anatomy: { headShape: 'MECH', bodyShape: 'TITAN_HUMANOID', eyeStyle: 'CYCLOPS', primaryColor: '#FCD34D', secondaryColor: '#1E293B', accentColor: '#3B82F6', hasHorns: true }
+    }, description: 'The All-Father of the Network.' },
 };
 
 // --- LOCATIONS ---
@@ -166,7 +173,6 @@ export const LOCATIONS_DB: Record<string, LocationNode> = {
     'loc_ruins': { id: 'loc_ruins', name: 'Old Net Ruins', levelReq: 20, connections: ['loc_forest', 'loc_city'], x: 40, y: 30, enemyTheme: ['Spirit', 'Psychic'], color: 'bg-purple-500', environmentType: 'Desert' },
     'loc_city': { id: 'loc_city', name: 'Mainframe City', levelReq: 25, connections: ['loc_arcade', 'loc_ruins', 'loc_volcano'], x: 80, y: 40, enemyTheme: ['Electric', 'Metal'], color: 'bg-blue-600', environmentType: 'City' },
     'loc_volcano': { id: 'loc_volcano', name: 'Firewall Peak', levelReq: 40, connections: ['loc_cave', 'loc_city', 'loc_valhalla'], x: 50, y: 15, enemyTheme: ['Fire', 'Dark'], color: 'bg-red-600', environmentType: 'Volcano' },
-    // ENDGAME
     'loc_valhalla': { id: 'loc_valhalla', name: 'Cyber Valhalla', levelReq: 60, connections: ['loc_volcano'], x: 50, y: 5, enemyTheme: ['Light', 'Dragon'], color: 'bg-yellow-400', environmentType: 'Valhalla' },
 };
 
@@ -177,7 +183,7 @@ export type MonsterStage = 'Noob' | 'Pro' | 'Elite' | 'Legend' | 'God';
 
 export interface Pixupet {
     id: string;
-    speciesId?: string; // Corrected missing property
+    speciesId?: string; 
     name: string;
     element: string;
     level: number;
@@ -185,9 +191,9 @@ export interface Pixupet {
     maxExp: number;
     hp: number; maxHp: number; currentHp: number;
     atk: number; def: number; spd: number;
-    int?: number; // Corrected missing property
+    int?: number; 
     hunger: number; fatigue: number; happiness: number;
-    stage: MonsterStage; // Corrected type
+    stage: MonsterStage; 
     rank: string;
     ability: string;
     voxelCode: string;
@@ -208,6 +214,7 @@ export interface Pixupet {
 export interface VisualTraits {
     extractedColors: { primary: string, secondary: string, accent: string };
     silhouetteMatrix?: string[];
+    anatomy?: any; // New Anime Structure
 }
 
 export const ELEMENT_THEMES: Record<string, { color: string, bg: string, icon: string }> = {
@@ -248,7 +255,7 @@ export const calculateStats = (pet: Pixupet) => {
     // Apply Part Multipliers
     if (pet.parts) {
         pet.parts.forEach(p => {
-            const partDef = PARTS_DB[p.partId]; // Renamed to avoid shadowing 'def'
+            const partDef = PARTS_DB[p.partId]; 
             if(partDef && partDef.stats) {
                 if(partDef.stats.hp) maxHp += partDef.stats.hp;
                 if(partDef.stats.atk) atk += partDef.stats.atk;
@@ -341,9 +348,9 @@ export const getRandomEnemy = (locId: string, playerLevel: number, voxelGen: any
         hunger: 100, fatigue: 0, happiness: 100,
         stage: 'Noob', rank: 'Wild', ability: 'Wild Data',
         moves: [], parts: [],
-        voxelCode: voxelGen(template.element, 'BIPED', 'Noob', template.visualTraits, template.name),
+        voxelCode: voxelGen(template.element, template.visualTraits.anatomy.bodyShape, 'Noob', template.visualTraits, template.name),
         visualTraits: template.visualTraits,
-        bodyType: 'BIPED',
+        bodyType: template.visualTraits.anatomy.bodyShape,
         isMinted: false
     } as any;
 };
@@ -368,17 +375,23 @@ export const generateStarterOptions = () => {
         {
             name: 'Ignis', element: 'Fire', bodyType: 'BIPED', description: 'A fiery spirit with high attack potential.',
             stats: { hp: 50, atk: 18, def: 12, spd: 14 },
-            visualTraits: { extractedColors: { primary: '#EF4444', secondary: '#FCA5A5', accent: '#7F1D1D' } }
+            visualTraits: { 
+                anatomy: { headShape: 'FOX', bodyShape: 'CHIBI_ROUND', eyeStyle: 'ANIME_LARGE', primaryColor: '#EF4444', secondaryColor: '#FCA5A5', accentColor: '#7F1D1D', hasTail: true }
+            }
         },
         {
             name: 'Aqua', element: 'Water', bodyType: 'FLOATING', description: 'Fluid movement and balanced defenses.',
             stats: { hp: 60, atk: 14, def: 16, spd: 12 },
-            visualTraits: { extractedColors: { primary: '#3B82F6', secondary: '#93C5FD', accent: '#1E3A8A' } }
+            visualTraits: { 
+                anatomy: { headShape: 'ROUND', bodyShape: 'FLOATING_ORB', eyeStyle: 'ANIME_LARGE', primaryColor: '#3B82F6', secondaryColor: '#93C5FD', accentColor: '#1E3A8A' }
+            }
         },
         {
             name: 'Terra', element: 'Grass', bodyType: 'QUADRUPED', description: 'Sturdy frame with regenerative capabilities.',
             stats: { hp: 70, atk: 15, def: 15, spd: 10 },
-            visualTraits: { extractedColors: { primary: '#10B981', secondary: '#6EE7B7', accent: '#064E3B' } }
+            visualTraits: { 
+                anatomy: { headShape: 'CAT', bodyShape: 'QUAD_BEAST', eyeStyle: 'DOTS', primaryColor: '#10B981', secondaryColor: '#6EE7B7', accentColor: '#064E3B' }
+            }
         }
     ];
 };

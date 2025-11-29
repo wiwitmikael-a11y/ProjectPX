@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useEffect, memo } from 'react';
+import React, { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { analyzeObject, getGenericVoxel, generateProceduralBoss, generateBattleCommentary, generatePetReaction, generateMission, analyzeArtifact } from './services/gemini';
 import { ITEMS_DB, getRandomEnemy, getLootDrop, GameItem, ELEMENT_THEMES, MonsterStats, LOCATIONS_DB, LocationNode, generateStarterOptions, EVO_THRESHOLDS, getProceduralMonsterArt, getRandomEventText, getActionFromText, getPetSpeech, EMOTE_ICONS, MONSTER_DB, MonsterEntry, checkDiscovery, assignMoves, Move, PARTS_DB, PartDefinition, AttachedPart, calculateStats, GACHA_POOLS, ActiveMission } from './services/gameData';
 import { IconBag, IconBook, IconCards, IconCart, IconCoin, IconMap, IconScan, IconSkull, IconTreasure, ItemIcon, IconCapsule, IconTrash } from './components/Icons';
@@ -13,22 +13,13 @@ import { VoxelViewer, PixuCard } from './components/Shared';
 // --- TYPES ---
 type GameState = 'SPLASH' | 'ONBOARDING' | 'STARTER_SELECT' | 'NEXUS' | 'SCAN' | 'COLLECTION' | 'SHOP' | 'ITEMS' | 'EXPLORE' | 'CODEX' | 'ENGINEER' | 'GACHA' | 'MISSION';
 
-const SAVE_VERSION = 'v30.0_SINGULARITY_EDITION'; 
+const SAVE_VERSION = 'v31.0_AFK_FIXED'; 
 
 const IconWallet = () => (
     <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" fill="#9945FF" stroke="black" strokeWidth="2"/>
         <path d="M22 12h-4c-1.1 0-2 .9-2 2v4h6v-6z" fill="#14F195" stroke="black" strokeWidth="2"/>
         <circle cx="20" cy="15" r="1.5" fill="black"/>
-    </svg>
-);
-
-const IconHunt = () => (
-     <svg viewBox="0 0 24 24" className="w-10 h-10 animate-pulse">
-        <circle cx="12" cy="12" r="10" fill="#EF4444" stroke="black" strokeWidth="2" />
-        <path d="M12 2v10M2 12h10" stroke="black" strokeWidth="0" />
-        <path d="M12 7l-2 5 2 5 2-5z" fill="white" />
-        <path d="M7 12l5-2 5 2-5 2z" fill="white" />
     </svg>
 );
 
@@ -91,13 +82,6 @@ export default function App() {
   const [gachaState, setGachaState] = useState<'IDLE' | 'DROPPING' | 'REVEAL'>('IDLE');
   const [gachaResult, setGachaResult] = useState<any>(null);
 
-  // Menus
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [shopOpen, setShopOpen] = useState(false);
-  const [itemsOpen, setItemsOpen] = useState(false);
-  const [exploreOpen, setExploreOpen] = useState(false);
-  const [walletOpen, setWalletOpen] = useState(false);
-
   // Engineer Mode State
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
 
@@ -112,10 +96,21 @@ export default function App() {
   // FX
   const [purchaseAnim, setPurchaseAnim] = useState<string | null>(null);
 
+  // UI States
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [exploreOpen, setExploreOpen] = useState(false);
+
   const activePet = inventory[activePetIndex];
   const battleStats = activePet ? calculateStats(activePet) : null;
   const location = LOCATIONS_DB[user.currentLocation];
   const logScrollRef = useRef<HTMLDivElement>(null);
+  
+  // --- MEMOIZED ENV DATA ---
+  const envData = useMemo(() => ({ 
+      envType: location.environmentType || 'Grass', 
+      isNight: isNight 
+  }), [location.environmentType, isNight]);
 
   // --- TIME DETECTION ---
   useEffect(() => {
@@ -241,10 +236,10 @@ export default function App() {
 
   const handleNewGame = () => {
       localStorage.removeItem(`pixupet_save_${SAVE_VERSION}`);
-      setUser({ name: 'Tamer', level: 1, exp: 0, coins: 500, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: ['part_leg_basic', 'part_sensor_lite', 'part_arm_stubby'], currentRank: 'Noob', seen: [], caught: [] });
+      setUser({ name: 'Tamer', level: 1, exp: 0, coins: 500, currentLocation: 'loc_starter', joinedAt: Date.now(), inventory: ['part_leg_basic', 'part_sensor_lite', 'part_arm_stubby'], currentRank: 'Noob', seen: [], caught: [], kills: 0 });
       setInventory([]);
       setStarterOptions(generateStarterOptions());
-      setGameState('ONBOARDING');
+      setGameState('STARTER_SELECT'); // Fixed: Switch to Starter Select to prevent blank screen
   };
 
   // --- AUTO-MODE LOGIC (THE INFINITY ENGINE) ---
@@ -278,7 +273,7 @@ export default function App() {
                   const bossEnemy = {
                       id: `boss_${Date.now()}`, name: bossData.name, element: bossData.element || 'Dark',
                       level: user.level + 5, stats: bossData.stats || { hp: 500, atk: 50, def: 50, spd: 20 },
-                      voxelCode: getGenericVoxel(bossData.element, 'BIPED', 'God', bossData.visualTraits, bossData.name),
+                      voxelCode: getGenericVoxel(bossData.element, bossData.bodyType || 'BIPED', 'God', bossData.visualTraits, bossData.name),
                       description: bossData.description
                   };
                   
@@ -350,8 +345,6 @@ export default function App() {
           showFloatingText("ANALYZING...", "text-blue-500");
           const artifactData = await analyzeArtifact(user.level);
           if(artifactData) {
-               // In a real app we would add this item definition to the DB dynamically
-               // For this demo, we simulate a massive buff
                showFloatingText(`ARTIFACT DECODED: ${artifactData.name}`, "text-purple-400");
                addCoins(1000, true);
                const inv = [...user.inventory];
@@ -388,45 +381,6 @@ export default function App() {
       return () => clearInterval(interval);
   }, [gameState, activeBattle, activeEvent, user.currentLocation, isAnalyzing, isPetIdle, preEventEmote, isMaterializing, activePet, isAutoMode]);
 
-  const triggerRandomEvent = async () => {
-      if(activePet.fatigue >= 80) { showFloatingText("TOO TIRED!", "text-red-500"); return; }
-      const updated = [...inventory];
-      updated[activePetIndex].fatigue = (updated[activePetIndex].fatigue || 0) + 10; 
-      updated[activePetIndex].hunger = Math.max(0, updated[activePetIndex].hunger - 5);
-      setInventory(updated);
-
-      const rand = Math.random();
-      if (rand > 0.4) {
-          setPreEventEmote(EMOTE_ICONS.BATTLE);
-          const enemy = getRandomEnemy(user.currentLocation, activePet.level, getGenericVoxel);
-          const { isNew, updates } = checkDiscovery(user, enemy.speciesId || 'unknown', 'SEEN');
-          if(isNew) setUser(u => ({ ...u, ...updates }));
-
-          setShowBattleOverlay({ enemy, player: activePet });
-          await new Promise(r => setTimeout(r, 2000));
-          setShowBattleOverlay(null);
-          setPreEventEmote(null);
-
-          const win = true; 
-          const eventResult = {
-              type: 'BATTLE', title: 'VICTORY!', enemyName: enemy.name,
-              logs: ["Combat initiated...", "Enemy neutralized!"],
-              rewards: { exp: enemy.level * 30, coins: enemy.level * 15 }
-          };
-          
-          addExp(eventResult.rewards.exp, true);
-          addCoins(eventResult.rewards.coins, true);
-          setUser(u => ({ ...u, kills: (u.kills || 0) + 1 }));
-          setActiveEvent(eventResult);
-      } else {
-          setPreEventEmote(EMOTE_ICONS.TREASURE);
-          await new Promise(r => setTimeout(r, 800));
-          setPreEventEmote(null);
-          const item = getLootDrop(user.currentLocation) || 'pixel_pizza';
-          addItem(item, true);
-          setActiveEvent({ type: 'TREASURE', title: 'SCAVENGE', logs: ["Item recovered!"], rewards: { items: [ITEMS_DB[item].name] } });
-      }
-  };
 
   const addExp = (amount: number, silent: boolean = false) => {
       const updated = [...inventory];
@@ -526,6 +480,111 @@ export default function App() {
       setGameState('NEXUS');
   };
 
+  // --- SUBMENU RENDERERS ---
+
+  if (gameState === 'SHOP') {
+      return (
+          <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
+               <div className="w-full max-w-md bg-white rounded-3xl h-[80vh] flex flex-col overflow-hidden relative border-4 border-purple-500">
+                   <div className="bg-purple-600 p-4 text-white font-black text-xl flex justify-between items-center">
+                       <span><IconCart/> ITEM SHOP</span>
+                       <button onClick={()=>setGameState('NEXUS')} className="bg-white text-black px-3 py-1 rounded text-xs font-bold">EXIT</button>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 bg-gray-100 grid grid-cols-2 gap-4">
+                       {Object.values(ITEMS_DB).filter(i => i.price > 0).map(item => (
+                           <div key={item.id} className="bg-white p-2 rounded-xl border-2 border-gray-200 flex flex-col items-center shadow-sm">
+                               <div className="w-12 h-12 mb-2"><ItemIcon item={item}/></div>
+                               <div className="font-bold text-sm text-center truncate w-full">{item.name}</div>
+                               <div className="text-[10px] text-gray-500 text-center mb-2 h-8 overflow-hidden">{item.description}</div>
+                               <button onClick={() => {
+                                   if(user.coins >= item.price) { addCoins(-item.price, true); addItem(item.id, true); } else { showFloatingText("NO FUNDS", "text-red-500"); }
+                               }} className="bg-yellow-400 w-full rounded py-1 font-black text-xs hover:bg-yellow-500 border border-black shadow-[2px_2px_0_#000] active:translate-y-1 active:shadow-none">
+                                   BUY {item.price}G
+                               </button>
+                           </div>
+                       ))}
+                   </div>
+               </div>
+          </div>
+      );
+  }
+
+  if (gameState === 'COLLECTION') {
+      return (
+          <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
+               <div className="w-full max-w-md bg-white rounded-3xl h-[80vh] flex flex-col overflow-hidden relative border-4 border-blue-500">
+                   <div className="bg-blue-600 p-4 text-white font-black text-xl flex justify-between items-center">
+                       <span><IconCards/> COLLECTION</span>
+                       <button onClick={()=>setGameState('NEXUS')} className="bg-white text-black px-3 py-1 rounded text-xs font-bold">EXIT</button>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 bg-gray-100 grid grid-cols-2 gap-4">
+                       {inventory.map((pet, idx) => (
+                           <div key={pet.id} onClick={() => { setActivePetIndex(idx); setGameState('NEXUS'); }} className={`border-4 rounded-xl overflow-hidden cursor-pointer ${idx===activePetIndex?'border-green-500 scale-105':'border-transparent'}`}>
+                               <PixuCard pet={pet} />
+                           </div>
+                       ))}
+                   </div>
+               </div>
+          </div>
+      );
+  }
+
+  if (gameState === 'GACHA') {
+      return (
+          <div className="absolute inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4">
+               <button onClick={()=>setGameState('NEXUS')} className="absolute top-4 right-4 bg-red-500 text-white px-6 py-2 rounded-full font-black border-2 border-white">EXIT</button>
+               
+               {gachaState === 'IDLE' && (
+                   <div className="flex flex-col gap-6 w-full max-w-md">
+                       <h2 className="text-white text-4xl font-black text-center mb-8 drop-shadow-[0_4px_0_#F472B6]">GACHA MACHINE</h2>
+                       <button onClick={() => handleGachaPull('STANDARD')} className="bg-white p-4 rounded-2xl border-4 border-gray-300 flex items-center justify-between hover:scale-105 transition-transform">
+                           <div className="text-left">
+                               <div className="font-black text-xl">STANDARD CAPSULE</div>
+                               <div className="text-xs text-gray-500">Common Items & Parts</div>
+                           </div>
+                           <div className="bg-yellow-400 px-4 py-2 rounded-xl font-black border-2 border-black">100 G</div>
+                       </button>
+                       <button onClick={() => handleGachaPull('PREMIUM')} className="bg-purple-100 p-4 rounded-2xl border-4 border-purple-300 flex items-center justify-between hover:scale-105 transition-transform">
+                           <div className="text-left">
+                               <div className="font-black text-xl text-purple-600">PREMIUM CAPSULE</div>
+                               <div className="text-xs text-purple-400">Rare/Epic Gear</div>
+                           </div>
+                           <div className="bg-yellow-400 px-4 py-2 rounded-xl font-black border-2 border-black">500 G</div>
+                       </button>
+                       <button onClick={() => handleGachaPull('GOD_MODE')} className="bg-yellow-100 p-4 rounded-2xl border-4 border-yellow-500 flex items-center justify-between hover:scale-105 transition-transform relative overflow-hidden">
+                           <div className="absolute inset-0 bg-yellow-400 opacity-20 animate-pulse"></div>
+                           <div className="text-left relative z-10">
+                               <div className="font-black text-xl text-yellow-700">GOD CAPSULE</div>
+                               <div className="text-xs text-yellow-600">Mythic/God Tier ONLY</div>
+                           </div>
+                           <div className="bg-black text-white px-4 py-2 rounded-xl font-black border-2 border-yellow-400 relative z-10">2000 G</div>
+                       </button>
+                   </div>
+               )}
+
+               {gachaState === 'DROPPING' && (
+                   <div className="text-6xl animate-bounce">💊</div>
+               )}
+
+               {gachaState === 'REVEAL' && gachaResult && (
+                   <div className="flex flex-col items-center animate-in zoom-in duration-300">
+                       <div className="text-white text-2xl font-bold mb-4">YOU GOT:</div>
+                       <div className="bg-white p-8 rounded-3xl border-8 border-yellow-400 shadow-[0_0_50px_rgba(255,215,0,0.5)] mb-8 transform rotate-3">
+                           <div className="w-32 h-32">
+                               {gachaResult.type ? <ItemIcon item={gachaResult}/> : <span className="text-4xl font-black">{gachaResult.name}</span>}
+                           </div>
+                       </div>
+                       <div className="text-yellow-400 text-3xl font-black mb-2">{gachaResult.name}</div>
+                       <div className="text-white opacity-70 mb-8">{gachaResult.rarity}</div>
+                       <button onClick={() => setGachaState('IDLE')} className="bg-blue-500 text-white px-8 py-3 rounded-full font-black text-xl border-4 border-blue-700 hover:scale-110 transition-transform">AGAIN</button>
+                   </div>
+               )}
+          </div>
+      );
+  }
+
+  // --- STANDARD RENDER ---
+
   return (
     <div className="w-full h-screen relative bg-black overflow-hidden font-sans select-none text-black">
       {/* 3D VIEWER LAYER */}
@@ -534,7 +593,7 @@ export default function App() {
             code={activePet.voxelCode} 
             mode={gameState === 'ENGINEER' ? 'ENGINEER' : 'HABITAT'}
             action={isAutoMode ? (statusText.includes('Target') || statusText.includes('BOSS') ? 'ATTACK' : 'RUN') : getActionFromText(statusText)} 
-            envData={{ envType: location.environmentType || 'Grass', isNight: isNight }}
+            envData={envData}
             equipment={{ ...activePet.equipment, parts: activePet.parts }}
             onInteract={null}
             onStateChange={(state) => setIsPetIdle(state === 'ENTER_IDLE')}
@@ -605,7 +664,7 @@ export default function App() {
       ))}
 
       {/* --- HUD HEADER --- */}
-      {gameState !== 'SPLASH' && gameState !== 'ONBOARDING' && (
+      {gameState !== 'SPLASH' && gameState !== 'ONBOARDING' && gameState !== 'STARTER_SELECT' && (
       <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-50 pointer-events-none safe-top">
           <div className="bg-white/30 backdrop-blur-md border border-white/20 rounded-2xl p-2 pointer-events-auto cursor-pointer hover:scale-105 transition-transform" onClick={()=>setStatsOpen(true)}>
               <div className="flex flex-col text-white drop-shadow-md">
@@ -623,8 +682,8 @@ export default function App() {
               {gameState === 'NEXUS' && (
                   <div className="flex flex-col gap-1 items-end">
                       <button onClick={() => setIsAutoMode(!isAutoMode)} 
-                          className={`mt-2 px-3 py-1 font-black text-xs rounded border-2 pointer-events-auto shadow-md transition-all ${isAutoMode ? 'bg-red-500 border-red-300 text-white animate-pulse' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
-                          {isAutoMode ? 'AUTO [ON]' : 'AUTO [OFF]'}
+                          className={`mt-2 px-6 py-2 font-black text-sm rounded-full border-2 pointer-events-auto shadow-xl transition-all ${isAutoMode ? 'bg-red-600 border-red-400 text-white animate-pulse ring-4 ring-red-500/30' : 'bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                          {isAutoMode ? 'AUTO SYSTEM: ACTIVE' : 'ACTIVATE AUTO'}
                       </button>
                       <button onClick={requestMission} disabled={missionLoading || user.activeMission?.isActive}
                           className={`mt-1 px-3 py-1 font-black text-xs rounded border-2 pointer-events-auto shadow-md transition-all ${missionLoading ? 'bg-yellow-600' : 'bg-yellow-500 border-yellow-300 text-black hover:scale-105'}`}>
@@ -636,16 +695,18 @@ export default function App() {
       </div>
       )}
 
-      {/* --- ITEMS UI (Updated for Artifacts) --- */}
+      {/* --- ITEMS UI --- */}
       {itemsOpen && (
           <div className="absolute inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center p-4">
-              <div className="w-full max-w-md bg-white rounded-3xl h-[60vh] flex flex-col overflow-hidden relative">
-                   <button onClick={() => setItemsOpen(false)} className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-6 py-2 rounded-full font-black text-xs z-20">◀ BACK</button>
-                   <div className="bg-orange-500 p-4 text-white font-black"><IconBag /> INVENTORY</div>
+              <div className="w-full max-w-md bg-white rounded-3xl h-[60vh] flex flex-col overflow-hidden relative border-4 border-orange-500">
+                   <div className="bg-orange-500 p-4 text-white font-black flex justify-between items-center">
+                       <span><IconBag /> INVENTORY</span>
+                       <button onClick={() => setItemsOpen(false)} className="bg-white text-orange-600 px-3 py-1 rounded text-xs font-bold shadow-sm">EXIT</button>
+                   </div>
                    <div className="flex-1 overflow-y-auto p-4 bg-gray-100 grid grid-cols-4 gap-2 pb-16">
                       {user.inventory.map((itemId, idx) => (
                           <div key={idx} onClick={() => { if(ITEMS_DB[itemId]?.type==='Food' || ITEMS_DB[itemId]?.type==='Artifact' || ITEMS_DB[itemId]?.type==='Consumable') consumeItem(itemId); }} 
-                               className="aspect-square bg-white border border-gray-300 rounded-xl flex items-center justify-center shadow-sm relative overflow-hidden">
+                               className="aspect-square bg-white border border-gray-300 rounded-xl flex items-center justify-center shadow-sm relative overflow-hidden active:scale-90 transition-transform">
                               {ITEMS_DB[itemId] ? <div className="w-10 h-10"><ItemIcon item={ITEMS_DB[itemId]}/></div> : <span className="text-[8px]">{PARTS_DB[itemId]?.name}</span>}
                               {itemId === 'unidentified_artifact' && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-[8px] text-white font-bold animate-pulse">?</div>}
                           </div>
@@ -655,17 +716,17 @@ export default function App() {
           </div>
       )}
       
-      {/* ... (Explore, Maps, Gacha - Kept same as previous) ... */}
+      {/* --- WORLD MAP --- */}
       {exploreOpen && (
           <div className="absolute inset-0 z-[100] bg-black/90 flex flex-col">
-              <div className="p-4 flex justify-between items-center"><h2 className="text-white font-black text-2xl">WORLD MAP</h2><button onClick={()=>setExploreOpen(false)} className="text-white bg-red-500 px-4 py-1 rounded-full font-black text-xs">CLOSE</button></div>
+              <div className="p-4 flex justify-between items-center border-b border-gray-700 bg-gray-900"><h2 className="text-white font-black text-2xl">WORLD MAP</h2><button onClick={()=>setExploreOpen(false)} className="text-white bg-red-500 px-4 py-1 rounded-full font-black text-xs hover:bg-red-600">CLOSE</button></div>
               <div className="flex-1 overflow-auto relative bg-[#0f172a] p-8">
                   <div className="relative w-[800px] h-[800px]">
                       {Object.values(LOCATIONS_DB).map(loc => (
                           <div key={loc.id} onClick={() => { setUser(u=>({...u, currentLocation: loc.id})); setExploreOpen(false); }}
-                              className={`absolute w-20 h-20 -ml-10 -mt-10 flex flex-col items-center justify-center cursor-pointer ${user.currentLocation===loc.id?'scale-110 z-20':''}`} style={{left:`${loc.x}%`, top:`${loc.y}%`}}>
-                              <div className={`w-12 h-12 rounded-full border-2 border-white flex items-center justify-center ${loc.color}`}>{ELEMENT_THEMES[loc.enemyTheme[0]]?.icon}</div>
-                              <div className="mt-2 bg-black/80 text-white text-[9px] px-2 rounded">{loc.name}</div>
+                              className={`absolute w-20 h-20 -ml-10 -mt-10 flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-110 ${user.currentLocation===loc.id?'scale-110 z-20':''}`} style={{left:`${loc.x}%`, top:`${loc.y}%`}}>
+                              <div className={`w-12 h-12 rounded-full border-2 border-white flex items-center justify-center ${loc.color} shadow-[0_0_15px_${loc.color}]`}>{ELEMENT_THEMES[loc.enemyTheme[0]]?.icon}</div>
+                              <div className="mt-2 bg-black/80 text-white text-[9px] px-2 py-1 rounded font-bold border border-white/20">{loc.name}</div>
                           </div>
                       ))}
                   </div>
@@ -676,11 +737,8 @@ export default function App() {
       {/* --- MAIN GAMEPLAY BUTTONS --- */}
       {gameState === 'NEXUS' && (
         <>
-          <div className={`absolute bottom-32 left-0 right-0 flex justify-center z-40 ${isAutoMode ? 'pointer-events-none opacity-50' : 'pointer-events-auto'}`}>
-              <button onClick={triggerRandomEvent} className="bg-red-500 text-white border-4 border-white/50 px-8 py-3 rounded-full font-black text-xl shadow-[0_10px_20px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 flex items-center gap-2 backdrop-blur-sm">
-                  <IconHunt /> HUNT
-              </button>
-          </div>
+          {/* REMOVED HUNT BUTTON - FULL AFK FOCUS */}
+          
           <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur-xl border border-white/30 rounded-3xl p-2 flex items-end gap-2 z-50 shadow-2xl safe-bottom min-w-[340px] justify-between pointer-events-auto transition-all ${isAutoMode ? 'opacity-30 pointer-events-none' : ''}`}>
               <button onClick={()=>{ setGameState('COLLECTION') }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
                   <div className="text-white group-hover:scale-110 transition-transform"><IconCards /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Cards</span>
@@ -702,7 +760,7 @@ export default function App() {
               <button onClick={()=>{ setExploreOpen(true) }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
                   <div className="text-green-300 group-hover:scale-110 transition-transform"><IconMap /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Map</span>
               </button>
-              <button onClick={()=>{ setShopOpen(true) }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
+              <button onClick={()=>{ setGameState('SHOP') }} className="flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-white/20 active:scale-90 transition-all group">
                   <div className="text-purple-300 group-hover:scale-110 transition-transform"><IconCart /></div> <span className="text-[8px] font-bold text-white uppercase mt-1">Shop</span>
               </button>
           </div>
@@ -749,14 +807,59 @@ export default function App() {
       </div>
       )}
 
+      {/* --- STARTER SELECT (NEW ADDITION) --- */}
+      {gameState === 'STARTER_SELECT' && (
+          <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center p-4">
+              <div className="text-white text-4xl font-black mb-8 animate-bounce font-['Bangers'] tracking-widest drop-shadow-[0_4px_0_#F59E0B]">
+                  INITIALIZE SYSTEM
+              </div>
+              <div className="flex flex-wrap justify-center gap-6 w-full max-w-5xl">
+                  {starterOptions.map((starter, i) => (
+                      <div key={i} onClick={() => handleStarterSelect(starter)}
+                           className="w-64 h-80 bg-gray-900 border-4 border-white/20 hover:border-white rounded-2xl p-4 flex flex-col items-center cursor-pointer transition-all hover:-translate-y-4 hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] group relative overflow-hidden">
+                           
+                           {/* BG GLOW */}
+                           <div className={`absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity ${starter.element==='Fire'?'bg-red-500':starter.element==='Water'?'bg-blue-500':'bg-green-500'}`}></div>
+
+                           <div className="text-6xl mb-4 mt-4 relative z-10 group-hover:scale-125 transition-transform">{ELEMENT_THEMES[starter.element]?.icon || '❓'}</div>
+                           <h2 className="text-2xl font-black text-white uppercase relative z-10">{starter.name}</h2>
+                           <div className={`text-[10px] font-bold px-2 py-1 rounded mt-2 relative z-10 text-white ${starter.element==='Fire'?'bg-red-600':starter.element==='Water'?'bg-blue-600':'bg-green-600'}`}>
+                               {starter.element} CLASS
+                           </div>
+                           
+                           <p className="text-gray-300 text-center text-xs mt-6 font-mono leading-tight relative z-10 opacity-80">
+                               {starter.description}
+                           </p>
+
+                           {/* STATS */}
+                           <div className="mt-auto w-full grid grid-cols-3 gap-1 relative z-10">
+                                <div className="bg-black/60 p-1 rounded text-center">
+                                    <div className="text-[8px] text-gray-400">HP</div>
+                                    <div className="text-xs font-bold text-green-400">{starter.stats.hp}</div>
+                                </div>
+                                <div className="bg-black/60 p-1 rounded text-center">
+                                    <div className="text-[8px] text-gray-400">ATK</div>
+                                    <div className="text-xs font-bold text-red-400">{starter.stats.atk}</div>
+                                </div>
+                                <div className="bg-black/60 p-1 rounded text-center">
+                                    <div className="text-[8px] text-gray-400">SPD</div>
+                                    <div className="text-xs font-bold text-yellow-400">{starter.stats.spd}</div>
+                                </div>
+                           </div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      )}
+
       {/* --- START --- */}
       {gameState === 'SPLASH' && (
       <div className="w-full h-screen flex flex-col items-center justify-center relative bg-gradient-to-br from-yellow-300 to-orange-400 p-4">
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dot-grid.png')] opacity-20"></div>
           <div className="text-6xl font-['Bangers'] mb-8 text-white drop-shadow-[4px_4px_0_#000]">PIXUPET</div>
           <div className="flex flex-col gap-4 z-20 w-full max-w-xs">
-              {inventory.length > 0 && <button onClick={() => setGameState('NEXUS')} className="bg-green-500 text-white text-xl py-4 rounded-2xl font-black shadow-lg border-b-4 border-green-700">RESUME</button>}
-              <button onClick={handleNewGame} className="bg-blue-500 text-white py-4 rounded-2xl font-black shadow-lg border-b-4 border-blue-700">{inventory.length > 0 ? "RESET DATA" : "NEW GAME"}</button>
+              {inventory.length > 0 && <button onClick={() => setGameState('NEXUS')} className="bg-green-500 text-white text-xl py-4 rounded-2xl font-black shadow-lg border-b-4 border-green-700 hover:scale-105 transition-transform">RESUME</button>}
+              <button onClick={handleNewGame} className="bg-blue-500 text-white py-4 rounded-2xl font-black shadow-lg border-b-4 border-blue-700 hover:scale-105 transition-transform">{inventory.length > 0 ? "RESET DATA" : "NEW GAME"}</button>
           </div>
       </div>
       )}
